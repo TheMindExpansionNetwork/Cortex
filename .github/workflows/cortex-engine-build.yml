@@ -1,0 +1,209 @@
+# Cortex engine build — Linux CUDA (P5a)
+#
+# Builds the engine (`cortex` + the libraries it loads) for linux-x86_64/cuda on GitHub-hosted runners and
+# packages it the way Control consumes it: packaging/package_engine.py writes the schema-2 component manifest
+# (see packaging/ENGINE-COMPONENT.md). The artifact is the package folder, ready for the owner to sign and
+# publish (see scripts/make-cortex-feed.py).
+#
+# HOSTED vs GPU (read before changing):
+#   * A GitHub-hosted runner has NO GPU and no NVIDIA driver, but CUDA TOOLKIT COMPILATION works fine on
+#     hosted runners: nvcc only needs the toolkit. That is what this workflow does — it is a build/pack job.
+#   * The TEST START (Control's `cortex update` runs a one-token probe before switching engines) and any
+#     correctness check against real hardware need a GPU: run the artifact on the owner's box or on a
+#     self-hosted GPU runner (set `runs-on` accordingly; the rest of the job is unchanged).
+#   * SIGNING happens OFFLINE on the owner's machine with the feed key (~/.cortex-keys, never in CI, never in
+#     the repo): package_engine.py packages unsigned; feed_tool.py sign-package / scripts/make-cortex-feed.py
+#     add the Ed25519 signature afterwards. No secret is needed by this workflow.
+#
+# What the package holds (ENGINE-COMPONENT.md, linux-x86_64 cuda): `cortex`, `libcortex_kq.so`, the CUDA 13
+# runtime libraries (libcudart/libcublas/libcublasLt); the driver's `libcuda` stays on the target PC.
+
+name: Cortex engine build (Linux CUDA)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/cortex-engine-build.yml
+      - packaging/package_engine.py
+      - packaging/collect_libs.py
+      - packaging/binary_deps.py
+      - CMakeLists.txt
+      - cmake/**
+      - src/**
+      - include/**
+  workflow_dispatch:
+    inputs:
+      engine_version:
+        description: 'Engine package version (engine-component.json "version"); empty = the env default'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  # The engine release the package manifest carries (`cortex-engine` component version); bump per release.
+  ENGINE_VERSION: '0.1.45'
+  # Machine code per card generation + PTX for the newest: sm_75 (Turing) … sm_120 (Blackwell), compute_120
+  # PTX so future cards run it. The kernels need sm_80 or newer (CMakeLists.txt); sm_75 stays for older
+  # Turing cards. CUDA 13 dropped pre-Turing archs, so nothing below sm_75 is built.
+  CUDA_ARCHS: '75-real;80-real;86-real;89-real;120-real;120-virtual'
+  # The oldest NVIDIA driver the package claims to run on (mirrors the cuda13 Windows build in
+  # ENGINE-COMPONENT.md; enforced by Control against `nvidia-smi`).
+  MIN_DRIVER_NVIDIA: '580.65'
+
+jobs:
+  build-linux-cuda:
+    name: engine / linux-x86_64 cuda
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Resolve the engine version (input overrides env)
+        shell: bash
+        run: echo "ENGINE_VERSION=${{ github.event.inputs.engine_version || env.ENGINE_VERSION }}" >> "$GITHUB_ENV"
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          # cmake is preinstalled on GitHub's ubuntu runner images; ninja and patchelf are not.
+          # patchelf is only needed for HIP packages' $ORIGIN patching — kept here so the same step
+          # also works on a self-hosted runner; harmless when unused.
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build patchelf
+
+      - name: Locate or install the CUDA toolkit
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The ubuntu-latest runner image ships CUDA toolkits under /usr/local (e.g. cuda-13.0 with a
+          # /usr/local/cuda symlink). Prefer the newest one that is already there; only if the image
+          # ever drops the toolkit do we pay for the NVIDIA apt install (the slow path, ~2 GB).
+          if [ -d /usr/local/cuda/bin ]; then
+            echo "CUDA_HOME=/usr/local/cuda" >> "$GITHUB_ENV"
+            echo "toolkit found: $(cat /usr/local/cuda/version.json 2>/dev/null | head -1 || /usr/local/cuda/bin/nvcc --version | tail -1)"
+          else
+            echo "no CUDA toolkit on this image; installing cuda-toolkit-13-0 from NVIDIA's apt repo"
+            wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+            sudo dpkg -i cuda-keyring_1.1-1_all.deb
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends cuda-toolkit-13-0
+            echo "CUDA_HOME=/usr/local/cuda-13.0" >> "$GITHUB_ENV"
+          fi
+          /usr/local/cuda*/bin/nvcc --version 2>/dev/null || true
+
+      - name: Fetch llama.cpp at the pinned commit (same source setup.py builds against)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The engine's ggml/mtmd comes from llama.cpp; the commit is pinned in setup.py so the build
+          # cannot drift from what the repo expects. Parse it out rather than duplicating it here.
+          LLAMA_COMMIT=$(python -c "import re; print(re.search(r'LLAMA_CPP_COMMIT\s*=\s*\"([0-9a-f]+)\"', open('setup.py').read()).group(1))")
+          echo "llama.cpp commit: $LLAMA_COMMIT"
+          curl -fsSL -o "$RUNNER_TEMP/llama.cpp.zip" "https://github.com/ggml-org/llama.cpp/archive/${LLAMA_COMMIT}.zip"
+          unzip -q "$RUNNER_TEMP/llama.cpp.zip" -d "$RUNNER_TEMP"
+          mv "$RUNNER_TEMP/llama.cpp-${LLAMA_COMMIT}" "$RUNNER_TEMP/llama.cpp"
+
+      - name: Configure (CMake, CUDA on)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Same shape as packaging/build_hip_linux.sh: Release, tests off, portable AVX2 baseline.
+          # CMAKE_EXE_LINKER_FLAGS gives the engine RUNPATH $ORIGIN so it finds its libraries beside
+          # itself inside the package folder (ENGINE-COMPONENT.md: packages are self-contained).
+          cmake -G Ninja -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCORTEX_ENABLE_CUDA=ON \
+            -DCORTEX_BUILD_TESTS=OFF \
+            -DCORTEX_PORTABLE=ON \
+            -DCMAKE_CUDA_ARCHITECTURES="$CUDA_ARCHS" \
+            -DCORTEX_GGML_DIR="$RUNNER_TEMP/llama.cpp" \
+            "-DCMAKE_EXE_LINKER_FLAGS=-Wl,-rpath,'\$ORIGIN' -Wl,--enable-new-dtags"
+
+      - name: Build the engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build --target cortex -j"$(nproc)"
+          test -x build/cortex || { echo "build/cortex missing"; exit 1; }
+
+      - name: Collect the shared libraries into the staging folder
+        shell: bash
+        run: |
+          set -euo pipefail
+          # collect_libs.py takes the ldd closure of build/cortex (everything not supplied by the
+          # distribution: the CUDA runtime, cublas, cublasLt) and writes SYSTEM-LIBS.txt. The GPU
+          # driver's libcuda is deliberately never bundled (ENGINE-COMPONENT.md).
+          mkdir -p stage
+          python packaging/collect_libs.py --binary build/cortex --search "$CUDA_HOME/lib64" --out stage/
+
+      - name: Package the engine component
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp build/cortex stage/
+          # Manifest: schema_version 2, id cortex-engine, archs from CMAKE_CUDA_ARCHITECTURES, the
+          # oldest driver, and the build id <commit>-cuda<toolkit> as ENGINE-COMPONENT.md records it.
+          ARCH_ARGS=""
+          for a in $(echo "$CUDA_ARCHS" | tr ';' '\n' | sed 's/-real$//; /-virtual$/d' | awk 'NF && !seen[$0]++'); do
+            [ -n "$a" ] || continue
+            ARCH_ARGS="$ARCH_ARGS --arch sm_$a"
+          done
+          # The manifest also names the PTX: compute_120 matches the "120-virtual" entry built above.
+          ARCH_ARGS="$ARCH_ARGS --arch compute_120"
+          CUDA_VER=$("$CUDA_HOME/bin/nvcc" --version | sed -n 's/.*release \([0-9.]*\).*/\1/p')
+          python packaging/package_engine.py \
+            --src stage \
+            --backend cuda \
+            --platform linux-x86_64 \
+            --version "$ENGINE_VERSION" \
+            --variant cuda13 \
+            --out components/engine \
+            --min-driver "nvidia=$MIN_DRIVER_NVIDIA" \
+            --build-id "$(git rev-parse --short=12 HEAD)-cuda${CUDA_VER}" \
+            $ARCH_ARGS
+
+      - name: Verify the package (full hash check, exit 1 on any mismatch)
+        shell: bash
+        run: |
+          set -euo pipefail
+          PKG="components/engine/${ENGINE_VERSION}-linux-x86_64-cuda-cuda13"
+          python packaging/package_engine.py --verify "$PKG"
+          # package_engine --verify prints the manifest sha256: that is the digest the signed feed names.
+
+      - name: Binary smoke (best effort — hosted runners have no GPU/driver)
+        continue-on-error: true
+        shell: bash
+        run: |
+          # Running `cortex --version` needs the loader to resolve; CUDA runtime initialisation on a
+          # driver-less runner can still fail here. This step is informational: the REAL test start
+          # (one-token probe) happens on the owner's GPU box or a self-hosted runner before publishing.
+          PKG="components/engine/${ENGINE_VERSION}-linux-x86_64-cuda-cuda13"
+          LD_LIBRARY_PATH="$PKG${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "$PKG/cortex" --version \
+            || echo "NOTE: no GPU/driver on this hosted runner — the test start happens on a GPU box"
+
+      - name: Upload the engine package
+        uses: actions/upload-artifact@v7
+        with:
+          name: cortex-engine-${{ env.ENGINE_VERSION }}-linux-x86_64-cuda-cuda13
+          path: components/engine/${{ env.ENGINE_VERSION }}-linux-x86_64-cuda-cuda13/
+          if-no-files-found: error
+
+      # NEXT (owner, offline): download the artifact, run
+      #   python packaging/feed_tool.py sign-package <package folder> --key ~/.cortex-keys/cortex-feed-key.json
+      # then build and publish the feed:
+      #   python scripts/make-cortex-feed.py --out release --engine <package folder> \
+      #     --key ~/.cortex-keys/cortex-feed-key.json
+      # and upload release/ (cortex-feed.json + .sig + engine/*.tar.gz + install.sh/.ps1 + update-trust.json)
+      # as the assets of the TheMindExpansionNetwork/Cortex release. The workflow deliberately never sees the
+      # private key; signing stays with the owner (cortex_control/signing.py).

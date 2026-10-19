@@ -1,0 +1,43 @@
+# Cortex Flash — systemd unit for a bare-metal 2× A100 80GB box (P6)
+#
+# Runs scripts/deepseek-2xa100.sh (DeepSeek-V4.1-Flash-1017 Unsloth GGUF → llama-server, port 8080).
+# Protocol: docs/GPU-TEST-PLAN.md · model numbers: docs/CORTEX-DEEPSEEK.md
+#
+# Install (owner):
+#   sudo useradd -r -m -d /opt/cortex cortex
+#   sudo cp -r <repo>/scripts /opt/cortex/scripts
+#   sudo cp hosting/systemd/cortex.service /etc/systemd/system/
+#   sudo install -d -o cortex -g cortex /opt/cortex/models        # put this on NVMe (Engram streams from it)
+#   # engine + CLI for the service user (PATH below points at these):
+#   sudo -u cortex python3.11 -m pip install --user huggingface_hub
+#   # llama-server: build with CUDA (see hosting/Dockerfile.cortex builder stage) and copy to /opt/cortex/bin
+#   sudo -e /etc/cortex/cortex.env                                # one line: HF_TOKEN=hf_xxx  (0600, root-owned)
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now cortex.service
+#   journalctl -u cortex.service -f
+
+[Unit]
+Description=Cortex Flash — DeepSeek-V4.1-Flash-1017 on 2× A100 80GB (llama-server)
+Documentation=https://github.com/TheMindExpansionNetwork/Cortex/blob/main/docs/GPU-TEST-PLAN.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cortex
+Group=cortex
+# WorkingDirectory is the model root: the script's default --repo is ./models/dsv41 relative to it.
+WorkingDirectory=/opt/cortex/models
+# Secrets (HF_TOKEN) come from a root-owned env file the unit does not echo into logs.
+EnvironmentFile=-/etc/cortex/cortex.env
+Environment="HF_HOME=/opt/cortex/models/hf"
+Environment="PATH=/opt/cortex/bin:/opt/cortex/.local/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/usr/bin/env bash /opt/cortex/scripts/deepseek-2xa100.sh --port 8080 --repo /opt/cortex/models/dsv41
+Restart=on-failure
+RestartSec=15
+LimitNOFILE=65536
+# Keep the download and the Engram reads out of the OOM zone; adjust per host RAM (≥128 GB free for Engram in RAM).
+OOMScoreAdjust=-250
+
+[Install]
+WantedBy=multi-user.target

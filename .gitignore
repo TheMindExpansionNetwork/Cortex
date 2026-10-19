@@ -85,3 +85,11 @@ node_modules/
 # screenshots and checkpoints from the Mac rebuild live outside git (CortexSplit\evidence-archive)
 /apps/host/docs/evidence/
 /apps/host/docs/checkpoints/
+
+# Update-feed signing keys (P5c): the owner keeps the private Ed25519 key OUTSIDE any git checkout
+# (~/.cortex-keys/). The public half ships as cortex_control/cortex_feed_public_key.json and later as
+# the keys entry in update_keys.json. If a private key file ever lands in the tree, it must stay ignored.
+*feed-private*
+cortex-feed-key.json
+/feed-key.json
+/feed-key.pub.json

@@ -23,16 +23,19 @@ while [[ $# -gt 0 ]]; do case "$1" in
 esac; done
 
 case "$QUANT" in IQ1_M|IQ1_S) ;; *) echo "Only IQ1_M / IQ1_S fit 2× A100 80GB. See docs/CORTEX-DEEPSEEK.md"; exit 1;; esac
+# HF folder name carries the "UD-" prefix (unsloth Dynamic): UD-IQ1_M/DeepSeek-V4.1-Flash-1017-UD-IQ1_M-00001-of-00005.gguf
+HF_QUANT="UD-$QUANT"
 
 REPO="unsloth/DeepSeek-V4.1-Flash-1017-GGUF"
 command -v hf >/dev/null 2>&1 || { echo "Need 'hf' (pip install -U huggingface_hub)"; exit 1; }
 nvidia-smi --list-gpus | wc -l | grep -qE "^2$" || echo "WARN: expected exactly 2 GPUs, found $(nvidia-smi --list-gpus | wc -l)"
 
-echo "[cortex] downloading $QUANT shards + mmproj into $REPO_DIR ..."
-hf download "$REPO" --include "$QUANT/*" "mmproj-BF16.gguf" --local-dir "$REPO_DIR"
+echo "[cortex] downloading $HF_QUANT shards + mmproj into $REPO_DIR ..."
+HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-1}" hf download "$REPO" \
+  --include "$HF_QUANT/*" "mmproj-BF16.gguf" --local-dir "$REPO_DIR"
 [[ "$DSPARK" == 1 ]] && hf download "$REPO" --include "dspark/*" --local-dir "$REPO_DIR"
 
-MODEL=$(ls "$REPO"/"$QUANT"/"$QUANT"/*.gguf 2>/dev/null | head -1 || ls "$REPO"/"$QUANT"/*-00001-of-*.gguf | head -1)
+MODEL=$(ls "$REPO_DIR/$HF_QUANT/"*-00001-of-00005.gguf 2>/dev/null | head -1)
 MMPROJ="$REPO_DIR/mmproj-BF16.gguf"
 
 if command -v python3 >/dev/null; then

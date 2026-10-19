@@ -478,5 +478,27 @@
    "Q6_K",
    "Q8_0"
   ]
+ },
+ "deepseek41/IQ1_M": {
+  "arch": "deepseek41",
+  "tensors": 267,
+  "bytes": 250400000000,
+  "experts_bpw": null,
+  "bpw": 2.678,
+  "engram_bytes": 110600000000,
+  "resident_rest_gb": 139.8,
+  "note": "Unsloth Dynamic 3.0 (UD-IQ1_M): 5 shards; shard 5 is the Engram table (per_layer_token_embd.weight). Reference only - the Cortex engine does not run this family yet (docs/PORTING-DSV41.md).",
+  "files": []
+ },
+ "deepseek41/IQ1_S": {
+  "arch": "deepseek41",
+  "tensors": 267,
+  "bytes": 233000000000,
+  "experts_bpw": null,
+  "bpw": 2.492,
+  "engram_bytes": 110600000000,
+  "resident_rest_gb": 122.4,
+  "note": "Unsloth Dynamic 3.0 (UD-IQ1_S). Reference only - the Cortex engine does not run this family yet (docs/PORTING-DSV41.md).",
+  "files": []
  }
 }

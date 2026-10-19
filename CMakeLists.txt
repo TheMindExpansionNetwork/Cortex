@@ -736,6 +736,14 @@ if(CORTEX_ENABLE_CUDA OR CORTEX_ENABLE_HIP)
   add_library(cortex_qwen35 STATIC src/qwen35/q36_engine.cu)
   target_include_directories(cortex_qwen35 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include PRIVATE ${_cortex_gpu_include_directories})
   target_link_libraries(cortex_qwen35 PRIVATE cortex_prefill cortex_kernels cortex_warnings ${_cortex_gpu_runtime_target})
+  # the DeepSeek-V4.1-Flash engine path (architecture deepseek41): Phase P1 entry stub. It recognises the family
+  # (include/cortex/artifact/model_family.hpp) and refuses honestly with the memory plan and the port map
+  # (docs/PORTING-DSV41.md) until the port lands (docs/ROADMAP.md P1-P3). Plain C++: builds under any compiler.
+  add_library(cortex_deepseek41 STATIC src/deepseek41/ds41_engine.cpp)
+  target_include_directories(cortex_deepseek41 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  target_link_libraries(cortex_deepseek41 PRIVATE cortex_warnings)
+  target_compile_definitions(cortex_deepseek41 PUBLIC CORTEX_HAVE_DEEPSEEK41)
+  target_link_libraries(cortex PRIVATE cortex_deepseek41)
   if(CORTEX_NATIVE_EXPERTS)
     # the hybrid mode (experts that do not all fit in VRAM): the CPU expert pool on ggml-cpu's arithmetic
     target_link_libraries(cortex_qwen35 PRIVATE cortex_kernels_cpu)

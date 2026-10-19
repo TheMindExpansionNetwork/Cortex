@@ -16,11 +16,15 @@ enum class ModelFamily {
     Unknown = 0,
     Qwen4Exp,    ///< Qwen3.8-Flash-Next and its fine-tunes / pruned variants (Swift 1.5, the Coder)
     Qwen35Moe,   ///< Qwen3.6-35B-A3B (Unsloth's MTP GGUFs): plain pre-norm residual, dense attention, nextn MTP block
+    DeepSeek41,  ///< DeepSeek-V4.1-Flash (748B-A16B): causal encoder-decoder, Engram memory, DSpark draft.
+                 ///< Recognised by the family switch (src/program/generate.cpp), which hands the file to
+                 ///< src/deepseek41 — the engine path is under construction (docs/ROADMAP.md P1-P3).
 };
 
 inline ModelFamily model_family_from_arch(const std::string& arch) {
     if (arch == "qwen4exp") return ModelFamily::Qwen4Exp;
     if (arch == "qwen35moe") return ModelFamily::Qwen35Moe;
+    if (arch == "deepseek41") return ModelFamily::DeepSeek41;
     return ModelFamily::Unknown;
 }
 
@@ -31,6 +35,8 @@ inline const char* model_family_arch(ModelFamily f) {
         return "qwen4exp";
     case ModelFamily::Qwen35Moe:
         return "qwen35moe";
+    case ModelFamily::DeepSeek41:
+        return "deepseek41";
     default:
         return "";
     }
@@ -43,6 +49,8 @@ inline const char* model_family_title(ModelFamily f) {
         return "Qwen3.8-Flash-Next";
     case ModelFamily::Qwen35Moe:
         return "Qwen3.6-35B-A3B";
+    case ModelFamily::DeepSeek41:
+        return "DeepSeek-V4.1-Flash";
     default:
         return "an unknown model";
     }

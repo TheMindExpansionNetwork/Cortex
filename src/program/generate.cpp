@@ -2278,12 +2278,14 @@ int main(int argc, char** argv) {
 #endif
         break;
     }
-#if defined(CORTEX_HAVE_QWEN35)
+#if defined(CORTEX_HAVE_QWEN35) || defined(CORTEX_HAVE_DEEPSEEK41)
     // **THE FAMILY SWITCH.**  A Qwen3.6-35B-A3B file (GGUF architecture qwen35moe) runs on its own engine path
     // (src/qwen35), decided here from the file's header before any of this engine's state exists; every other file
     // goes on below exactly as before.  Only the architecture string is read (the header of --native's shard).
+    // DeepSeek-V4.1-Flash (deepseek41, docs/ROADMAP.md P1-P3) is recognised the same way and hands to src/deepseek41.
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::strcmp(argv[i], "--native") != 0 && std::strcmp(argv[i], "--model") != 0) continue;
+#if defined(CORTEX_HAVE_QWEN35)
         bool qwen35 = false;
         try {
             const cortex::GgufFile meta(cortex::gguf_split_paths(argv[i + 1]).front());
@@ -2292,6 +2294,17 @@ int main(int argc, char** argv) {
             // not readable here: the normal path below reports it
         }
         if (qwen35) return cortex::qwen35::run(argc, argv);
+#endif
+#if defined(CORTEX_HAVE_DEEPSEEK41)
+        bool deepseek41 = false;
+        try {
+            const cortex::GgufFile meta(cortex::gguf_split_paths(argv[i + 1]).front());
+            deepseek41 = cortex::model_family(meta) == cortex::ModelFamily::DeepSeek41;
+        } catch (const std::exception&) {
+            // not readable here: the normal path below reports it
+        }
+        if (deepseek41) return cortex::deepseek41::run(argc, argv);
+#endif
         break;
     }
 #endif

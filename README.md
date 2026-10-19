@@ -32,12 +32,12 @@ for what we changed and why.
 | Phase | Goal | Status |
 | --- | --- | --- |
 | P0 | Repo, rebrand, integration plan, GPU test plan, power analysis | **done — this commit** |
-| P1 | Port the `deepseek_v41` GGUF architecture into the Cortex engine (from upstream llama.cpp) | planned |
-| P2 | Map Engram table → Strata's proven SSD n-gram reader (on-demand mmap rows) | planned |
-| P3 | Map DSpark speculative decoding → Strata's coupled-draft/MTP path | planned |
-| P4 | Bring-up + benchmarks on **2× A100 80GB** (and a consumer-GPU tier table) | planned |
-| P5 | Our own signed engine builds + release feed (replace upstream feed) | planned |
-| P6 | One-command hosting: RunPod/Modal A100 recipe, OpenAI-compatible endpoint | planned |
+| P1 | Port the `deepseek41` GGUF architecture into the Cortex engine (from upstream llama.cpp) | **scaffolded** — family recognition + engine stub live, reference vendored, port map written |
+| P2 | Map Engram table → Strata's proven SSD n-gram reader (on-demand mmap rows) | **contract live** — reader wiring next |
+| P3 | Map DSpark speculative decoding → Strata's coupled-draft/MTP path | **contract live** — controller wiring next |
+| P4 | Bring-up + benchmarks on **2× A100 80GB** (and a consumer-GPU tier table) | ready — awaits hardware |
+| P5 | Our own signed engine builds + release feed (replace upstream feed) | in progress |
+| P6 | One-command hosting: RunPod/Modal A100 recipe, OpenAI-compatible endpoint | in progress |
 
 The full spec: [docs/ROADMAP.md](docs/ROADMAP.md) · model deep-dive: [docs/CORTEX-DEEPSEEK.md](docs/CORTEX-DEEPSEEK.md)
 · test protocol: [docs/GPU-TEST-PLAN.md](docs/GPU-TEST-PLAN.md) · the watts: [docs/POWER-ANALYSIS.md](docs/POWER-ANALYSIS.md)

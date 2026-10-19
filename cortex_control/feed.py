@@ -31,6 +31,10 @@ from cortex_control.targets import BACKEND_MATRIX
 
 SCHEMA_VERSION = 1
 FEED_NAME = "strata-feed.json"
+# P5 switchover (docs/ROADMAP.md): this stays the upstream feed NAME until the first signed Cortex release
+# ships. Cortex's own tooling (scripts/make-cortex-feed.py) already emits cortex-feed.json; until the
+# switchover commit, CORTEX_UPDATE_FEED overrides the URL, and the rename of this constant is part of the
+# same commit that adds the Cortex feed's public key to update_keys.json.
 SIGNATURE_SUFFIX = ".sig"
 FORMATS = ("tar.gz", "tar.xz", "zip")
 PLATFORMS = ("windows-x86_64", "linux-x86_64", "macos-arm64", "macos-x86_64")

@@ -22,6 +22,9 @@ from pathlib import Path
 
 #: Where the feed is read when nothing else is set: the files of the latest GitHub release of Niko1221/Strata (the same folder the
 #: one-line installers use). Only a feed signed with a key in update_keys.json (or CORTEX_UPDATE_TRUSTED_KEYS) is accepted.
+# P5 switchover (docs/ROADMAP.md): the default stays the upstream signed feed so the Qwen families keep
+# updating today; Cortex's own feed (scripts/make-cortex-feed.py -> cortex-feed.json) takes over in the
+# switchover commit that ships the first signed Cortex release. Override with CORTEX_UPDATE_FEED meanwhile.
 DEFAULT_FEED = "https://github.com/Niko1221/Strata/releases/latest/download/strata-feed.json"
 ENV_FEED = "CORTEX_UPDATE_FEED"
 ENV_APP_VERSION = "CORTEX_APP_VERSION"

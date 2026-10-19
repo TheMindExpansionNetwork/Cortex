@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from strata_control import tune_apply as ta  # noqa: E402
+from cortex_control import tune_apply as ta  # noqa: E402
 
 
 def a_job(*, args: dict | None = None, state: str = "completed",
@@ -51,14 +51,14 @@ def a_job(*, args: dict | None = None, state: str = "completed",
 
 class ApplyCase(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="strata-tune-apply-"))
+        self.tmp = Path(tempfile.mkdtemp(prefix="cortex-tune-apply-"))
         self.state = self.tmp / "state"
         self.state.mkdir()
-        self.config = self.tmp / "strata-fixture.json"
+        self.config = self.tmp / "cortex-fixture.json"
         self.config.write_text(json.dumps({
             "model": "fixture", "gpu": 0,
             "args": ["--max-context", "32768", "--kv", "fp16"],
-            "env": {"PATH": "/native/bin", "STRATA_TOKEN": "private"},
+            "env": {"PATH": "/native/bin", "CORTEX_TOKEN": "private"},
             "aliases": ["chat"],
         }, indent=1) + "\n", encoding="utf-8")
         self.before = self.config.read_bytes()
@@ -105,9 +105,9 @@ class TestConfigEdit(ApplyCase):
     def test_unknown_fields_and_secrets_survive(self):
         """An apply that dropped a user's token or a vendor's unknown key would be worse than none."""
         out = ta.apply_args_to_config(
-            {"args": [], "env": {"STRATA_TOKEN": "private"}, "vendor_unknown": {"keep": True},
+            {"args": [], "env": {"CORTEX_TOKEN": "private"}, "vendor_unknown": {"keep": True},
              "aliases": ["chat"]}, ["--kv", "int8"])
-        self.assertEqual(out["env"], {"STRATA_TOKEN": "private"})
+        self.assertEqual(out["env"], {"CORTEX_TOKEN": "private"})
         self.assertEqual(out["vendor_unknown"], {"keep": True})
         self.assertEqual(out["aliases"], ["chat"])
 
@@ -193,7 +193,7 @@ class TestApply(ApplyCase):
                                         current_identity=self.identity(), state_dir=self.state)
         after = json.loads(self.config.read_text(encoding="utf-8"))
         self.assertEqual(after["args"], ["--max-context", "32768", "--kv", "int8"])
-        self.assertEqual(after["env"]["STRATA_TOKEN"], "private")
+        self.assertEqual(after["env"]["CORTEX_TOKEN"], "private")
         self.assertEqual(after["aliases"], ["chat"])
         self.assertEqual(result["plan"]["added"], ["--kv int8"])
         self.assertEqual(result["plan"]["removed"], ["--kv fp16"])
@@ -345,15 +345,15 @@ class TestRollback(ApplyCase):
 
 class TestConfigDiscovery(ApplyCase):
     def test_only_object_configs_with_an_args_list_are_treated_as_run_configurations(self):
-        (self.tmp / "strata-good.json").write_text('{"args": ["--kv", "fp16"]}', encoding="utf-8")
-        (self.tmp / "strata-notjson.json").write_text("{ broken", encoding="utf-8")
-        (self.tmp / "strata-wrongshape.json").write_text('{"model": "x"}', encoding="utf-8")
+        (self.tmp / "cortex-good.json").write_text('{"args": ["--kv", "fp16"]}', encoding="utf-8")
+        (self.tmp / "cortex-notjson.json").write_text("{ broken", encoding="utf-8")
+        (self.tmp / "cortex-wrongshape.json").write_text('{"model": "x"}', encoding="utf-8")
         (self.tmp / "other.json").write_text('{"args": []}', encoding="utf-8")
         found = {p.name for p in ta.find_config_files(self.tmp)}
-        self.assertIn("strata-good.json", found)
-        self.assertIn("strata-fixture.json", found)
-        self.assertNotIn("strata-notjson.json", found, "a damaged file is skipped, not guessed at")
-        self.assertNotIn("strata-wrongshape.json", found)
+        self.assertIn("cortex-good.json", found)
+        self.assertIn("cortex-fixture.json", found)
+        self.assertNotIn("cortex-notjson.json", found, "a damaged file is skipped, not guessed at")
+        self.assertNotIn("cortex-wrongshape.json", found)
         self.assertNotIn("other.json", found, "the project's own naming decides, not any JSON file")
 
 

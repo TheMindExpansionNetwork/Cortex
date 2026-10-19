@@ -1,10 +1,10 @@
-# Strata audit fixes — implementation and review
+# Cortex audit fixes — implementation and review
 
 Executed by Codex on 7 October 2026. No Claude process or Claude subagent was used.
 
 ## Scope and setup
 
-- Package extracted to `audit-fixes/`; bundled agent definition copied unchanged to `.claude/agents/strata-fixer.md`.
+- Package extracted to `audit-fixes/`; bundled agent definition copied unchanged to `.claude/agents/cortex-fixer.md`.
 - Original 420 audit PNGs remain in `docs/evidence/audit-2026-10-07/`.
 - All 19 tasks were handled in dependency order. The required scope was **15 high + 82 medium findings**. The 80 optional low findings were not scheduled for a separate polish pass; some disappeared as a consequence of rebuilding the affected surfaces.
 - Every required finding has a disposition in [FINDING-STATUS.md](FINDING-STATUS.md), with a machine-readable copy in [finding-status.json](finding-status.json).

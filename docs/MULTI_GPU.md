@@ -1,4 +1,4 @@
-# Strata on two or more GPUs (layer split)
+# Cortex on two or more GPUs (layer split)
 
 One model can run across several NVIDIA cards in one PC. The layers are split into contiguous ranges, one per GPU:
 the first card runs layers 0 to K-1, the next card runs K onward, and so on; the last card also runs the output head
@@ -19,19 +19,19 @@ one card and IQ3_XXS on another both loaded (33 s and 59 s with the files cached
 (about 60 tokens/s each), the Monitor listed both, and unloading one left the other answering. This was run with the AMD build only;
 the same app code drives NVIDIA cards, but we have not run two models on two NVIDIA cards.
 
-**One make of card per engine.** An engine drives one make of card (NVIDIA, AMD or Intel). The app, `strata launch` and setup
+**One make of card per engine.** An engine drives one make of card (NVIDIA, AMD or Intel). The app, `cortex launch` and setup
 offer only the cards the engine can drive, never split a model across two makes, say in one plain line when the other make has
 the bigger card, and say that two models at once on two makes is not supported.
 
 ## Using it
 
 **Nothing to type.** `START-HERE.bat` (Linux: `./setup.sh`) lists your NVIDIA cards and says for each one whether
-Strata can use it:
+Cortex can use it:
 
 ```
   Your NVIDIA GPUs:
     GPU 0: NVIDIA GeForce RTX 5080, 16 GB VRAM - can be used
-    GPU 1: NVIDIA GeForce GTX 1080 Ti, 11 GB VRAM - not supported - older than the RTX 20 series (compute capability 6.1; Strata needs 7.5 or newer)
+    GPU 1: NVIDIA GeForce GTX 1080 Ti, 11 GB VRAM - not supported - older than the RTX 20 series (compute capability 6.1; Cortex needs 7.5 or newer)
     GPU 2: NVIDIA GeForce RTX 3090, 24 GB VRAM - can be used
   ...
   1) RTX 3090 + RAM: fits: needs 44 GB of the 70 GB available   (recommended)
@@ -41,13 +41,13 @@ Strata can use it:
 Which GPUs? [1]:
 ```
 
-**Which cards a model uses (one rule, in setup, `strata launch` and the app).** Strata first tries the model on your
+**Which cards a model uses (one rule, in setup, `cortex launch` and the app).** Cortex first tries the model on your
 **largest** card plus the computer's memory, the normal hybrid mode, and recommends that when it fits (with some RAM to
 spare). Only when it does not fit one card, or would be too tight, the layer split over the two largest cards is
 recommended instead. Every option is listed with plain numbers (what the model needs and what the cards and RAM give;
 how much would be read from the SSD when it does not fit) and the choice is yours. The cards that count: not an
 integrated chip (it shares the system memory and adds nothing beside a real card), at least 4 GB of graphics memory, and
-8 GB or more to share a model. The arithmetic is the app's `fitOn` (strata_control/gpu_fit.py keeps its constants equal);
+8 GB or more to share a model. The arithmetic is the app's `fitOn` (cortex_control/gpu_fit.py keeps its constants equal);
 each extra card of a split costs an estimated 2 GB of its own buffers.
 
 **Choosing yourself** (at setup or at any start):
@@ -71,7 +71,7 @@ each extra card of a split costs an estimated 2 GB of its own buffers.
 - Intel GPUs, and a mix of NVIDIA and AMD cards. (AMD cards share a model among themselves: `./setup.sh --backend
   hip --gpus 1,0`, see [AMD_HIP.md](AMD_HIP.md).)
 
-Or edit an existing config (`strata-*.json`), then restart:
+Or edit an existing config (`cortex-*.json`), then restart:
 
 ```json
 "gpu": [0, 2],
@@ -92,11 +92,11 @@ was K=3: the 3060 ran 3 layers, 12 GB idle, 452 tok/s of prefill against 802 at 
 `"layer_split"` 12, 18, 24, 28, 32: 582, 693, 762, 802, 803 tok/s; the 3060's 360 GB/s of memory bandwidth against the 4060 Ti's
 288 counts for more than its SMs). On two cards the engine now first asks for a placement in which each card owns at least its
 share of the layers by its room for experts, and the log line says which rule chose the split. Measured on 2x RTX A4000 made
-unequal (stage 0 priced at 0.57 of the speed with 3.7 GiB less room, `STRATA_SPLIT_SPEED_SCALE=0.57` and `--vram-reserve-mib 4400`; 14.5K-token
+unequal (stage 0 priced at 0.57 of the speed with 3.7 GiB less room, `CORTEX_SPLIT_SPEED_SCALE=0.57` and `--vram-reserve-mib 4400`; 14.5K-token
 prompt, IQ3_XXS, 5 interleaved pairs): the old rule chose K=3 (3 layers on stage 0), the new one K=20; prompt reading 945 -> 1,441 tok/s (+52%,
 5/5 pairs), decode 50.2 -> 65.9 tok/s (+31%, 5/5). Equal cards and three or more GPUs are unchanged.
 On x16 + x4 rigs the link-miss scaling (#2007, from a 4x gap) can also move `auto` off the balanced placement (2x RTX 3090, x16 + x4:
-K=31 with miss cost x4.20, 114-119 tok/s decode against 130-136 at K=27, #2418): `STRATA_SPLIT_UNIFORM=1` (opt-in, with `"gpu_order": "as_given"`)
+K=31 with miss cost x4.20, 114-119 tok/s decode against 130-136 at K=27, #2418): `CORTEX_SPLIT_UNIFORM=1` (opt-in, with `"gpu_order": "as_given"`)
 prices every link the same, as before 0.1.41.
 Prefill that is flat in the prompt length (no gain from 4K to 16K) is the sign of an idle card; **on an unequal pair sweep
 `"layer_split"` once** - a 4K-only benchmark cannot see it.
@@ -111,12 +111,12 @@ stays. On an R9700 32 GB + RX 9070 XT the R9700 holds all of the Coder's experts
 refilled after every request; on cards that hold nearly all their experts that cost short prompts up to a third of
 their speed. 0.1.32 refills all cards at once, uses a smaller streaming ring on a split, and lets a card with free
 VRAM keep its own prompt buffers - the same output as 0.1.31, measured on an R9700 + RX 9070 XT: 2K prompts 993 ->
-1,265 tok/s, 16K 1,852 -> 1,950, decode unchanged. `STRATA_SPLIT_OWN=1` (opt-in) gives every card its own buffers:
+1,265 tok/s, 16K 1,852 -> 1,950, decode unchanged. `CORTEX_SPLIT_OWN=1` (opt-in) gives every card its own buffers:
 2K 1,450 and 16K 2,227 tok/s there, but a full card then keeps a different set of experts resident, so the output
-differs from the default's (stable and coherent); `STRATA_SPLIT_OWN=auto` does that only where the buffers are at
+differs from the default's (stable and coherent); `CORTEX_SPLIT_OWN=auto` does that only where the buffers are at
 most 12% of each card's VRAM.
 
-**The idle card can help one-chunk prompts (opt-in, `STRATA_PREFILL_HELP=1`).** A prompt that fits one chunk runs the stages one after the other, so while
+**The idle card can help one-chunk prompts (opt-in, `CORTEX_PREFILL_HELP=1`).** A prompt that fits one chunk runs the stages one after the other, so while
 one card reads its layers the other idles. With it on, each stage hands a share of its streamed experts to the idle card: it
 streams them over its own PCIe link into its own (lent) prompt buffers, computes their rows on the MMQ path and sends
 them back - `--peer-device`'s peer streaming, without P2P (the activations and the rows go through mapped host memory,
@@ -127,25 +127,25 @@ overlap anyway and no share paid. Measured on 2x RTX 3090 (UD-Q4_K_XL, no P2P), 
 costs no VRAM (the idle card's own prompt buffers) and ~110 KB of mapped host memory per token of the largest chunk it
 helped (~360 MB at 3.3K tokens). The rows it computes round like a different MMQ grouping, so the output is not
 bit-identical to the default's (it is repeatable: same prompt, same output), which is why it is **opt-in**:
-`STRATA_PREFILL_HELP=1` turns it on. Native packs on the MMQ prompt path only (not with the fused prompt kernels,
-`STRATA_PF_FUSED=1`, nor with `--peer-device`). With it on, `STRATA_PREFILL_HELP_FRAC=f` fixes the share.
+`CORTEX_PREFILL_HELP=1` turns it on. Native packs on the MMQ prompt path only (not with the fused prompt kernels,
+`CORTEX_PF_FUSED=1`, nor with `--peer-device`). With it on, `CORTEX_PREFILL_HELP_FRAC=f` fixes the share.
 On two Radeon AI PRO R9700 (each limited to 16 GB with `--vram-reserve-mib 17084`, Q2_0 pack, layer split auto, 5 interleaved pairs,
-noise arm within 0.2%), `STRATA_PREFILL_HELP=1` gave prompt tok/s without -> with: 700 tokens 638 -> 672 (x1.053, 5/5), 1.5K 839 -> 809
+noise arm within 0.2%), `CORTEX_PREFILL_HELP=1` gave prompt tok/s without -> with: 700 tokens 638 -> 672 (x1.053, 5/5), 1.5K 839 -> 809
 (x0.964), 3K 1,105 -> 929 (x0.840), 6K 1,284 -> 1,211 (x0.943): the PCIe 4.0 x16 links of this box (28.4 GB/s each) make the share lose
-from 1.5K tokens up, so it stays off (`STRATA_PREFILL_HELP_FRAC` was not tuned for it).
+from 1.5K tokens up, so it stays off (`CORTEX_PREFILL_HELP_FRAC` was not tuned for it).
 
 The engine flags behind it: `--layer-split K1[,K2..]|auto` and `--split-device D1[,D2..]` (the later stages'
 devices; default the next visible ones). `--layer-split K --split-device 0` runs both stages on one card sharing
 everything - the bit-exact check of the hand-off, not a speed mode.
 
-**The draft layer's prompt K/V in batches on a split (opt-in, `STRATA_SPLIT_MTP_BATCH=1`).** With `--mtp` the draft
+**The draft layer's prompt K/V in batches on a split (opt-in, `CORTEX_SPLIT_MTP_BATCH=1`).** With `--mtp` the draft
 layer sits on the last card, and each prompt chunk ends by filling that layer's K/V for the chunk's rows. On one card the
 prompt path does it in batches (`Prefill::draft_kv`, a few large matrix products per chunk); on a split the drafter's own
 pass always did it, one graph launch and four device copies per group of 8 rows (1,024 groups per 8,192-token chunk).
 With the variable set, the last card's prompt path batches it as it does on one card. Restart-only; default off, so the
 default start is unchanged. It needs a `--native` pack (the GGUF-form token table) and a paged or ring (`--kv-resident`)
-draft K/V (`STRATA_MTP_BATCH_RING=0` sends a ring back to the old pass); otherwise it says why once and keeps the old pass:
-`strata serve: draft layer prompt K/V batched on CUDA<d> ...` or `strata serve: STRATA_SPLIT_MTP_BATCH=1 declined, the
+draft K/V (`CORTEX_MTP_BATCH_RING=0` sends a ring back to the old pass); otherwise it says why once and keeps the old pass:
+`cortex serve: draft layer prompt K/V batched on CUDA<d> ...` or `cortex serve: CORTEX_SPLIT_MTP_BATCH=1 declined, the
 drafter's own pass runs: <reason>`. The draft layer's K/V come out of Q8_1 x Q8_0 MMQ instead of its own mmvq, so the
 drafts, and how many are accepted, can move; the target's tokens are decided by the verify window.
 `tools/split_mtp_batch_parity.py` compares the greedy texts of the two arms. Measured on one machine (2x RTX 3080 20 GB
@@ -163,7 +163,7 @@ twice moved up to 4.7%, so two restarts per arm can neither confirm nor exclude 
 **Each card loads only its own layers' dense weights** (0.1.39, PR #639) with explicit split points (`--layer-split
 27`, not `auto`): every card used to keep a full copy (~3.4 GB for the Coder) though its stage reads only its own
 layers, and the VRAM it frees goes to that card's expert cache (2x MI50 16 GB, Coder: 8,819 -> 10,626 experts in
-VRAM, decode 39.2 -> 41.7 tok/s). Opt-in for now, on AMD and NVIDIA alike: `STRATA_STAGE_TRIM=1` (please report how
+VRAM, decode 39.2 -> 41.7 tok/s). Opt-in for now, on AMD and NVIDIA alike: `CORTEX_STAGE_TRIM=1` (please report how
 it goes).
 A card holding more experts can change which experts run on the GPU, so the output can differ slightly from a run
 without it.
@@ -188,25 +188,25 @@ The split with `--mmap-experts` catches up once the OS file cache holds the expe
 running; the resident copy is there from the first request and stays locked when other programs need the RAM. With
 `--pcie-frac 0 --adapt-every 0` the split's greedy output is the same with either mode.
 
-**The prompt path's loan on a split and its streamed ring (`STRATA_SPLIT_RING`).** Under a split the prompt path borrows
+**The prompt path's loan on a split and its streamed ring (`CORTEX_SPLIT_RING`).** Under a split the prompt path borrows
 the tail slots of each card's expert cache for its buffers (they are given back after the prompt), and the resident RAM
 copy keeps those experts too, so a borrowed expert is not read back from the model file during a prompt. How many slots
 are borrowed depends on the prompt path's streamed ring: a split uses 96 ring slots when at least 75% of the (layer,
-expert) pairs sit in some card's cache, and `STRATA_SPLIT_RING=N` sets N slots (`0` goes back to the pinned-share rule).
+expert) pairs sit in some card's cache, and `CORTEX_SPLIT_RING=N` sets N slots (`0` goes back to the pinned-share rule).
 The ring used to be chosen after the RAM copy's regions were sized, so the regions were sized for a different ring than
-the prompt path then used: with `STRATA_SPLIT_RING=384` it borrowed 5,396 slots and the copy kept 4,662, and the
+the prompt path then used: with `CORTEX_SPLIT_RING=384` it borrowed 5,396 slots and the copy kept 4,662, and the
 other 734 were read from the model file in every chunk. The ring is now chosen first (`Prefill::set_ring_override`
-says it must be set before the buffers are counted). The start-up line `strata serve: lend sizing: the prompt path
+says it must be set before the buffers are counted). The start-up line `cortex serve: lend sizing: the prompt path
 borrows N slots (ring R slots at chunk C), K of them keep their experts in RAM too` shows both numbers, and a
 `WARNING` follows when K is below N. Without a split, or without `--resident-experts`, nothing changes. With a split
 the order of the two steps changed for every ring choice, the 96-slot rule included: its regions used to be sized for
 the larger default ring, so there the copy probably kept more slots than were borrowed (not measured). The 5,396 /
 4,662 figures were measured on the test machine (2x RTX 3080 20 GB at 220 W, Xeon E5-2696 v4, UD-Q4_K_XL,
-`--layer-split 23`, resident RAM mode, `--prefill auto:16384`, 2 slots), one restart per arm, with `STRATA_SPLIT_RING=384`
-and `STRATA_PREFILL_RING` unset. Before the change a 104K-token prompt made 413 blob reads and read 10.3 GB of experts
+`--layer-split 23`, resident RAM mode, `--prefill auto:16384`, 2 slots), one restart per arm, with `CORTEX_SPLIT_RING=384`
+and `CORTEX_PREFILL_RING` unset. Before the change a 104K-token prompt made 413 blob reads and read 10.3 GB of experts
 from the model file per request; after it, 0, with all 5,396 borrowed slots kept in RAM, for 2.15 GiB more pinned RAM
 (13.61 -> 15.76 GiB). 25K and 51K prompts read nothing from the file in either case. With the override unset and
-`STRATA_PREFILL_RING=384` the lend lines are identical before and after (5,396 / 5,396, 15.76 GiB). No speed gain is
+`CORTEX_PREFILL_RING=384` the lend lines are identical before and after (5,396 / 5,396, 15.76 GiB). No speed gain is
 shown: the medians of three 104K reads were 2,803 tok/s before and 2,907 after, but the spread before is 2,540-2,897
 (its first read faulted 4.2 GB in from NVMe) and there is no A/A restart. Here the page cache absorbed the 10 GB per
 request; with less spare page cache it would be disk traffic. Not measured: both ring variables unset.
@@ -220,8 +220,8 @@ keeps the one whose caches would hold the most of the expert profile, hottest pa
 placement that leaves the fullest card the most room. The startup log prints the choice:
 
 ```
-strata generate: layer split auto: K=19 - the caches hold 11767 of 12288 profiled pairs (fullest device 100%)
-strata serve: layer split: layers 0-18 (CUDA0), 19-47 (CUDA1), one hand-off per window
+cortex generate: layer split auto: K=19 - the caches hold 11767 of 12288 profiled pairs (fullest device 100%)
+cortex serve: layer split: layers 0-18 (CUDA0), 19-47 (CUDA1), one hand-off per window
 ```
 
 ## What each card holds
@@ -234,13 +234,13 @@ strata serve: layer split: layers 0-18 (CUDA0), 19-47 (CUDA1), one hand-off per 
 Prompts are read in chunks that flow through the cards in turn; while a later card reads chunk c, the first card
 already reads chunk c+1. (0.1.44, AMD gfx12: the auto chunk on a split stays at 8192, not the single-card 16384: a 16K prompt is then two chunks
 that overlap instead of one, a 32K one four instead of two. Same tokens; 2x / 3x / 4x R9700 prompt tok/s at 16K +36% / +45% / +53%,
-32K +18% / +21% / +29%, 64K +4% / +12% / +17%, 8K unchanged. `STRATA_SPLIT_CHUNK16K=1` keeps 16384.) Conversation checkpoints save and restore every card's state; the adaptive expert swaps copy
+32K +18% / +21% / +29%, 64K +4% / +12% / +17%, 8K unchanged. `CORTEX_SPLIT_CHUNK16K=1` keeps 16384.) Conversation checkpoints save and restore every card's state; the adaptive expert swaps copy
 into the card that owns the layer.
 
-## Overlapped hand-off (`STRATA_SPLIT_OVERLAP=1`, opt-in)
+## Overlapped hand-off (`CORTEX_SPLIT_OVERLAP=1`, opt-in)
 
 By default each verify window runs the stages one after another: the host syncs stage 1, then stages and launches
-stage 2's graph, and so on. `STRATA_SPLIT_OVERLAP=1` (stages on different cards only) gives the hand-off a ready
+stage 2's graph, and so on. `CORTEX_SPLIT_OVERLAP=1` (stages on different cards only) gives the hand-off a ready
 flag: the earlier stage's GPU writes the hand-off with volatile stores and raises the flag (`handoff_publish`), the
 next stage's graph is staged and launched on a helper thread while the earlier stage is still running and waits for
 the flag on its GPU (`wait_flag_ge`), and the host goes straight from serving one stage's layers to the next, syncing
@@ -250,7 +250,7 @@ critical path. Batch windows (several conversations) keep the serial order. It i
 Measured on 2x RX 7900 XTX (gfx1100, ROCm, Linux), Ryzen 9 9900X, 52 GB RAM, Swift 1.5 IQ3_XXS, 128K context, 8-bit
 KV, layers 0-25 / 26-47; 512-token greedy answers, median of 8 runs:
 
-| | serial (default) | `STRATA_SPLIT_OVERLAP=1` | one card |
+| | serial (default) | `CORTEX_SPLIT_OVERLAP=1` | one card |
 |---|---|---|---|
 | decode, code prompt | 53 tok/s | 70.1 tok/s | ~70 tok/s |
 | decode, prose prompt | 45 tok/s | 55.9 tok/s | ~68 tok/s |
@@ -258,11 +258,11 @@ KV, layers 0-25 / 26-47; 512-token greedy answers, median of 8 runs:
 Greedy output is byte-identical with the flag at 0 and 1; the quiz set scored the same (47/51). Not measured on
 NVIDIA yet, where a sync and a graph launch cost less.
 
-The reading stage's wait for the flag is bounded on the GPU: `STRATA_SPLIT_WAIT_MS` (default 30000, 0 = no bound).
+The reading stage's wait for the flag is bounded on the GPU: `CORTEX_SPLIT_WAIT_MS` (default 30000, 0 = no bound).
 If the flag does not arrive in time, the wait marks an error word and returns, the window's graph completes, and the
 host fails that window with an error naming the setting (the server then restarts the engine) instead of using a
 stale hand-off. Normally the host's own per-layer wait (20 s, #267) ends a stalled window first and releases every
-GPU wait, the hand-off's included. Test hook: `STRATA_TEST_HANDOFF_DROP=N` withholds the flag in the first stage's
+GPU wait, the hand-off's included. Test hook: `CORTEX_TEST_HANDOFF_DROP=N` withholds the flag in the first stage's
 N-th window, as if the publish were lost.
 ## Prompt chunks sized for the pipeline (`--prefill-pipe`, opt-in; setup's `--calibrate` sets it)
 
@@ -289,13 +289,13 @@ dies keep b/a 768 (355-356 against 219-220 tok/s in every round, +62%); two RTX 
 faster than off, b/a 768 20% slower). A first version that read a different stretch of text per value and confirmed in
 two rounds picked 1536 on the RTX 3090 Ti pair from one fast read - where the experts are streamed, the read speed
 depends on the text. `--prefill-pipe 1` needs no
-b/a: it is `STRATA_PREFILL_EQUAL=1`'s rule (#693) - today's chunk count, evened out on the 256-token grid, and only
-when today's last chunk has 1024 tokens or more (3072 with `STRATA_PREFILL_CPU_SHARE` set). A chunk that size streams
+b/a: it is `CORTEX_PREFILL_EQUAL=1`'s rule (#693) - today's chunk count, evened out on the 256-token grid, and only
+when today's last chunk has 1024 tokens or more (3072 with `CORTEX_PREFILL_CPU_SHARE` set). A chunk that size streams
 every expert its card does not hold, a shorter one only the experts it routes to, so a prompt just past the chunk size
 reads as one full chunk and a nearly free tail, and evening that out would add a second full pass over the experts:
 the first version evened every split out, and on two RTX 4090 MistyMoonR's calibration read 1,601 tok/s with it
 against 2,129 off. 0 (the default) is today's split;
-`STRATA_PREFILL_PIPE=<R>` is the same as the flag where the config cannot carry it. The chunk geometry changes the
+`CORTEX_PREFILL_PIPE=<R>` is the same as the flag where the config cannot carry it. The chunk geometry changes the
 rounding, which is why it is opt-in.
 
 A prompt segment (the prompt between two of its cuts: the system-prompt root, the last turn, a `pin=`) is planned once,
@@ -305,13 +305,13 @@ on after a `BYIELD` or from a periodic checkpoint taken inside it (the slot and 
 goes on in it when it continues the same segment, else it plans again and says so in the log). The output bits then
 match as far as the experts the cards hold do (`--adapt-swaps 0` for byte-identical repeats, as without the pipe).
 Before this, a read beside decoding slots re-planned every piece, and one that went on after a `BYIELD` re-planned what
-was left. A chunk the pipe planned takes no `STRATA_PREFILL_CPU_SHARE`: the stages read
+was left. A chunk the pipe planned takes no `CORTEX_PREFILL_CPU_SHARE`: the stages read
 such chunks at the same time, and which stage got the CPU pool first would decide which experts the CPU computed. The
 DONE line ends with `chunk=` (the first chunk of the request's longest batched segment) and `experts_streamed=` (the
 expert blobs its prompt copied to the cards), and the INFO line carries `prefill_cap`, `prefill_stages`,
 `stream_all_min` and `prefill_pipe`. One line in the log says what a plan chose:
 
-    strata prefill: 10058 tokens in 1280-token chunks over 4 stages (--prefill-pipe 706: b/a)
+    cortex prefill: 10058 tokens in 1280-token chunks over 4 stages (--prefill-pipe 706: b/a)
 
 Four GP100 dies (PH402 SKU 200, `--layer-split 12,24,36`, Flash-Next IQ3_XXS, 64K context), prompt tok/s, fresh
 prompts, two interleaved rounds (each within 0.2%), with b/a 1024 (the same chunks as 700-890, measured on this rig):
@@ -354,7 +354,7 @@ a card was freed is left out); b/a 5836 and 6432 (timed on the rig), against 102
 - Under WDDM (Windows, and WSL2) only 8 GiB of the expert arena is pinned (more, mapped into two GPU contexts,
   leaves WDDM refusing allocations); the rest streams through the pinned staging ring. A Linux driver has no such
   limit, so there the whole arena is pinned (since 0.1.31; the cap cost a 4090 + 3060 split two thirds of its
-  prompt speed, #253). `STRATA_ARENA_PIN_GIB=N` pins at most N GiB, `0` the whole arena, on any OS.
+  prompt speed, #253). `CORTEX_ARENA_PIN_GIB=N` pins at most N GiB, `0` the whole arena, on any OS.
 - Every card needs compute capability 7.5 (RTX 20 or newer). The pre-sm_80 QSA scorer path is fp32 FMAs, so a
   Turing card runs the same kernels instead of the tensor-core prompt attention.
 
@@ -385,7 +385,7 @@ The Coder on an RTX 5080 + RTX 3090 (Ryzen 9 9950X3D), 32K context; details in
 **Default on AMD RDNA4 (gfx1200 / gfx1201).** With `--serve`, the draft layer and a layer split of **two or more stages**,
 `--pipeline-windows 2` is on unless you say otherwise (the log says "is on by default for a layer split of N stages"; two
 stages since 0.1.44, three or more since 0.1.43). It is no quality trade: the tokens are the serial loop's up to CPU rounding
-(below). `--pipeline-windows 0` or `STRATA_PIPELINE_AUTO=0` turns it off; `--pipeline-windows 2` asks for it on any split.
+(below). `--pipeline-windows 0` or `CORTEX_PIPELINE_AUTO=0` turns it off; `--pipeline-windows 2` asks for it on any split.
 The same options that switch it off when you ask for it (`--batch`, `--peer-device`, the helper caches, no draft layer,
 `--adapt-async 1`) leave it off without a line when it is only the default. NVIDIA builds keep it opt-in.
 
@@ -394,7 +394,7 @@ On 2x / 4x R9700 the two streams then slowed each other, in most engine starts a
 last stage's window took 27 ms instead of 13 ms while a chain ran (14.9 ms in the lucky starts, which also decoded 25% faster;
 the 0.1.43 notes' "128.9 does not reproduce" was this). With the pipeline on, the engine now loads the draft layer on the
 **first** card, whose window has finished when the chain starts: the chain's source rows are copied across once per chain and the
-draft head's rows once at load. Same tokens; `STRATA_MTP_STAGE0=0` keeps the old place. Exact-flags A/B, 5 pairs, decode tok/s
+draft head's rows once at load. Same tokens; `CORTEX_MTP_STAGE0=0` keeps the old place. Exact-flags A/B, 5 pairs, decode tok/s
 (serial loop -> now): 2 cards code 103 -> 125 (+21%), 4K prompt +8%, prose equal; 3 cards code +19%, 4K +12%, prose +2%; 4 cards
 code +22%, prose +4%, 4K +15%.
 
@@ -423,7 +423,7 @@ and the asynchronous tier stay two-stage. In the config:
   of the first card's recurrent state (about 3 MiB per GDN layer it runs) on the first card with `2` (on every front
   card with three or more stages; only the first card's room is kept out of its cache, the others allocate theirs after).
 - **Same text**: the last card only ever runs windows that are verified, and every window row computes what it
-  would in any other window, so the tokens are the serial loop's. With `STRATA_IQ_MT_MIN=1 --pcie-frac 0
+  would in any other window, so the tokens are the serial loop's. With `CORTEX_IQ_MT_MIN=1 --pcie-frac 0
   --adapt-every 0` the greedy output is identical bit for bit to the serial loop's with the same expert caches. The pipeline keeps
   its VRAM out of the caches, so against a run without the flag a few experts move from a card to the CPU, which
   rounds them differently, and a near-tie can flip (a serial run given the same caches through `--vram-reserve-mib`
@@ -445,15 +445,15 @@ and the asynchronous tier stay two-stage. In the config:
 - **Measured on four stages** (Flash-Next GSQ-RCO IQ3_S, 262K context, int8 KV, layer split 12,24,36 on 4x RX 7900 XT,
   every expert in VRAM; greedy, reasoning off, 256 tokens, repository-text prompts): decode 59.4 -> 67.6 tok/s at 4K
   (median of 3) and 51.8 -> 65.6 at 32K. A guessed window that holds costs ~15 ms against ~43 ms for a fresh one; about
-  a third of the guesses held. The greedy text was identical to the serial loop's on all four prompts (`STRATA_IQ_MT_MIN=1
-  --pcie-frac 0 --adapt-every 0`), and with every guess forced wrong (`STRATA_PIPELINE_FORCE_MISS=1`).
+  a third of the guesses held. The greedy text was identical to the serial loop's on all four prompts (`CORTEX_IQ_MT_MIN=1
+  --pcie-frac 0 --adapt-every 0`), and with every guess forced wrong (`CORTEX_PIPELINE_FORCE_MISS=1`).
 - **HIP**: the draft layer's per-row `gr_read` used the last stage's session scratch (`ss.block.gr`), which that stage's
   verifier also uses; a chain launched at a verdict and the next window's last stage then ran on the card at once and
   the window's head read a clobbered mix (wrong tokens after a guess that held). The draft layer now has its own scratch.
 
-The `STRATA_PIPELINE_*` tuning and test variables (THETA, FORCE_MISS, SWITCH, LOG, TRACE, SPEC_DEPTH and the like) are read only with
-`STRATA_PIPELINE_DEBUG=1`. `--pipeline-windows` and `--adapt-async 1` combine: the engine turns the asynchronous tier
-off beside `--pipeline-windows 2` only when `STRATA_PIPELINE_ADAPT_ASYNC=0` is set. What switches either one off is
+The `CORTEX_PIPELINE_*` tuning and test variables (THETA, FORCE_MISS, SWITCH, LOG, TRACE, SPEC_DEPTH and the like) are read only with
+`CORTEX_PIPELINE_DEBUG=1`. `--pipeline-windows` and `--adapt-async 1` combine: the engine turns the asynchronous tier
+off beside `--pipeline-windows 2` only when `CORTEX_PIPELINE_ADAPT_ASYNC=0` is set. What switches either one off is
 printed once at start ("is off: ..."). `--remote-expert-opt` does something only with a helper cache
 (`--expert-cache-device1..3`); on a plain layer split it is inert, and setup no longer writes it there (#1447).
 
@@ -468,13 +468,13 @@ noted (reported by adambenhassen, #1447; not repeated on our boxes):
 | setup defaults (two runs) | 137.0 / 136.9 | 1798 |
 | `--adapt-async 1` (two runs) | 145.2 / 143.7 | 1800 / 1797 |
 | `--adapt-async 1`, no `--remote-expert-opt` | 145.0 | 1807 |
-| `STRATA_ADAPT_LAG=2` | 142.8 | 1800 |
-| `STRATA_EXCHANGE_ROTATE=1` | 139.6 | 1800 |
-| `STRATA_PF_FUSED=1` | 137.2 | 1913 |
+| `CORTEX_ADAPT_LAG=2` | 142.8 | 1800 |
+| `CORTEX_EXCHANGE_ROTATE=1` | 139.6 | 1800 |
+| `CORTEX_PF_FUSED=1` | 137.2 | 1913 |
 | `--pipeline-windows 2` | 136.7 | 2097 |
-| `STRATA_SPEC_COUPLED=1` | 137.6 | 1804 |
-| `STRATA_SPEC_PROB=1` | 137.2 | 1788 |
-| `STRATA_SPEC_COUPLED=1` + `STRATA_SPEC_GUMBEL=1` | 136.5 | 1805 |
+| `CORTEX_SPEC_COUPLED=1` | 137.6 | 1804 |
+| `CORTEX_SPEC_PROB=1` | 137.2 | 1788 |
+| `CORTEX_SPEC_COUPLED=1` + `CORTEX_SPEC_GUMBEL=1` | 136.5 | 1805 |
 | async + lag 2 + rotate + pf_fused | 145.0 | 1829 |
 | pw2 + lag 2 + rotate + pf_fused | 135.9 | 2296 |
 | pw2 + async + lag 2 + rotate + pf_fused | 142.0 | 2302 |

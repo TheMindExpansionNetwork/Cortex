@@ -1,6 +1,6 @@
 # 32 annotation review — 9 October 2026
 
-Completed in `/Users/nikoveit/Documents/Strata-Design/backups/strata`.
+Completed in `/Users/nikoveit/Documents/Cortex-Design/backups/cortex`.
 
 App: http://localhost:5160 · Host API: http://127.0.0.1:5161
 

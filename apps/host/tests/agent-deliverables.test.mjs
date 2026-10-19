@@ -8,8 +8,8 @@ import { DeliverableTracker, ActivityGroups, fileType, groupLine, lineDelta } fr
 import { startScriptedWorker } from './helpers/scripted-worker.mjs';
 import { createAgentBridge } from '../server/agent/agent-bridge.mjs';
 import { resolveHarness } from '../server/agent/harness-runtime.mjs';
-const HARNESS = process.env.STRATA_HARNESS_DIR;
-const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'STRATA_HARNESS_DIR is not set to a built Harness' : false;
+const HARNESS = process.env.CORTEX_HARNESS_DIR;
+const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'CORTEX_HARNESS_DIR is not set to a built Harness' : false;
 const NL = String.fromCharCode(10), MINUS = String.fromCharCode(0x2212);
 
 test('file types, line deltas and the compact line', () => {
@@ -22,7 +22,7 @@ test('file types, line deltas and the compact line', () => {
 });
 
 test('a created file, a changed file and a script-made file are reported once each, with sizes and line changes', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'strata-dl-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-dl-'));
   try {
     writeFileSync(join(dir, 'notes.md'), ['one', 'two', 'three', ''].join(NL));
     const t = new DeliverableTracker(dir); t.snapshot();
@@ -44,7 +44,7 @@ test('a created file, a changed file and a script-made file are reported once ea
 });
 
 test('a snapshot cut short by its time budget never turns the rest of the folder into "new files" (QA report: Edited 308 files)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'strata-dl3-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-dl3-'));
   try {
     // a big, old tree (the CUDA headers of the report) that was there long before the turn
     const old = new Date(Date.now() - 3600_000);
@@ -66,7 +66,7 @@ test('a snapshot cut short by its time budget never turns the rest of the folder
 });
 
 test('the tracker never looks inside the app, engine, component, AppData or temp folders, nor when the chat folder is the app itself', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'strata-dl4-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-dl4-'));
   try {
     const ws = join(dir, 'work'), engine = join(ws, 'engine'), temp = join(ws, 'Temp'), appData = join(ws, 'AppData'), mine = join(ws, 'mine');
     for (const d of [ws, engine, temp, appData, mine]) mkdirSync(d);
@@ -107,7 +107,7 @@ test('activity groups: consecutive tools are one growing group closed by text, w
 
 test('a turn sends deliverable and activity-group frames in order, before the end', { skip }, async (t) => {
   const worker = await startScriptedWorker({});
-  const dir = mkdtempSync(join(tmpdir(), 'strata-dl2-')); const ws = join(dir, 'ws'); mkdirSync(ws);
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-dl2-')); const ws = join(dir, 'ws'); mkdirSync(ws);
   const bridge = createAgentBridge({ dataDir: dir, localInstances: () => [{ id: 'i', label: 'S', baseUrl: worker.url, modelId: 'scripted-model', context: 32768, slots: 2 }], connections: () => [], env: process.env, startTimeoutMs: 90_000 });
   t.after(async () => { await bridge.close(); await worker.close(); try { rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch { /* best effort */ } });
   const fwd = p => p.split(String.fromCharCode(92)).join('/');

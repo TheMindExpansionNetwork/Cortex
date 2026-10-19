@@ -1,7 +1,7 @@
 // aux_cpus_test: the CPU-set derivation of --aux-cpus (pure functions, no GPU) and, on Linux, the placement of live
 // threads (a thread of the process moved to the aux set by the sweep, one that pins itself at creation, the owned ones
 // left alone, and the original placement put back).
-#include "strata/platform/aux_cpus.hpp"
+#include "cortex/platform/aux_cpus.hpp"
 
 #include <array>
 #include <atomic>
@@ -9,7 +9,7 @@
 #include <cstdio>
 #include <thread>
 
-using namespace strata::aux_cpus;
+using namespace cortex::aux_cpus;
 
 namespace {
 int failures = 0;

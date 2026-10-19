@@ -1,7 +1,7 @@
 // sycl/src/kernels/dequant_bench.cpp - time the prompt path's expert dequantizers (iq_dequant_gu_f16 / iq_dequant_f16)
 // on random blocks and print a hash of the FP16 output, so two builds can be compared bit for bit.
 //   dequant_bench [type|all] [experts]       (gate/up 1280 x 2560 and down 2560 x 1280 per expert, the model's shape)
-#include "strata/kernels/iq_kernels.hpp"
+#include "cortex/kernels/iq_kernels.hpp"
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
 #include <chrono>
@@ -46,8 +46,8 @@ int main(int argc, char** argv) {
             for (int e = 0; e < experts; ++e) {
                 const uint8_t* b = src + (size_t) e * 3 * per_mat;
                 uint16_t* o = dst + (size_t) e * (gu_out + d_out);
-                strata::kernels::iq_dequant_gu_f16(t.id, b, b + per_mat, n_ff, n_embd, o, s);
-                strata::kernels::iq_dequant_f16(t.id, b + 2 * per_mat, n_embd * n_ff, o + gu_out, s);
+                cortex::kernels::iq_dequant_gu_f16(t.id, b, b + per_mat, n_ff, n_embd, o, s);
+                cortex::kernels::iq_dequant_f16(t.id, b + 2 * per_mat, n_embd * n_ff, o + gu_out, s);
             }
             s->wait();
         };

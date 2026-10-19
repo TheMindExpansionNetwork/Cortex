@@ -1,6 +1,6 @@
 // Arithmetic adapted from gated_delta_net.cu at pinned llama.cpp
 // 3cf03257f219afbe7334045ff7c6a06ac68c627d. Only state addressing differs:
-// each warp owns one Strata (head,column) and retains its four rows in registers.
+// each warp owns one Cortex (head,column) and retains its four rows in registers.
 // Compile with --use_fast_math to match the pinned CUDA implementation.
 //
 // MIT License
@@ -25,21 +25,21 @@
 // SOFTWARE.
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
-#include "strata/core/geometry.hpp"
+#include "cortex/core/geometry.hpp"
 #include <dpct/dpct.hpp>
-#include "strata/sycl_queue.hpp"
-#include "strata/kernels/native_gdn.hpp"
+#include "cortex/sycl_queue.hpp"
+#include "cortex/kernels/native_gdn.hpp"
 #include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 std::atomic<bool> enabled{false};
 constexpr int S = 128;
-static_assert(S == strata::core::kCompiledGeometry.ssm_state_size, "native_gdn is compiled for core/geometry.hpp");
+static_assert(S == cortex::core::kCompiledGeometry.ssm_state_size, "native_gdn is compiled for core/geometry.hpp");
 
 __dpct_inline__ float warp_sum(float value) {
 #pragma unroll
@@ -133,7 +133,7 @@ void native_gdn_step(float* state, const float* q, const float* k, const float* 
         auto exp_props = sycl::ext::oneapi::experimental::properties{
             sycl::ext::oneapi::experimental::use_root_sync};
 
-        ((sycl::queue *)(strata::q_of(stream)))
+        ((sycl::queue *)(cortex::q_of(stream)))
             ->parallel_for<dpct_kernel_name<class step_134598>>(
                 sycl::nd_range<3>(sycl::range(S / 4, 1, unsigned(shape.h_v)) *
                                       sycl::range(1, 4, 32),
@@ -166,4 +166,4 @@ void native_gdn_step(float* state, const float* q, const float* k, const float* 
     if (error !=
         0) throw std::runtime_error(dpct::get_error_string_dummy(error));
 }
-} // namespace strata::kernels
+} // namespace cortex::kernels

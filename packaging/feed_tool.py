@@ -16,7 +16,7 @@ Typical use (the owner's offline machine; replace ``KEYDIR`` with a folder that 
     python packaging/feed_tool.py verify-feed RELEASE --pub KEYDIR/feed-key.pub.json
 
 ``keygen`` never prints the secret and refuses to write inside a git checkout or over an existing file. The public file's
-entry goes into ``strata_control/update_keys.json`` (``keys``) once, in the commit that ships the first signed release.
+entry goes into ``cortex_control/update_keys.json`` (``keys``) once, in the commit that ships the first signed release.
 The Tauri updater key is a different key (minisign, made by ``tauri signer generate``); its public half goes in
 ``tauri.conf.json`` and in ``update_keys.json`` as ``app_minisign_public``.
 """
@@ -37,7 +37,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from strata_control import engine_component as ec, feed as feedmod, signing  # noqa: E402
+from cortex_control import engine_component as ec, feed as feedmod, signing  # noqa: E402
 
 
 def _inside_git(path: Path) -> bool:
@@ -75,7 +75,7 @@ def keygen(out: Path, *, allow_git: bool = False) -> dict:
     with os.fdopen(fd, "w", encoding="utf-8") as stream:
         json.dump(key, stream, indent=1)
         stream.write("\n")
-    from strata_control import private_files
+    from cortex_control import private_files
     private_files.restrict_to_current_user(secret, directory=False)          # 0600, or a protected ACL on Windows
     public.write_text(json.dumps({"keys": [signing.public_part(key)]}, indent=1) + "\n", encoding="utf-8")
     return signing.public_part(key)
@@ -162,7 +162,7 @@ def pack_engine(folder: Path, out: Path, fmt: str = "tar.gz", *, url_prefix: str
     component = ec.read_manifest(folder)
     files = _tree(folder)
     installed = sum(p.stat().st_size for _, p in files)
-    name = f"strata-engine-{folder.name}.{fmt}"
+    name = f"cortex-engine-{folder.name}.{fmt}"
     archive = Path(out) / name
     _write_archive(files, archive, fmt, component.entrypoint)
     entry = {"version": component.version, "platform": component.platform, "backend": component.backend,
@@ -175,11 +175,11 @@ def pack_engine(folder: Path, out: Path, fmt: str = "tar.gz", *, url_prefix: str
 
 
 def pack_control(folder: Path, out: Path, *, version: str, platform: str, fmt: str = "tar.gz",
-                 entry_file: str = "strata.py", url_prefix: str = "control/") -> dict:
+                 entry_file: str = "cortex.py", url_prefix: str = "control/") -> dict:
     folder = Path(folder)
     files = _tree(folder, links=True)
     installed = sum(p.stat().st_size for _, p in files if not p.is_symlink())
-    name = f"strata-control-{version}-{platform}.{fmt}"
+    name = f"cortex-control-{version}-{platform}.{fmt}"
     archive = Path(out) / name
     _write_archive(files, archive, fmt, entry_file)
     entry = {"platform": platform, "format": fmt, "url": f"{url_prefix}{name}", "size": archive.stat().st_size,
@@ -193,7 +193,7 @@ def build_feed(out: Path, *, key: dict, sequence: int, channel: str = "stable", 
                now: dt.datetime | None = None) -> dict:
     now = now or dt.datetime.now(dt.timezone.utc)
     install_manifest = ""
-    document: dict = {"schema_version": feedmod.SCHEMA_VERSION, "feed": "strata-updates", "channel": channel,
+    document: dict = {"schema_version": feedmod.SCHEMA_VERSION, "feed": "cortex-updates", "channel": channel,
                       "sequence": sequence, "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
                       "expires_at": (now + dt.timedelta(days=expires_days)).strftime("%Y-%m-%dT%H:%M:%SZ") if expires_days else None}
     if engine_dir:

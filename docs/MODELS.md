@@ -1,9 +1,9 @@
 # Which model? Sizes, versions and what fits
 
-Strata's main model is [Qwen3.8-Flash-Next](https://huggingface.co/Qwen/Qwen3.8-Flash-Next), in several **sizes**
+Cortex's main model is [Qwen3.8-Flash-Next](https://huggingface.co/Qwen/Qwen3.8-Flash-Next), in several **sizes**
 (the same model, compressed more or less) and several **versions** (the original, a coding version, a fine-tune, other
 makers' compressions). It also runs a smaller model, [Qwen3.6-35B-A3B](#qwen36-35b-a3b). The desktop app, the Terminal
-(`strata launch`) and the installer recommend one for your PC; this page explains the choice. Back to the
+(`cortex launch`) and the installer recommend one for your PC; this page explains the choice. Back to the
 [README](../README.md).
 
 > **On this page:** [Pick by memory](#pick-by-memory) · [Speed](#how-fast-is-each-size) · [The sizes](#the-sizes) ·
@@ -13,7 +13,7 @@ makers' compressions). It also runs a smaller model, [Qwen3.6-35B-A3B](#qwen36-3
 ## Pick by memory
 
 The tiers count RAM and VRAM (the graphics card's memory) together, the same as the [README](../README.md#the-other-sizes).
-`strata launch`, setup and the install tool of the MCP server pre-select by them; the desktop app does from 0.2.1. Every
+`cortex launch`, setup and the install tool of the MCP server pre-select by them; the desktop app does from 0.2.1. Every
 other size stays a choice. A PC with a card of 12 GB and 32 GB of RAM is in the 40 GB tier (32 + 12 = 44).
 
 | Your memory (RAM + VRAM) | Pre-selected | Notes |
@@ -24,7 +24,7 @@ other size stays a choice. A PC with a card of 12 GB and 32 GB of RAM is in the 
 | **64 GB** | **IQ3_S** (54.8 GB), the original. Swift 1.5's IQ3_S is an equal choice | The slowest, the best: it matches the full model on the published tests |
 | **96 GB or more** | [Unsloth's UD-IQ4_XS to Q8_0](#unsloths-files-ud-iq4_xs-to-q8_0), 4 to 8 bit | UD-IQ4_XS keeps every expert in RAM from about 80 GB of RAM, Q8_0 from about 136 GB. Up to 192 GB, the 5-8-bit files fit in RAM. Setup still pre-selects IQ3_S here, except on a Strix Halo |
 
-With less memory than a row says, Strata's [low-RAM mode](#a-big-graphics-card-and-little-ram) starts by itself and the
+With less memory than a row says, Cortex's [low-RAM mode](#a-big-graphics-card-and-little-ram) starts by itself and the
 model runs slower, much slower with a small card. The figures above are RAM + VRAM; [Will it fit?](#will-it-fit) counts
 RAM alone, for the sizes that keep their experts in RAM.
 
@@ -67,7 +67,7 @@ Radeon AI PRO R9700, RX 7800 XT, RX 9060 XT, RX 6900 XT) are in [AMD_HIP.md](AMD
 
 Every PC is different: `START-HERE.bat --calibrate` measures a few engine settings on yours and keeps the fastest
 (about 15-30 minutes, longer on a slow card; on the PC above it made the Coder 7% faster; NVIDIA cards for now).
-`strata launch` and the app have their own tuning step (quick: about 20 minutes). Measured Strata on your own
+`cortex launch` and the app have their own tuning step (quick: about 20 minutes). Measured Cortex on your own
 PC? See [Community benchmark results](COMMUNITY_BENCHMARKS.md) for a report template and how to share your results
 in a pull request.
 
@@ -105,9 +105,9 @@ Coder. With a small card most experts then come from the SSD and it is much slow
 **Pictures.** The versions in setup's menu read pictures, and pictures are on by default wherever a model can
 read them. The picture reader runs on the CPU when the graphics card has less than 24 GB (a few seconds per
 picture, nothing taken from the card) and on the graphics card from 24 GB (about 1-1.4 GB of VRAM; 0.1-0.5 s per
-picture). The rule is the same on NVIDIA and AMD cards. `--vision off` (or "No" in the app and in `strata launch`) turns
-pictures off; `--vision cpu` or `--vision gpu` picks the reader. On AMD, `strata-vision-hip` is the card's reader; if it
-cannot start, Strata uses the CPU reader by itself ([AMD_HIP.md](AMD_HIP.md)). The Mac app and the Mac Terminal have no
+picture). The rule is the same on NVIDIA and AMD cards. `--vision off` (or "No" in the app and in `cortex launch`) turns
+pictures off; `--vision cpu` or `--vision gpu` picks the reader. On AMD, `cortex-vision-hip` is the card's reader; if it
+cannot start, Cortex uses the CPU reader by itself ([AMD_HIP.md](AMD_HIP.md)). The Mac app and the Mac Terminal have no
 picture reader yet ([MAC.md](MAC.md)), and neither does the Intel Arc engine ([INTEL.md](INTEL.md#not-done)). More: [Images](DETAILS.md#images-vision).
 
 ### Qwen3.8-Flash-Next
@@ -199,8 +199,8 @@ versions of it. The app shows them by who made the weights:
 
 | App name | Setup name (`--model`) | What it is | Download |
 | --- | --- | --- | ---: |
-| **NVFP4 (Strata's version)** | `NVFP4` | Strata's own conversion (GPTQ; the ready-made pack is sergqwer's strata-nvfp4). The best quality of the three | 128 GB |
-| **NVFP4 (NVIDIA's version)** | `NVFP4-NVIDIA` | NVIDIA's own NVFP4 checkpoint (plain rounding), converted for Strata. The same size and speed as the first | 128 GB |
+| **NVFP4 (Cortex's version)** | `NVFP4` | Cortex's own conversion (GPTQ; the ready-made pack is sergqwer's cortex-nvfp4). The best quality of the three | 128 GB |
+| **NVFP4 (NVIDIA's version)** | `NVFP4-NVIDIA` | NVIDIA's own NVFP4 checkpoint (plain rounding), converted for Cortex. The same size and speed as the first | 128 GB |
 | **NVFP4 (NVIDIA, trained for FP4)** | `NVFP4-QAD` | NVIDIA's retrained 4-bit model, slightly faster on short prompts ([below](#nvfp4-qad)) | 102 GB (+110 GB of disk to prepare) |
 
 All three need about 80 GB of RAM to keep every expert in RAM, run on NVIDIA cards only, and read pictures (the
@@ -218,12 +218,12 @@ START-HERE.bat --setup --family nvfp4 --model NVFP4
 NVIDIA retrained Qwen3.8-Flash-Next for 4-bit experts (quantization-aware distillation) and published it as
 [Qwen3.8-Flash-Next-FP4-Local](https://huggingface.co/nvidia/Qwen3.8-Flash-Next-FP4-Local). In setup's NVFP4 family it is
 the size **NVFP4-QAD**. It is not a ready-made pack: setup downloads NVIDIA's files as they are (102 GB) and **turns them
-into a Strata pack on your PC** (once, 20-40 minutes; about 110 GB more disk while it runs, and the 102 GB can be deleted
-afterwards). Nothing of NVIDIA's weights is redistributed by Strata.
+into a Cortex pack on your PC** (once, 20-40 minutes; about 110 GB more disk while it runs, and the 102 GB can be deleted
+afterwards). Nothing of NVIDIA's weights is redistributed by Cortex.
 
 | Size | Download | Memory it needs | In plain words |
 | --- | ---: | ---: | --- |
-| **NVFP4-QAD** (app: NVFP4 (NVIDIA, trained for FP4)) | 102 GB (+110 GB of disk to prepare) | like NVFP4: ~80 GB of RAM keeps every expert in RAM | NVIDIA's FP4, trained for FP4 - slightly faster on short prompts than the other two NVFP4 versions (Strata's version has the best quality) |
+| **NVFP4-QAD** (app: NVFP4 (NVIDIA, trained for FP4)) | 102 GB (+110 GB of disk to prepare) | like NVFP4: ~80 GB of RAM keeps every expert in RAM | NVIDIA's FP4, trained for FP4 - slightly faster on short prompts than the other two NVFP4 versions (Cortex's version has the best quality) |
 
 NVIDIA cards only. It reads pictures (through the original model's picture reader file, which setup downloads with it). Its licenses are the NVIDIA Open Model Agreement and Qwen's Community License.
 Technical details and measurements: [NVFP4.md](NVFP4.md#nvidias-fp4-local-checkpoint).
@@ -240,7 +240,7 @@ explicit packing conversion and is not an installer menu option.
 ## Qwen3.6-35B-A3B
 
 A smaller model from the same maker: [Qwen3.6-35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B) (35 billion
-parameters, 3 billion active per token, 256 experts, Apache 2.0 license). Strata runs [Unsloth's GGUFs with the MTP
+parameters, 3 billion active per token, 256 experts, Apache 2.0 license). Cortex runs [Unsloth's GGUFs with the MTP
 draft layer](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF) on its own engine path, chosen by the file. It is
 in the app's model list and in setup (`--family qwen36`). It runs on NVIDIA and AMD cards; the Intel Arc engine and the
 Mac engine do not run it. It reads pictures and serves several requests at once.
@@ -264,8 +264,8 @@ START-HERE.bat --setup --family qwen36 --model UD-Q4_K_XL
 
 - **In the app:** the Models page lists every model with its size and whether it fits your computer; pick one and press
   the install button.
-- **In the Terminal:** `strata launch` has a Model step with the same list (and "Use model files I already have").
-  `strata models list` shows what is installed; `strata models import <folder or .gguf> --plan` shows what a set of files
+- **In the Terminal:** `cortex launch` has a Model step with the same list (and "Use model files I already have").
+  `cortex models list` shows what is installed; `cortex models import <folder or .gguf> --plan` shows what a set of files
   you already have would be, without changing anything.
 - **With the installer:** `SETUP.bat` (the same as `START-HERE.bat --setup`; on Linux `./setup.sh --setup`) adds another
   model any time.

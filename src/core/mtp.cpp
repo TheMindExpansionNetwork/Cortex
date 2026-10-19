@@ -1,38 +1,38 @@
-// src/core/mtp.cpp - see include/strata/core/mtp.hpp.
-#include "strata/core/mtp.hpp"
-#include "strata/core/pin_budget.hpp"
-#include "strata/kernels/qsa_prompt_attn.hpp"
-#include "strata/core/coupled_draft.hpp"
-#include "strata/core/spec_prob.hpp"
-#include "strata/core/on_device.hpp"
-#include "strata/core/progress.hpp"
+// src/core/mtp.cpp - see include/cortex/core/mtp.hpp.
+#include "cortex/core/mtp.hpp"
+#include "cortex/core/pin_budget.hpp"
+#include "cortex/kernels/qsa_prompt_attn.hpp"
+#include "cortex/core/coupled_draft.hpp"
+#include "cortex/core/spec_prob.hpp"
+#include "cortex/core/on_device.hpp"
+#include "cortex/core/progress.hpp"
 
-#include "strata/core/native_head.hpp"
-#include "strata/core/peer_experts.hpp"
-#include "strata/platform/memory.hpp"
-#include "strata/kernels/bf16_gemv.hpp"
-#include "strata/kernels/cpu/expert.hpp"
-#include "strata/kernels/elementwise.hpp"
-#include "strata/kernels/fused_gr.hpp"
-#include "strata/kernels/gr.hpp"
-#include "strata/kernels/kv_q4.hpp"
-#include "strata/kernels/kv_q8.hpp"
-#include "strata/kernels/native_moe.hpp"
-#include "strata/kernels/native_mmvq.hpp"
-#include "strata/kernels/native_qsa.hpp"
-#include "strata/kernels/native_rope.hpp"
-#include "strata/kernels/native_router.hpp"
-#include "strata/kernels/qsa.hpp"
-#include "strata/kernels/qsa_decode_attn.hpp"
-#include "strata/kernels/quantize_act.hpp"
-#include "strata/kernels/rope.hpp"
-#include "strata/kernels/router_top10.hpp"
-#include "strata/kernels/s2_expert_grouped.hpp"
-#include "strata/kernels/sampler.hpp"
-#include "strata/kernels/shared_expert.hpp"
-#include "strata/kernels/verify_kernels.hpp"
-#include "strata/kernels/ngram.hpp"
-#include "strata/kernels/gfx_arch.hpp"
+#include "cortex/core/native_head.hpp"
+#include "cortex/core/peer_experts.hpp"
+#include "cortex/platform/memory.hpp"
+#include "cortex/kernels/bf16_gemv.hpp"
+#include "cortex/kernels/cpu/expert.hpp"
+#include "cortex/kernels/elementwise.hpp"
+#include "cortex/kernels/fused_gr.hpp"
+#include "cortex/kernels/gr.hpp"
+#include "cortex/kernels/kv_q4.hpp"
+#include "cortex/kernels/kv_q8.hpp"
+#include "cortex/kernels/native_moe.hpp"
+#include "cortex/kernels/native_mmvq.hpp"
+#include "cortex/kernels/native_qsa.hpp"
+#include "cortex/kernels/native_rope.hpp"
+#include "cortex/kernels/native_router.hpp"
+#include "cortex/kernels/qsa.hpp"
+#include "cortex/kernels/qsa_decode_attn.hpp"
+#include "cortex/kernels/quantize_act.hpp"
+#include "cortex/kernels/rope.hpp"
+#include "cortex/kernels/router_top10.hpp"
+#include "cortex/kernels/s2_expert_grouped.hpp"
+#include "cortex/kernels/sampler.hpp"
+#include "cortex/kernels/shared_expert.hpp"
+#include "cortex/kernels/verify_kernels.hpp"
+#include "cortex/kernels/ngram.hpp"
+#include "cortex/kernels/gfx_arch.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -50,30 +50,30 @@
 #include <immintrin.h>
 #endif
 
-#ifdef STRATA_NATIVE_EXPERTS
+#ifdef CORTEX_NATIVE_EXPERTS
 #include "ggml.h"   // --mtp-q4: the head rows' and projections' formats, dequantized and requantized at load
 #endif
 
-#if defined(STRATA_GPU_METAL)
+#if defined(CORTEX_GPU_METAL)
 // The Metal backend's MTP drafter (metal/src/engine/window.cpp, beside the decode window it reads): load, prefill and
 // draft hand over to it; bind has nothing to bind there.
-namespace strata::metal_engine {
+namespace cortex::metal_engine {
 bool mtp_load(const std::string& rt_dir, int max_t, std::string& err);
 bool mtp_prefill(const int32_t* next_tokens, int64_t n, int64_t cell0, std::string& err);
 bool mtp_draft(int T, const int32_t* tokens, int64_t p, int a, int max_steps, int32_t* drafts, float* probs, float min_p,
                int* n_drafts, std::string& err);
-}  // namespace strata::metal_engine
+}  // namespace cortex::metal_engine
 #endif
 
-namespace strata::core {
+namespace cortex::core {
 namespace {
 
 constexpr float EPS = 1e-6f;
 
-// #783 PR-i: STRATA_MTP_CATCHUP_ALL=1 catches the drafter's K/V up for the whole verified window, rejected rows included
+// #783 PR-i: CORTEX_MTP_CATCHUP_ALL=1 catches the drafter's K/V up for the whole verified window, rejected rows included
 bool mtp_catchup_all() {
     static const bool on = [] {
-        const char* v = std::getenv("STRATA_MTP_CATCHUP_ALL");
+        const char* v = std::getenv("CORTEX_MTP_CATCHUP_ALL");
         return v != nullptr && v[0] != '\0' && v[0] != '0';
     }();
     return on;
@@ -94,20 +94,20 @@ struct Bump {
 };
 
 bool mapped(size_t bytes, void** h, void** d) {
-    if (strata::core::host_alloc_guarded(h, bytes, cudaHostAllocMapped | (peer_portable() ? cudaHostAllocPortable : 0)) != cudaSuccess) return false;
+    if (cortex::core::host_alloc_guarded(h, bytes, cudaHostAllocMapped | (peer_portable() ? cudaHostAllocPortable : 0)) != cudaSuccess) return false;
     std::memset(*h, 0, bytes);
     return cudaHostGetDevicePointer(d, *h, 0) == cudaSuccess;
 }
 
-strata::kernels::QsaShapes shapes_of(const ModelGeometry& g) { return qsa_shapes(g); }
+cortex::kernels::QsaShapes shapes_of(const ModelGeometry& g) { return qsa_shapes(g); }
 
 // 64-bit seek/tell on a `FILE*`: `fseek`/`ftell` take a 32-bit `long` on Windows and would wrap past 2 GiB.
 #if defined(_WIN32)
-#define STRATA_FILE_SEEK64(f, o, w) _fseeki64((f), (long long) (o), (w))
-#define STRATA_FILE_TELL64(f) _ftelli64(f)
+#define CORTEX_FILE_SEEK64(f, o, w) _fseeki64((f), (long long) (o), (w))
+#define CORTEX_FILE_TELL64(f) _ftelli64(f)
 #else
-#define STRATA_FILE_SEEK64(f, o, w) fseeko((f), (off_t) (o), (w))
-#define STRATA_FILE_TELL64(f) ftello(f)
+#define CORTEX_FILE_SEEK64(f, o, w) fseeko((f), (off_t) (o), (w))
+#define CORTEX_FILE_TELL64(f) ftello(f)
 #endif
 
 bool read_file(const std::string& path, std::vector<uint8_t>& out) {
@@ -121,11 +121,11 @@ bool read_file(const std::string& path, std::vector<uint8_t>& out) {
         FILE* f;
         ~Closer() { if (f != nullptr) std::fclose(f); }
     } closer{f};
-    if (STRATA_FILE_SEEK64(f, 0, SEEK_END) != 0) return false;
-    const long long n = (long long) STRATA_FILE_TELL64(f);
-    if (n < 0 || STRATA_FILE_SEEK64(f, 0, SEEK_SET) != 0) return false;
+    if (CORTEX_FILE_SEEK64(f, 0, SEEK_END) != 0) return false;
+    const long long n = (long long) CORTEX_FILE_TELL64(f);
+    if (n < 0 || CORTEX_FILE_SEEK64(f, 0, SEEK_SET) != 0) return false;
 #if !defined(_WIN32)
-    strata::platform::advise_willneed(fileno(f), 0, (uint64_t) n);
+    cortex::platform::advise_willneed(fileno(f), 0, (uint64_t) n);
 #endif
     out.resize((size_t) n);
     return n == 0 || std::fread(out.data(), 1, (size_t) n, f) == (size_t) n;
@@ -159,7 +159,7 @@ MtpDrafter::~MtpDrafter() {
     if (state_arena_) cudaFree(state_arena_);
     if (arena_) cudaFree(arena_);
     if (head_logits_) cudaFree(head_logits_);
-    if (owns_draft_head_ && dhead_) { strata::kernels::native_q6_k_unpack(dhead_); cudaFree(dhead_); }
+    if (owns_draft_head_ && dhead_) { cortex::kernels::native_q6_k_unpack(dhead_); cudaFree(dhead_); }
     if (owns_draft_head_ && dvocab_) cudaFree(dvocab_);
     if (ev_chain_) cudaEventDestroy(ev_chain_);
     for (cudaEvent_t e : ev_step_) if (e) cudaEventDestroy(e);
@@ -189,7 +189,7 @@ const void* MtpDrafter::wq(const char* name, int& type) const {
 
 // --mtp-q4: every Q8_0 tensor of dense.bin as Q4_0 (ggml's reference quantizer), in one device buffer
 bool MtpDrafter::make_q4_dense(const std::vector<uint8_t>& blob, std::string& err) {
-#ifdef STRATA_NATIVE_EXPERTS
+#ifdef CORTEX_NATIVE_EXPERTS
     uint64_t total = 0;
     std::vector<std::pair<const Tensor*, uint64_t>> plan;
     for (const auto& t : tensors_) {
@@ -213,7 +213,7 @@ bool MtpDrafter::make_q4_dense(const std::vector<uint8_t>& blob, std::string& er
     if (cudaMalloc((void**) &dense4_, (size_t) total) != cudaSuccess) { err = "mtp: the Q4_0 projections do not fit"; return false; }
     cudaMemcpy(dense4_, host.data(), (size_t) total, cudaMemcpyHostToDevice);
     vram_ += total;
-    std::fprintf(stderr, "strata mtp: --mtp-q4: %zu projections as Q4_0 (%.1f MiB)\n", plan.size(), (double) total / 1048576.0);
+    std::fprintf(stderr, "cortex mtp: --mtp-q4: %zu projections as Q4_0 (%.1f MiB)\n", plan.size(), (double) total / 1048576.0);
     return true;
 #else
     (void) blob;
@@ -224,7 +224,7 @@ bool MtpDrafter::make_q4_dense(const std::vector<uint8_t>& blob, std::string& er
 
 // --mtp-q4: the draft head's subset rows as Q4_0 (dequantized from the main head's format)
 bool MtpDrafter::make_q4_head(std::string& err) {
-#ifdef STRATA_NATIVE_EXPERTS
+#ifdef CORTEX_NATIVE_EXPERTS
     const int64_t N = g_->n_embd;
     const auto* tt = ggml_get_type_traits((ggml_type) head_->type());
     if (tt == nullptr || tt->to_float == nullptr || N % 32 != 0) { err = "mtp: --mtp-q4 cannot read the head's format"; return false; }
@@ -239,7 +239,7 @@ bool MtpDrafter::make_q4_head(std::string& err) {
     // the Q4_0 rows replace the subset in place (they are smaller)
     if (cudaMemcpy(dhead_, dst.data(), dst.size(), cudaMemcpyHostToDevice) != cudaSuccess) { err = "mtp: writing the draft head"; return false; }
     dhead_type_ = GGML_Q4_0;
-    std::fprintf(stderr, "strata mtp: --mtp-q4: draft head over %lld tokens as Q4_0 (%.1f MiB read per step, was %.1f)\n",
+    std::fprintf(stderr, "cortex mtp: --mtp-q4: draft head over %lld tokens as Q4_0 (%.1f MiB read per step, was %.1f)\n",
                  (long long) n_dvocab_, (double) dst.size() / 1048576.0, (double) src.size() / 1048576.0);
     return true;
 #else
@@ -250,12 +250,12 @@ bool MtpDrafter::make_q4_head(std::string& err) {
 
 bool MtpDrafter::load(const std::string& rt_dir, const ModelGeometry& g, SessionState& ss, int max_t, std::string& err,
                       int64_t window, const MtpDrafter* shared) {
-#if defined(STRATA_GPU_METAL)
+#if defined(CORTEX_GPU_METAL)
     (void) window; (void) shared;
     g_ = &g;
     ss_ = &ss;
     max_t_ = max_t;
-    return strata::metal_engine::mtp_load(rt_dir, max_t, err);
+    return cortex::metal_engine::mtp_load(rt_dir, max_t, err);
 #endif
     cudaGetDevice(&device_);   // a layer split's last stage on another GPU: the drafter lives there
     g_ = &g;
@@ -263,7 +263,7 @@ bool MtpDrafter::load(const std::string& rt_dir, const ModelGeometry& g, Session
     if (ple_ss_ == nullptr) ple_ss_ = &ss;
     max_t_ = max_t;
     rt_dir_ = rt_dir;
-    if (max_t < 1 || max_t > strata::kernels::kVerifyMaxT) { err = "mtp: max_t out of range"; return false; }
+    if (max_t < 1 || max_t > cortex::kernels::kVerifyMaxT) { err = "mtp: max_t out of range"; return false; }
     if (shared != nullptr) {
         if (shared->device_ != device_ || shared->g_ != &g || shared->dense_ == nullptr ||
             shared->experts_ == nullptr || shared->rt_dir_ != rt_dir) {
@@ -309,7 +309,7 @@ bool MtpDrafter::load(const std::string& rt_dir, const ModelGeometry& g, Session
     }
     // ---- the 512 routed experts, one blob each
     if (shared == nullptr) {
-        const uint64_t bytes = (uint64_t) g.n_expert * strata::kernels::cpu::BLOB;
+        const uint64_t bytes = (uint64_t) g.n_expert * cortex::kernels::cpu::BLOB;
         // Loader fix (0.1.15+loaderfix.2): each 64 MiB read below reached the disk as ~16k 4095-byte reads under
         // MSVC's `basic_filebuf::xsgetn`, which is what made 675 MiB of drafter experts take minutes.
         FILE* f = std::fopen((rt_dir + "/experts.bin").c_str(), "rb");
@@ -320,7 +320,7 @@ bool MtpDrafter::load(const std::string& rt_dir, const ModelGeometry& g, Session
         } closer{f};
         if (cudaMalloc((void**) &experts_, bytes) != cudaSuccess) { err = "mtp: the 512 experts do not fit in VRAM"; return false; }
 #if !defined(_WIN32)
-        strata::platform::advise_willneed(fileno(f), 0, bytes);
+        cortex::platform::advise_willneed(fileno(f), 0, bytes);
 #endif
         std::vector<uint8_t> chunk(64u << 20);
         for (uint64_t off = 0; off < bytes;) {
@@ -337,7 +337,7 @@ bool MtpDrafter::load(const std::string& rt_dir, const ModelGeometry& g, Session
     for (const char* n : required) if (!q8(n)) { err = std::string("mtp: ") + n + " is missing (q8_0)"; return false; }
 
     // ---- the layer's own K/V (dense attention: no indexer state is read)
-    const strata::kernels::QsaShapes s = shapes_of(g);
+    const cortex::kernels::QsaShapes s = shapes_of(g);
     const int64_t max_cells = ss.qsa_states[ss.qsa_primary()].max_cells;
     // KV streaming: the drafter only reads its last `window` cells, so with streaming on its K/V is a ring of the
     // window (plus the cells a round writes ahead of its queries) over a host copy, refilled on a resume. The host copy
@@ -353,7 +353,7 @@ bool MtpDrafter::load(const std::string& rt_dir, const ModelGeometry& g, Session
     if (cudaMalloc(&state_arena_, sb) != cudaSuccess) { err = "mtp: the K/V state does not fit"; return false; }
     if (qsa_state_init(g, max_cells, state_arena_, st_, &ss.qsa_states[ss.qsa_primary()], ring) == 0) {
         if (st_.kv_mode == 0) { err = "mtp: state init failed"; return false; }
-        std::fprintf(stderr, "strata mtp: no pinned RAM left for the draft layer's K/V copy; keeping it in VRAM\n");
+        std::fprintf(stderr, "cortex mtp: no pinned RAM left for the draft layer's K/V copy; keeping it in VRAM\n");
         cudaGetLastError();
         cudaFree(state_arena_);
         st_ = QsaState{};
@@ -371,7 +371,7 @@ bool MtpDrafter::load(const std::string& rt_dir, const ModelGeometry& g, Session
     // ---- buffers
     window_ = (window > 0 && window < max_cells) ? window : 0;
     cap_ = (((window_ > 0 ? window_ : max_cells) + 63) / 64) * 64;
-    attn_scratch_floats_ = (int64_t) strata::kernels::qsa_decode_attn_scratch_floats(cap_, s);
+    attn_scratch_floats_ = (int64_t) cortex::kernels::qsa_decode_attn_scratch_floats(cap_, s);
     const uint64_t T = (uint64_t) max_t, N = (uint64_t) g.n_embd, HC = (uint64_t) g.hc, K = (uint64_t) ss.k;
     const uint64_t NH = (uint64_t) g.n_head, HD = (uint64_t) g.head_dim, NKV = (uint64_t) g.n_head_kv;
     const uint64_t R2 = 2 * T;   // step/pos rows: T catch-up rows + up to T-2 chain steps
@@ -393,7 +393,7 @@ bool MtpDrafter::load(const std::string& rt_dir, const ModelGeometry& g, Session
         mixed_ = b.take<float>(T * N); inj_ = b.take<float>(T * HC); inj2_ = b.take<float>(T * HC);
         lo_ = b.take<float>(T * (uint64_t) g.hc_lr); rs_ = b.take<float>(T * HC); bo_ = b.take<float>(T * N);
         xn_ = b.take<float>(T * HC * N);
-        xq_ = b.take<uint8_t>(strata::kernels::native_q8_1_bytes((int) (NH * HD), 8));
+        xq_ = b.take<uint8_t>(cortex::kernels::native_q8_1_bytes((int) (NH * HD), 8));
         qfull_ = b.take<float>(T * NH * 2 * HD); qcur_ = b.take<float>(T * NH * HD);
         kcur_ = b.take<float>(T * NKV * HD); vcur_ = b.take<float>(T * NKV * HD);
         attn_ = b.take<float>(T * NH * HD); attn32_ = b.take<float>(T * NH * HD);
@@ -402,21 +402,21 @@ bool MtpDrafter::load(const std::string& rt_dir, const ModelGeometry& g, Session
         shared_ = b.take<float>(T * N); parts_ = b.take<float>(T * K * N); y_ = b.take<float>(T * N);
         sample_ = b.take<float>(T * N);
         {
-            const strata::kernels::GrShapes gsh{g.n_embd, g.hc, g.hc_lr};
-            uint8_t* gr_mem = b.take<uint8_t>(strata::kernels::gr_workspace_bytes(gsh));
-            if (gr_mem != nullptr) strata::kernels::gr_workspace_init(gsh, gr_mem, own_gr_);
+            const cortex::kernels::GrShapes gsh{g.n_embd, g.hc, g.hc_lr};
+            uint8_t* gr_mem = b.take<uint8_t>(cortex::kernels::gr_workspace_bytes(gsh));
+            if (gr_mem != nullptr) cortex::kernels::gr_workspace_init(gsh, gr_mem, own_gr_);
         }
         hit_slot_ = b.take<int32_t>(T * K); hit_dst_ = b.take<int32_t>(T * K); hit_count_ = b.take<int32_t>(4);
         grp_ptr_ = b.take<unsigned long long>(T * K); grp_start_ = b.take<int32_t>(T * K + 1);
         grp_counts_ = b.take<int32_t>(4);
         hit_xq_ = b.take<uint8_t>(T * (N / 32) * 34); hit_xs_ = b.take<float>(T * (N / 32));
-        hit_scratch_ = b.take<uint8_t>(strata::kernels::moe_hit_grouped_scratch_bytes((int64_t) (T * K), g.n_embd, g.n_ff));
-        sh_scratch_ = (float*) b.take<uint8_t>(strata::kernels::shared_expert_scratch_bytes(g.n_ff));
+        hit_scratch_ = b.take<uint8_t>(cortex::kernels::moe_hit_grouped_scratch_bytes((int64_t) (T * K), g.n_embd, g.n_ff));
+        sh_scratch_ = (float*) b.take<uint8_t>(cortex::kernels::shared_expert_scratch_bytes(g.n_ff));
         x_bf16_ = b.take<uint16_t>(N);
         out_ids_ = b.take<int32_t>(T + 4);
         probs_ = b.take<float>(T + 4);
-        arg_scratch_ = b.take<uint8_t>(strata::kernels::argmax_rows_scratch_bytes((int) T));
-        top_scratch_ = b.take<uint8_t>(strata::kernels::row_top_prob_scratch_bytes((int) T));
+        arg_scratch_ = b.take<uint8_t>(cortex::kernels::argmax_rows_scratch_bytes((int) T));
+        top_scratch_ = b.take<uint8_t>(cortex::kernels::row_top_prob_scratch_bytes((int) T));
         dummy_inj_ = b.take<float>(HC);
     };
     Bump count;
@@ -434,28 +434,28 @@ bool MtpDrafter::load(const std::string& rt_dir, const ModelGeometry& g, Session
         cudaMemcpy(ident_, id.data(), id.size() * 4, cudaMemcpyHostToDevice);
     }
     // --pipeline-windows 2 (the forcing graphs): the chain shares its card with stage 1's windows and the next launch
-    // on stage 0 waits for it, so its stream gets the highest priority there (STRATA_MTP_PRIORITY=0: the default)
+    // on stage 0 waits for it, so its stream gets the highest priority there (CORTEX_MTP_PRIORITY=0: the default)
     bool prio = false;
-#if !defined(STRATA_USE_HIP) && !defined(STRATA_HIP_GFX906) && !defined(STRATA_GPU_METAL)   // (HIP, Metal: the default priority)
-    static const bool hi_prio = [] { const char* v = std::getenv("STRATA_MTP_PRIORITY"); return v == nullptr || std::atoi(v) != 0; }();
+#if !defined(CORTEX_USE_HIP) && !defined(CORTEX_HIP_GFX906) && !defined(CORTEX_GPU_METAL)   // (HIP, Metal: the default priority)
+    static const bool hi_prio = [] { const char* v = std::getenv("CORTEX_MTP_PRIORITY"); return v == nullptr || std::atoi(v) != 0; }();
     int prio_lo = 0, prio_hi = 0;
     if (force_on_ && hi_prio && cudaDeviceGetStreamPriorityRange(&prio_lo, &prio_hi) == cudaSuccess)
         prio = cudaStreamCreateWithPriority(&cs_, cudaStreamNonBlocking, prio_hi) == cudaSuccess;
     cudaGetLastError();
 #endif
-#if defined(STRATA_USE_HIP) && !defined(STRATA_HIP_GFX906)
-    // engine-latency, STRATA_MTP_HIP_PRIO (default on gfx1200/gfx1201, =1 elsewhere opt-in, =0 off): the draft stream at the
+#if defined(CORTEX_USE_HIP) && !defined(CORTEX_HIP_GFX906)
+    // engine-latency, CORTEX_MTP_HIP_PRIO (default on gfx1200/gfx1201, =1 elsewhere opt-in, =0 off): the draft stream at the
     // highest priority.  ROCm hands out hardware queues per priority (GPU_MAX_HW_QUEUES per level), so the drafter gets a
     // queue of its own: its round no longer waits behind the commit graph that the verifier's stream launched just before
     // it (the commit is only needed by the next window, and now runs beside the draft).  R9700, UD-Q4_K_XL: draft wall
     // 5.8 -> 3.5 ms a window (notes-latency.md).
     {
         static const bool hip_prio = [] {
-            if (const char* v = std::getenv("STRATA_MTP_HIP_PRIO"); v != nullptr && *v != 0) return std::atoi(v) != 0;
+            if (const char* v = std::getenv("CORTEX_MTP_HIP_PRIO"); v != nullptr && *v != 0) return std::atoi(v) != 0;
             int dev = 0;
             cudaDeviceProp prop{};
             return cudaGetDevice(&dev) == cudaSuccess && cudaGetDeviceProperties(&prop, dev) == cudaSuccess &&
-                   strata::kernels::gfx_arch_is_gfx12(prop.gcnArchName);
+                   cortex::kernels::gfx_arch_is_gfx12(prop.gcnArchName);
         }();
         int lo = 0, hi = 0;
         if (hip_prio && hipDeviceGetStreamPriorityRange(&lo, &hi) == hipSuccess)
@@ -464,7 +464,7 @@ bool MtpDrafter::load(const std::string& rt_dir, const ModelGeometry& g, Session
     }
 #endif
     if (!prio && cudaStreamCreateWithFlags(&cs_, cudaStreamNonBlocking) != cudaSuccess) { err = "mtp: stream"; return false; }
-#if !defined(STRATA_USE_HIP)
+#if !defined(CORTEX_USE_HIP)
     if (cudaStreamCreateWithFlags(&side_, cudaStreamNonBlocking) != cudaSuccess ||
         cudaEventCreateWithFlags(&sh_fork_, cudaEventDisableTiming) != cudaSuccess ||
         cudaEventCreateWithFlags(&sh_join_, cudaEventDisableTiming) != cudaSuccess) {
@@ -474,16 +474,16 @@ bool MtpDrafter::load(const std::string& rt_dir, const ModelGeometry& g, Session
 #else
     // HIP keeps the shared expert on cs_, so nothing uses this branch stream, and #1240 stopped creating it and its two
     // events (an R9700 lost prompt speed with them after the first request).  On gfx103x the stream's existence alone
-    // makes prompts read faster: RX 6800, Windows, STRATA_HIP_PROMPT_F16=1, a 7.9K-token prompt at 798-808 tok/s
+    // makes prompts read faster: RX 6800, Windows, CORTEX_HIP_PROMPT_F16=1, a 7.9K-token prompt at 798-808 tok/s
     // with it and 584-596 without, all of it in the prompt path's "wait copy" phase (3,081 -> 75 ms); the two events
-    // change nothing.  So gfx103x creates the stream and no other HIP card does.  STRATA_MTP_SIDE_STREAM=1 / =0 forces
+    // change nothing.  So gfx103x creates the stream and no other HIP card does.  CORTEX_MTP_SIDE_STREAM=1 / =0 forces
     // either.
     {
         int dev = 0;
         cudaDeviceProp prop{};
         bool on = cudaGetDevice(&dev) == cudaSuccess && cudaGetDeviceProperties(&prop, dev) == cudaSuccess &&
                   std::strncmp(prop.gcnArchName, "gfx103", 6) == 0;
-        if (const char* v = std::getenv("STRATA_MTP_SIDE_STREAM"); v != nullptr && *v != 0) on = std::atoi(v) != 0;
+        if (const char* v = std::getenv("CORTEX_MTP_SIDE_STREAM"); v != nullptr && *v != 0) on = std::atoi(v) != 0;
         if (on && cudaStreamCreateWithFlags(&side_, cudaStreamNonBlocking) != cudaSuccess) {
             err = "mtp: streams";
             return false;
@@ -492,33 +492,33 @@ bool MtpDrafter::load(const std::string& rt_dir, const ModelGeometry& g, Session
 #endif
     const double files_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_files).count();
     if (shared != nullptr) {
-        std::fprintf(stderr, "strata mtp: shared draft weights, %.0f MiB of private state and buffers\n",
+        std::fprintf(stderr, "cortex mtp: shared draft weights, %.0f MiB of private state and buffers\n",
                      (double) vram_ / 1048576.0);
     } else {
-        std::fprintf(stderr, "strata mtp: draft layer loaded, %.0f MiB of VRAM (experts %.0f, dense %.0f), files read in %.2f s (%.0f MiB/s)\n",
-                     (double) vram_ / 1048576.0, (double) g.n_expert * strata::kernels::cpu::BLOB / 1048576.0,
+        std::fprintf(stderr, "cortex mtp: draft layer loaded, %.0f MiB of VRAM (experts %.0f, dense %.0f), files read in %.2f s (%.0f MiB/s)\n",
+                     (double) vram_ / 1048576.0, (double) g.n_expert * cortex::kernels::cpu::BLOB / 1048576.0,
                      (double) tensors_.back().off / 1048576.0, files_s,
-                     files_s > 0 ? ((double) g.n_expert * strata::kernels::cpu::BLOB + (double) tensors_.back().off) /
+                     files_s > 0 ? ((double) g.n_expert * cortex::kernels::cpu::BLOB + (double) tensors_.back().off) /
                                        1048576.0 / files_s : 0.0);
     }
     return true;
 }
 
 namespace {
-// STRATA_MTP_FULL_HEAD=1 (a diagnostic): draft over the whole vocabulary (the main head itself) instead of
+// CORTEX_MTP_FULL_HEAD=1 (a diagnostic): draft over the whole vocabulary (the main head itself) instead of
 // rt/draft_vocab.bin's subset - the reference head, to measure what the subset costs in acceptance
 bool full_head_env() {
-    static const bool on = [] { const char* v = std::getenv("STRATA_MTP_FULL_HEAD"); return v && v[0] == '1'; }();
+    static const bool on = [] { const char* v = std::getenv("CORTEX_MTP_FULL_HEAD"); return v && v[0] == '1'; }();
     return on;
 }
 }  // namespace
 
 bool MtpDrafter::top2_env() {
-    static const bool on = [] { const char* v = std::getenv("STRATA_MTP_TOP2"); return v && v[0] == '1'; }();
+    static const bool on = [] { const char* v = std::getenv("CORTEX_MTP_TOP2"); return v && v[0] == '1'; }();
     return on;
 }
 
-// STRATA_MTP_TOP2=1 (a diagnostic for tree drafts): draft j's runner-up under the draft layer, from the head logits
+// CORTEX_MTP_TOP2=1 (a diagnostic for tree drafts): draft j's runner-up under the draft layer, from the head logits
 // the step just wrote (row 0), on the host.  Slow; only for measuring what a second branch would have caught.
 void MtpDrafter::record_top2(int j) {
     const int64_t nv = dhead_ != nullptr ? n_dvocab_ : n_vocab_;
@@ -548,7 +548,7 @@ uint64_t MtpDrafter::bind_bytes(uint64_t head_row_bytes, int64_t n_vocab) const 
             if (size >= 4 && size % 4 == 0) bytes += (uint64_t) (size / 4) * head_row_bytes + (uint64_t) size;
         }
     }
-    // coupled draft sampling (STRATA_SPEC_COUPLED=1 only): an upper bound - the id -> subset map, the penalty ring,
+    // coupled draft sampling (CORTEX_SPEC_COUPLED=1 only): an upper bound - the id -> subset map, the penalty ring,
     // the split scratch (64 lists of 64 entries at most) and the parameters
     if (coupled_draft_env() && cparams_ == nullptr)
         bytes += (uint64_t) n_vocab * 4 + (uint64_t) (kCoupledHistCap + max_t_) * 4 + 64ull * 64ull * 8ull + 4096;
@@ -557,16 +557,16 @@ uint64_t MtpDrafter::bind_bytes(uint64_t head_row_bytes, int64_t n_vocab) const 
 
 bool MtpDrafter::setup_coupled(std::string& err) {
     const int64_t nv = dhead_ != nullptr ? n_dvocab_ : n_vocab_;
-    const size_t scratch = strata::kernels::coupled_draft_scratch_bytes((int) nv);
+    const size_t scratch = cortex::kernels::coupled_draft_scratch_bytes((int) nv);
     if (scratch == 0) {
-        std::fprintf(stderr, "strata mtp: STRATA_SPEC_COUPLED: %lld draft logits are too wide for the coupled sampler; "
+        std::fprintf(stderr, "cortex mtp: CORTEX_SPEC_COUPLED: %lld draft logits are too wide for the coupled sampler; "
                              "argmax drafts\n", (long long) nv);
         return true;
     }
     const size_t ring = (size_t) (kCoupledHistCap + max_t_) * sizeof(int32_t);
-    if (cudaMalloc((void**) &cparams_, sizeof(strata::kernels::SamplerParams)) != cudaSuccess ||
+    if (cudaMalloc((void**) &cparams_, sizeof(cortex::kernels::SamplerParams)) != cudaSuccess ||
         cudaMalloc((void**) &cring_, ring) != cudaSuccess || cudaMalloc(&cscratch_, scratch) != cudaSuccess ||
-        !mapped(sizeof(strata::kernels::SamplerParams), (void**) &h_cparams_, (void**) &m_cparams_) ||
+        !mapped(sizeof(cortex::kernels::SamplerParams), (void**) &h_cparams_, (void**) &m_cparams_) ||
         !mapped((size_t) kCoupledHistCap * sizeof(int32_t), (void**) &h_chist_, (void**) &m_chist_)) {
         err = "mtp: the coupled draft sampler's buffers do not fit";
         return false;
@@ -578,7 +578,7 @@ bool MtpDrafter::setup_coupled(std::string& err) {
     }
     cudaMemset(cring_, 0xff, ring);   // -1: no token
     std::fill(h_chist_, h_chist_ + kCoupledHistCap, -1);
-    vram_ += sizeof(strata::kernels::SamplerParams) + ring + scratch;
+    vram_ += sizeof(cortex::kernels::SamplerParams) + ring + scratch;
     if (dhead_ != nullptr) {   // token id -> subset index (-1: not in the draft head), for the penalties
         std::vector<int32_t> sub((size_t) n_dvocab_), inv((size_t) n_vocab_, -1);
         cudaMemcpy(sub.data(), dvocab_, sub.size() * sizeof(int32_t), cudaMemcpyDeviceToHost);
@@ -597,16 +597,16 @@ bool MtpDrafter::setup_coupled(std::string& err) {
     }
     coupled_ok_ = true;
     if (spec_prob_env())
-        std::fprintf(stderr, "strata mtp: probabilistic draft acceptance on (STRATA_SPEC_PROB): sampled requests draft by "
+        std::fprintf(stderr, "cortex mtp: probabilistic draft acceptance on (CORTEX_SPEC_PROB): sampled requests draft by "
                              "sampling the draft head's distribution over %lld tokens; the verifier accepts with "
                              "min(1, p/q) and resamples the residual\n", (long long) nv);
     else
-        std::fprintf(stderr, "strata mtp: coupled draft sampling on (STRATA_SPEC_COUPLED): sampled requests draft with the "
+        std::fprintf(stderr, "cortex mtp: coupled draft sampling on (CORTEX_SPEC_COUPLED): sampled requests draft with the "
                              "target's chain and Philox draw over %lld tokens\n", (long long) nv);
     return true;
 }
 
-void MtpDrafter::set_draft_sampling(const strata::kernels::SamplerParams& sp) {
+void MtpDrafter::set_draft_sampling(const cortex::kernels::SamplerParams& sp) {
     coupled_active_ = coupled_ok_ && !sp.greedy && sp.temperature > 0.0f && sp.temperature >= spec_min_temp();
     if (!coupled_active_) return;
     *h_cparams_ = sp;   // read by the next round graph (after the previous one has synced)
@@ -633,7 +633,7 @@ void draft_head_hint(int64_t n_tokens, int64_t row_bytes) {
         std::snprintf(b, sizeof(b), " and %.0f MiB is free", (double) free_b / 1048576.0);
         free_s = b;
     }
-    std::fprintf(stderr, "strata mtp: the draft head over %lld tokens needs %.0f MiB of VRAM%s.\n",
+    std::fprintf(stderr, "cortex mtp: the draft head over %lld tokens needs %.0f MiB of VRAM%s.\n",
                  (long long) n_tokens, mib(n_tokens), free_s.c_str());
     struct Subset { const char* name; int64_t tokens; const char* what; };
     static const Subset smaller[] = {{"cyrillic", 58963, "English, code and the Cyrillic script"},
@@ -647,20 +647,20 @@ void draft_head_hint(int64_t n_tokens, int64_t row_bytes) {
             opts += b;
         }
     if (!opts.empty())
-        std::fprintf(stderr, "strata mtp: hint: a smaller draft vocabulary needs less VRAM: %s. Start once with it - "
+        std::fprintf(stderr, "cortex mtp: hint: a smaller draft vocabulary needs less VRAM: %s. Start once with it - "
                              "START-HERE.bat --draft-vocab en (Windows) or ./setup.sh --draft-vocab en - and the model "
-                             "keeps it (\"draft_vocab\" in its strata-*.json config); or a smaller --context in "
+                             "keeps it (\"draft_vocab\" in its cortex-*.json config); or a smaller --context in "
                              "setup.\n",
                      opts.c_str());
     else
-        std::fprintf(stderr, "strata mtp: hint: this is already the smallest shipped draft vocabulary: a smaller "
+        std::fprintf(stderr, "cortex mtp: hint: this is already the smallest shipped draft vocabulary: a smaller "
                              "--context (or closing what else uses the GPU) leaves it room.\n");
 }
 }  // namespace
 
 bool MtpDrafter::bind(const WeightTable& wt, const NativeHead* head, const float* window_R, std::string& err,
                       const MtpDrafter* shared) {
-#if defined(STRATA_GPU_METAL)
+#if defined(CORTEX_GPU_METAL)
     (void) wt; (void) head; (void) window_R; (void) err; (void) shared;
     return true;
 #endif
@@ -717,7 +717,7 @@ bool MtpDrafter::bind(const WeightTable& wt, const NativeHead* head, const float
                            cudaMalloc((void**) &dv, raw.size()) == cudaSuccess &&
                            cudaMemcpy(dv, raw.data(), raw.size(), cudaMemcpyHostToDevice) == cudaSuccess;
                     if (ok_x) {
-                        strata::kernels::gather_rows((const uint8_t*) head->weights(), row_bytes, dv, n_dvocab_,
+                        cortex::kernels::gather_rows((const uint8_t*) head->weights(), row_bytes, dv, n_dvocab_,
                                                      (uint8_t*) tmp, nullptr);
                         ok_x = cudaDeviceSynchronize() == cudaSuccess;
                     }
@@ -730,16 +730,16 @@ bool MtpDrafter::bind(const WeightTable& wt, const NativeHead* head, const float
                 }
                 if (!ok_x) { err = "mtp: the draft head's rows could not be copied from the head's card"; return false; }
             } else {
-                strata::kernels::gather_rows((const uint8_t*) head->weights(), row_bytes, dvocab_, n_dvocab_, dhead_, nullptr);
+                cortex::kernels::gather_rows((const uint8_t*) head->weights(), row_bytes, dvocab_, n_dvocab_, dhead_, nullptr);
             }
             cudaDeviceSynchronize();
             vram_ += (uint64_t) (n_dvocab_ * row_bytes) + raw.size();
-            std::fprintf(stderr, "strata mtp: draft head over %lld tokens (%.1f MiB)\n", (long long) n_dvocab_,
+            std::fprintf(stderr, "cortex mtp: draft head over %lld tokens (%.1f MiB)\n", (long long) n_dvocab_,
                          (double) (n_dvocab_ * row_bytes) / 1048576.0);
             dhead_type_ = head->type();
             if (q4_head_ && !make_q4_head(err)) return false;
-            if (dhead_type_ == 14 && strata::kernels::native_q6_k_packed_enabled())   // STRATA_Q6_PACKED=1
-                strata::kernels::native_q6_k_pack(dhead_, (int) (row_bytes / 210) * 256, (int) n_dvocab_,
+            if (dhead_type_ == 14 && cortex::kernels::native_q6_k_packed_enabled())   // CORTEX_Q6_PACKED=1
+                cortex::kernels::native_q6_k_pack(dhead_, (int) (row_bytes / 210) * 256, (int) n_dvocab_,
                                                   "MTP draft head");
         }
     }
@@ -747,9 +747,9 @@ bool MtpDrafter::bind(const WeightTable& wt, const NativeHead* head, const float
     return true;
 }
 
-// STRATA_MTP_PROFILE=1 (measurement only): GPU stamps between the draft layer's stages in the round graph and in every
+// CORTEX_MTP_PROFILE=1 (measurement only): GPU stamps between the draft layer's stages in the round graph and in every
 // step graph (each stamp is one more node, so the totals run a little high); the per-stage averages are printed every
-// 300 rounds with STRATA_DRAFT_TIMING's line.  Off: no stamp is recorded and nothing changes.
+// 300 rounds with CORTEX_DRAFT_TIMING's line.  Off: no stamp is recorded and nothing changes.
 namespace {
 constexpr int kMpSlots = 24;
 constexpr int kMpGraphs = 17;   // the round graph (0) and the steps 1..16
@@ -765,7 +765,7 @@ struct MtpProf {
     double sum[2][kMpSlots] = {};
     int64_t n[2] = {0, 0};
     MtpProf() {
-        const char* e = std::getenv("STRATA_MTP_PROFILE");
+        const char* e = std::getenv("CORTEX_MTP_PROFILE");
         on = e != nullptr && e[0] == '1';
     }
     void init() {
@@ -775,7 +775,7 @@ struct MtpProf {
         h.assign((size_t) kMpSlots * kMpGraphs, 0);
     }
     void stamp(int i, cudaStream_t cs) const {
-        if (on && d != nullptr && base >= 0) strata::kernels::gpu_stamp(d, base * kMpSlots + i, cs);
+        if (on && d != nullptr && base >= 0) cortex::kernels::gpu_stamp(d, base * kMpSlots + i, cs);
     }
     void collect(int n_steps_run) {   // after the round's sync: the round graph and steps 1..n_steps_run-1
         if (!on || d == nullptr) return;
@@ -805,7 +805,7 @@ struct MtpProf {
                 std::snprintf(b, sizeof b, " %s %.3f", kMpNames[i], sum[k][i] / 1e6 / (double) n[k]);
                 out += b;
             }
-            std::fprintf(stderr, "strata mtp profile (%s, ms per graph over %lld):%s | total %.3f\n", k == 0 ? "round" : "step",
+            std::fprintf(stderr, "cortex mtp profile (%s, ms per graph over %lld):%s | total %.3f\n", k == 0 ? "round" : "step",
                          (long long) n[k], out.c_str(), tot / 1e6 / (double) n[k]);
             for (double& x : sum[k]) x = 0;
             n[k] = 0;
@@ -814,13 +814,13 @@ struct MtpProf {
 };
 MtpProf g_mp;
 
-// STRATA_VERIFY_NODES=1 also lists the draft graphs' nodes (kernel names on HIP; counts on CUDA)
+// CORTEX_VERIFY_NODES=1 also lists the draft graphs' nodes (kernel names on HIP; counts on CUDA)
 void mtp_list_nodes(cudaGraph_t graph, const char* what) {
-    if (std::getenv("STRATA_VERIFY_NODES") == nullptr || graph == nullptr) return;
-#if defined(STRATA_GPU_METAL)
+    if (std::getenv("CORTEX_VERIFY_NODES") == nullptr || graph == nullptr) return;
+#if defined(CORTEX_GPU_METAL)
     (void) what;    // Metal has no graph nodes to list
 #else
-#if defined(STRATA_USE_HIP)
+#if defined(CORTEX_USE_HIP)
     using NodeT = hipGraphNode_t;
     using NodeTypeT = hipGraphNodeType;
 #define MTP_GET_NODES hipGraphGetNodes
@@ -840,7 +840,7 @@ void mtp_list_nodes(cudaGraph_t graph, const char* what) {
         NodeTypeT ty;
         MTP_NODE_TYPE(nd, &ty);
         std::string name = "type" + std::to_string((int) ty);
-#if defined(STRATA_USE_HIP)
+#if defined(CORTEX_USE_HIP)
         if (ty == hipGraphNodeTypeKernel) {
             hipKernelNodeParams kp{};
             if (hipGraphKernelNodeGetParams(nd, &kp) == hipSuccess && kp.func != nullptr) {
@@ -858,7 +858,7 @@ void mtp_list_nodes(cudaGraph_t graph, const char* what) {
     }
 #undef MTP_GET_NODES
 #undef MTP_NODE_TYPE
-    std::fprintf(stderr, "strata mtp: the %s graph has %zu nodes:", what, nn);
+    std::fprintf(stderr, "cortex mtp: the %s graph has %zu nodes:", what, nn);
     for (auto& k : kinds) std::fprintf(stderr, "\n %4d x %.110s", k.second, k.first.c_str());
     std::fprintf(stderr, "\n");
 #endif
@@ -875,7 +875,7 @@ bool MtpDrafter::record_forward(int T, int step_row0, cudaStream_t cs, std::stri
 }
 
 bool MtpDrafter::record_front(int T, int row0, cudaStream_t cs, std::string& err) {
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     const ModelGeometry& g = *g_;
     const int64_t N = g.n_embd, HC = g.hc, NH = g.n_head, HD = g.head_dim, NKV = g.n_head_kv;
     const QsaShapes s = shapes_of(g);
@@ -936,13 +936,13 @@ bool MtpDrafter::record_front(int T, int row0, cudaStream_t cs, std::string& err
         native_mmvq(wt_k_proj, wp_k_proj, xq_, kcur_, (int) N, (int) (NKV * HD), T, cs);
         native_mmvq(wt_v_proj, wp_v_proj, xq_, vcur_, (int) N, (int) (NKV * HD), T, cs);
         // #783 PR-d (stuchapin909): the T tokens' K norm, K/V rotation and K/V append each run once over all T rows
-        // (every row is independent; the rope keeps its per-token positions). STRATA_NO_BATCH_KV_STEP=1 appends per token.
+        // (every row is independent; the rope keeps its per-token positions). CORTEX_NO_BATCH_KV_STEP=1 appends per token.
         static const bool no_batch_kv = [] {
-            const char* v = std::getenv("STRATA_NO_BATCH_KV_STEP");
+            const char* v = std::getenv("CORTEX_NO_BATCH_KV_STEP");
             return v != nullptr && v[0] != '\0' && v[0] != '0';
         }();
         // #783 PR-f (stuchapin909): the per-head RMSNorm and the rope fused (bit-identical to the pair, rope_parity
-        // check 6; STRATA_NO_NORM_ROPE=1 keeps the two; off on HIP until its parity check passes). K rows of one token
+        // check 6; CORTEX_NO_NORM_ROPE=1 keeps the two; off on HIP until its parity check passes). K rows of one token
         // are consecutive in `pos`, tokens are NH apart, so a one-token window is the fusable case.
         const bool fuse_nr = native_rope_enabled() && native_norm_rope_usable((int) HD, (int) s.n_rot);
         if (T == 1 && fuse_nr) {
@@ -956,7 +956,7 @@ bool MtpDrafter::record_front(int T, int row0, cudaStream_t cs, std::string& err
                 else rope_neox_apply(kc, kc, (int) NKV, (int) HD, (int) s.n_rot, st_.cos_tab, st_.sin_tab, pos + t * NH, cs);
             }
         }
-        if (st_.kv_rot) {   // rotated K and V (kv_q4.hpp): Q4_0, and INT8 with STRATA_KV_ROT=1
+        if (st_.kv_rot) {   // rotated K and V (kv_q4.hpp): Q4_0, and INT8 with CORTEX_KV_ROT=1
             fwht256_inplace_cuda(kcur_, (int64_t) T * NKV, cs);
             fwht256_inplace_cuda(vcur_, (int64_t) T * NKV, cs);
         }
@@ -987,7 +987,7 @@ bool MtpDrafter::record_front(int T, int row0, cudaStream_t cs, std::string& err
 }
 
 void MtpDrafter::norm_rope(float* data, const float* gamma, int rows, int cols, const int32_t* p, cudaStream_t cs) {
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     const QsaShapes s = shapes_of(*g_);
     native_qsa_rms_norm_weighted(data, gamma, data, cols, rows, EPS, cs);
     if (native_rope_enabled()) native_rope_apply(data, data, rows, cols, (int) s.n_rot, rope_scaling(), p, cs);
@@ -995,7 +995,7 @@ void MtpDrafter::norm_rope(float* data, const float* gamma, int rows, int cols, 
 }
 
 bool MtpDrafter::record_rest(int step_row, cudaStream_t cs, std::string& err) {
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     const ModelGeometry& g = *g_;
     SessionState& ss = *ss_;
     const int T = 1;
@@ -1028,8 +1028,8 @@ bool MtpDrafter::record_rest(int step_row, cudaStream_t cs, std::string& err) {
         g_mp.stamp(5, cs);
         const QsaAttnPools pools = qsa_attn_pools(st_);
         if (window_ > 0) window_ids(const_cast<int32_t*>(step), T, (int) window_, ident_, cap_, cs);
-        // STRATA_QSA_SPLIT_ATTN=1: the draft layer's attention over its window, split the same way
-        static const bool split_attn = [] { const char* v = std::getenv("STRATA_QSA_SPLIT_ATTN"); return v != nullptr && std::atoi(v) != 0; }();
+        // CORTEX_QSA_SPLIT_ATTN=1: the draft layer's attention over its window, split the same way
+        static const bool split_attn = [] { const char* v = std::getenv("CORTEX_QSA_SPLIT_ATTN"); return v != nullptr && std::atoi(v) != 0; }();
         if (!(split_attn && qsa_decode_attn_split(qcur_, pools, ident_, step, cap_, s, attn_scratch_, (uint64_t) attn_scratch_floats_, attn_, T, cs)))
         qsa_decode_attn_batch(qcur_, pools, ident_, step, cap_, s, attn_scratch_, attn_, T, cs);
         if (st_.kv_rot) fwht256_inplace_cuda(attn_, (int64_t) T * NH, cs);
@@ -1064,25 +1064,25 @@ bool MtpDrafter::record_rest(int step_row, cudaStream_t cs, std::string& err) {
         const SForm none{};
         const bool need_bf16_x = !shared_expert_native_bf16_enabled();
         static const bool fuse_head_gr = [] {
-            const char* v = std::getenv("STRATA_FUSE_HEAD_GR");
+            const char* v = std::getenv("CORTEX_FUSE_HEAD_GR");
             return v != nullptr && std::atoi(v) != 0;
         }();
         static const bool head_mix_multi_on = [] {
-#if defined(STRATA_USE_HIP)
-            const char* v = std::getenv("STRATA_HEAD_MIX_MULTI");   // HIP: opt-in (=1)
+#if defined(CORTEX_USE_HIP)
+            const char* v = std::getenv("CORTEX_HEAD_MIX_MULTI");   // HIP: opt-in (=1)
             return v != nullptr && std::atoi(v) != 0;
 #else
-            const char* v = std::getenv("STRATA_HEAD_MIX_MULTI");
+            const char* v = std::getenv("CORTEX_HEAD_MIX_MULTI");
             return v == nullptr || std::atoi(v) != 0;
 #endif
         }();
         // the shared expert only reads mixed_ / xq_ and writes shared_: a branch beside the router and the routed
-        // experts, joined before the combine (CUDA; HIP keeps one stream: STRATA_MTP_SHARED_BRANCH=0 does too)
+        // experts, joined before the combine (CUDA; HIP keeps one stream: CORTEX_MTP_SHARED_BRANCH=0 does too)
         static const bool branch_on = [] {
-#if defined(STRATA_USE_HIP)
+#if defined(CORTEX_USE_HIP)
             return false;
 #else
-            const char* v = std::getenv("STRATA_MTP_SHARED_BRANCH");
+            const char* v = std::getenv("CORTEX_MTP_SHARED_BRANCH");
             return v == nullptr || std::atoi(v) != 0;
 #endif
         }();
@@ -1124,7 +1124,7 @@ bool MtpDrafter::record_rest(int step_row, cudaStream_t cs, std::string& err) {
             } catch (const std::exception& e) { err = std::string("mtp route-resident: ") + e.what(); return false; }
         }
         g_mp.stamp(9, cs);
-        moe_group_resident(ids_, (int) (T * K), (int) K, experts_, (int64_t) strata::kernels::cpu::BLOB, grp_ptr_,
+        moe_group_resident(ids_, (int) (T * K), (int) K, experts_, (int64_t) cortex::kernels::cpu::BLOB, grp_ptr_,
                            grp_start_, grp_counts_, hit_dst_, hit_slot_, cs);
         quantize_q8_0_scaled(mixed_, hit_xq_, hit_xs_, (int64_t) T * N, cs);
         moe_grouped_s2(grp_ptr_, grp_start_, grp_counts_, hit_dst_, hit_slot_, (int64_t) T * K, (int64_t) T * K, hit_xq_,
@@ -1136,8 +1136,8 @@ bool MtpDrafter::record_rest(int step_row, cudaStream_t cs, std::string& err) {
             shared_rows();
         }
         g_mp.stamp(11, cs);
-        static const bool no_multi_gr = [] {   // #783 PR-g: STRATA_NO_MULTI_GR=1 keeps the per-token GR calls
-            const char* v = std::getenv("STRATA_NO_MULTI_GR");
+        static const bool no_multi_gr = [] {   // #783 PR-g: CORTEX_NO_MULTI_GR=1 keeps the per-token GR calls
+            const char* v = std::getenv("CORTEX_NO_MULTI_GR");
             return v != nullptr && v[0] != '\0' && v[0] != '0';
         }();
         for (int t = 0; t < T; ++t) {
@@ -1199,7 +1199,7 @@ bool MtpDrafter::record_rest(int step_row, cudaStream_t cs, std::string& err) {
         if (coupled_rec_) {
             // coupled draft sampling: the target's chain and Philox draw for the row that will verify this draft
             // (counter = this cell + 1, from its step record), penalties over the ring; T == 1 (full layer)
-            if (m_q_ != nullptr)   // STRATA_SPEC_PROB: a draw from q with its own stream, and q's list for the verifier
+            if (m_q_ != nullptr)   // CORTEX_SPEC_PROB: a draw from q with its own stream, and q's list for the verifier
                 spec_draft_sample(head_logits_, (int) nv, sub ? dvocab_ : nullptr, sub ? dinv_ : nullptr, (int) n_vocab_,
                                   cparams_, cring_, kCoupledHistCap, coupled_j_, step, cscratch_, out_ids_, probs_, m_q_,
                                   spec_gate_pick(), spec_draft_temp_scale(), cs);
@@ -1251,7 +1251,7 @@ bool finish_capture(cudaStream_t cs, bool ok, cudaGraphExec_t& exec, const char*
 
 bool MtpDrafter::capture_prefill(int T, std::string& err) {
     if (prefill_exec_[T]) return true;
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     if (cudaStreamBeginCapture(cs_, cudaStreamCaptureModeThreadLocal) != cudaSuccess) { err = "mtp: begin capture"; return false; }
     copy_i32_from_mapped(tok_, m_tok_, T, cs_);
     copy_i32_from_mapped(step_, m_step_, (int64_t) T * 4, cs_);
@@ -1270,7 +1270,7 @@ bool MtpDrafter::capture_prefill_dev(int T, std::string& err) {
 bool MtpDrafter::capture_round(int T, bool coupled, std::string& err) {
     cudaGraphExec_t& exec = coupled ? round_exec_c_[T] : round_exec_[T];
     if (exec) return true;
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     const int64_t HCN = g_->hc * g_->n_embd;
     g_mp.init();   // (its allocation before the capture)
     if (cudaStreamBeginCapture(cs_, cudaStreamCaptureModeThreadLocal) != cudaSuccess) { err = "mtp: begin capture"; return false; }
@@ -1283,7 +1283,7 @@ bool MtpDrafter::capture_round(int T, bool coupled, std::string& err) {
     // one graph per step (`capture_step`) so the host can stop it when a draft is unlikely
     const int ra = 2 * max_t_ - 1;
     const int64_t N = g_->n_embd, NH = g_->n_head;
-#if defined(STRATA_USE_HIP)   // AMD keeps its separate copies
+#if defined(CORTEX_USE_HIP)   // AMD keeps its separate copies
     copy_i32_from_mapped(tok_, m_tok_, T, cs_);
     copy_i32_from_mapped(step_, m_step_, (int64_t) 2 * T * 4, cs_);
     copy_i32_from_mapped(pos_, m_pos_, (int64_t) 2 * T * NH, cs_);
@@ -1320,12 +1320,12 @@ bool MtpDrafter::capture_round(int T, bool coupled, std::string& err) {
 bool MtpDrafter::capture_step(int j, bool coupled, std::string& err) {
     cudaGraphExec_t& exec = coupled ? step_exec_c_[j] : step_exec_[j];
     if (exec) return true;
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     const int64_t HCN = g_->hc * g_->n_embd;
     const int row = max_t_ + j - 1;
     g_mp.init();
     if (cudaStreamBeginCapture(cs_, cudaStreamCaptureModeThreadLocal) != cudaSuccess) { err = "mtp: begin capture"; return false; }
-#if defined(STRATA_USE_HIP)
+#if defined(CORTEX_USE_HIP)
     copy_i32_from_mapped(step_ + row * 4, m_step_ + row * 4, 4, cs_);
     copy_i32_from_mapped(pos_ + row * g_->n_head, m_pos_ + row * g_->n_head, g_->n_head, cs_);
 #else
@@ -1349,9 +1349,9 @@ void MtpDrafter::kv_restore(int64_t upto) {
     const OnDevice on_device(device_);
     if (st_.kv_mode != 2 || upto <= 0) return;
     // the ring's blocks below `upto`, from the host copy: a checkpoint resume may have left later cells in them
-    const strata::kernels::QsaShapes s = shapes_of(*g_);
+    const cortex::kernels::QsaShapes s = shapes_of(*g_);
     const int64_t b1 = (upto + s.page_size - 1) / s.page_size, b0 = std::max<int64_t>(0, b1 - st_.n_slots);
-    strata::kernels::kv_ring_restore(qsa_attn_pools(st_), st_.host, qsa_kv_format(st_), b0, b1, st_.n_slots, s, cs_);
+    cortex::kernels::kv_ring_restore(qsa_attn_pools(st_), st_.host, qsa_kv_format(st_), b0, b1, st_.n_slots, s, cs_);
     cudaStreamSynchronize(cs_);
 }
 
@@ -1369,15 +1369,15 @@ bool MtpDrafter::prepare_prefill(std::string& err) {
         pf_cap_ = max_t_ * per_row;
     }
     for (int T = 1; T <= max_t_; ++T)
-        if (!capture_prefill_dev(T, err)) return false;   // (STRATA_MTP_PREFILL_SYNC's loop syncs anyway)
+        if (!capture_prefill_dev(T, err)) return false;   // (CORTEX_MTP_PREFILL_SYNC's loop syncs anyway)
     return true;
 }
 
-// STRATA_MTP_PREFILL_SYNC: the prompt pass's per-group loop (see MtpDrafter::prefill); HIP's default
+// CORTEX_MTP_PREFILL_SYNC: the prompt pass's per-group loop (see MtpDrafter::prefill); HIP's default
 static bool prefill_per_group_sync() {
     static const bool v = [] {
-        if (const char* e = std::getenv("STRATA_MTP_PREFILL_SYNC")) return std::atoi(e) != 0;
-#if defined(STRATA_USE_HIP)
+        if (const char* e = std::getenv("CORTEX_MTP_PREFILL_SYNC")) return std::atoi(e) != 0;
+#if defined(CORTEX_USE_HIP)
         return true;
 #else
         return false;
@@ -1399,7 +1399,7 @@ bool MtpDrafter::reserve_prefill(int64_t n, std::string& err) {
     // the records' pinned upload slots too (#1996's ring grows a slot at its first larger upload: a pinned free and
     // allocation, which take the driver's lock)
     if (!pf_ring_.reserve((size_t) (n * per_row) * sizeof(int32_t)))
-        std::fprintf(stderr, "strata mtp: the prompt records' pinned upload slots could not be reserved (they grow at "
+        std::fprintf(stderr, "cortex mtp: the prompt records' pinned upload slots could not be reserved (they grow at "
                              "first use)\n");
     if (pf_cap_ >= n * per_row) return true;
     if (pf_dev_) cudaFree(pf_dev_);
@@ -1415,9 +1415,9 @@ bool MtpDrafter::reserve_prefill(int64_t n, std::string& err) {
 
 bool MtpDrafter::prefill(const float* R_rows, const int32_t* next_tokens, int64_t n, int64_t cell0, std::string& err,
                          bool sync) {
-#if defined(STRATA_GPU_METAL)
+#if defined(CORTEX_GPU_METAL)
     (void) R_rows; (void) sync;   // the rows are the decode window's own (the Metal drafter reads them in place)
-    return strata::metal_engine::mtp_prefill(next_tokens, n, cell0, err);
+    return cortex::metal_engine::mtp_prefill(next_tokens, n, cell0, err);
 #endif
     const OnDevice on_device(device_);
     const Clock::time_point t0 = Clock::now();
@@ -1427,7 +1427,7 @@ bool MtpDrafter::prefill(const float* R_rows, const int32_t* next_tokens, int64_
     // E-4: every group's token / step / position records uploaded at once; each group is then device copies and a
     // graph on the one stream, with a single sync at the end (a group of <= max_t rows used to be staged in mapped
     // memory and synced before the next: ~5,500 host round trips on a 32K prompt).  The same work in the same
-    // order.  STRATA_MTP_PREFILL_SYNC=1 keeps the old loop, =0 forces E-4.
+    // order.  CORTEX_MTP_PREFILL_SYNC=1 keeps the old loop, =0 forces E-4.
     // HIP defaults to the old loop.  This pass runs whenever E-9 (Prefill::draft_kv) declines, which it does for the
     // drafter's ring (KV streaming, --kv-resident), and on gfx1201 / ROCm 7.2.4 the E-4 queue (a graph launch and four
     // device copies per group, ~2,000 groups per 8192-token chunk, no sync) sometimes never completes: the prompt hangs
@@ -1518,7 +1518,7 @@ bool MtpDrafter::prefill(const float* R_rows, const int32_t* next_tokens, int64_
     return true;
 }
 
-// STRATA_DRAFT_TIMING=1: where a draft round's time goes, from cudaEvent pairs around each graph launch (GPU time of the round
+// CORTEX_DRAFT_TIMING=1: where a draft round's time goes, from cudaEvent pairs around each graph launch (GPU time of the round
 // graph and of each step, and the idle gap the host's decision leaves between two steps) and the host's own wall time.
 namespace {
 struct DraftTiming {
@@ -1528,7 +1528,7 @@ struct DraftTiming {
     double pre_ms = 0, launch_ms = 0, ple_ms = 0, wait0_ms = 0, waitj_ms = 0;   // host: staging, graph launch calls, PLE prefetch, spins
     int64_t rounds = 0, steps = 0;
     DraftTiming() {
-        const char* e = std::getenv("STRATA_DRAFT_TIMING");
+        const char* e = std::getenv("CORTEX_DRAFT_TIMING");
         on = e != nullptr && e[0] == '1';
     }
     void init() {
@@ -1539,11 +1539,11 @@ struct DraftTiming {
     void report() const {
         if (rounds == 0) return;
         const double r = (double) rounds;
-        std::fprintf(stderr, "strata mtp draft timing: %lld rounds, %.2f steps/round: wall %.3f ms = round graph %.3f + steps %.3f GPU "
+        std::fprintf(stderr, "cortex mtp draft timing: %lld rounds, %.2f steps/round: wall %.3f ms = round graph %.3f + steps %.3f GPU "
                              "(%.3f per step) + host gaps between graphs %.3f + tail %.3f (per round)\n",
                      (long long) rounds, (double) steps / r, wall_ms / r, round_ms / r, step_ms / r,
                      steps > 0 ? step_ms / (double) steps : 0.0, gap_ms / r, tail_ms / r);
-        std::fprintf(stderr, "strata mtp draft timing (host, per round): staging %.3f, graph launch calls %.3f, PLE prefetch %.3f, "
+        std::fprintf(stderr, "cortex mtp draft timing (host, per round): staging %.3f, graph launch calls %.3f, PLE prefetch %.3f, "
                              "wait for draft 0 %.3f, waits for the steps %.3f\n",
                      pre_ms / r, launch_ms / r, ple_ms / r, wait0_ms / r, waitj_ms / r);
     }
@@ -1553,13 +1553,13 @@ DraftTiming g_dt;
 
 bool MtpDrafter::draft(int T, const int32_t* tokens, int64_t p, int a, int32_t* drafts, std::string& err,
                        float* probs, float min_p, int* n_drafts) {
-#if defined(STRATA_GPU_METAL)
+#if defined(CORTEX_GPU_METAL)
     {
         if (T < 1 || T > max_t_ || a < 0 || a >= T) { err = "mtp: draft arguments out of range"; return false; }
         const int max_steps = (int) std::min<int64_t>(std::min(max_t_ - 1, max_drafts_), (int64_t) 1 << 30);
         const Clock::time_point t0 = Clock::now();
         int n = 0;
-        if (!strata::metal_engine::mtp_draft(T, tokens, p, a, max_steps, drafts, probs, min_p, &n, err)) return false;
+        if (!cortex::metal_engine::mtp_draft(T, tokens, p, a, max_steps, drafts, probs, min_p, &n, err)) return false;
         for (int j = n; j < max_t_ - 1; ++j) { drafts[j] = 0; if (probs) probs[j] = 0.0f; }
         if (n_drafts) *n_drafts = n;
         ms_draft += ms_since(t0);
@@ -1612,8 +1612,8 @@ bool MtpDrafter::draft(int T, const int32_t* tokens, int64_t p, int a, int32_t* 
         if (!do_ple || tok < 0) return;
         const Clock::time_point tp = Clock::now();
         struct PleT { bool on; double& acc; Clock::time_point t; ~PleT() { if (on) acc += std::chrono::duration<double, std::milli>(Clock::now() - t).count(); } } ple_t{dth, g_dt.ple_ms, tp};
-        uint32_t rows16[strata::kernels::PLE_N_HEADS];
-        strata::kernels::ngram_rows(&tok, ple_prev, 1, pss->ple.consts, rows16);
+        uint32_t rows16[cortex::kernels::PLE_N_HEADS];
+        cortex::kernels::ngram_rows(&tok, ple_prev, 1, pss->ple.consts, rows16);
         ple_prev[0] = ple_prev[1];
         ple_prev[1] = tok;
         pss->ple.table->prefetch_rows(rows16);
@@ -1852,7 +1852,7 @@ int MtpDrafter::chain_poll(std::string& err) {
 
 bool MtpDrafter::draft_first(int T, const float* R_row, int32_t token, int64_t cell, int32_t* drafts, std::string& err,
                              float* probs, float min_p, int* n_drafts) {
-#if defined(STRATA_GPU_METAL)
+#if defined(CORTEX_GPU_METAL)
     {   // the decode window's row 0 is the residual (the window that just ran)
         (void) R_row;
         std::vector<int32_t> toks((size_t) T, token);
@@ -1872,4 +1872,4 @@ bool MtpDrafter::draft_first(int T, const float* R_row, int32_t token, int64_t c
     return draft(T, toks.data(), cell, 0, drafts, err, probs, min_p, n_drafts);
 }
 
-}  // namespace strata::core
+}  // namespace cortex::core

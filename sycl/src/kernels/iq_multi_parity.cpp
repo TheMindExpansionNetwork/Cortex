@@ -17,9 +17,9 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/kernels/f16_bits.hpp"
-#include "strata/kernels/iq_kernels.hpp"
-#include "strata/kernels/native_mmvq.hpp"
+#include "cortex/kernels/f16_bits.hpp"
+#include "cortex/kernels/iq_kernels.hpp"
+#include "cortex/kernels/native_mmvq.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -31,7 +31,7 @@
 #include <string>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 

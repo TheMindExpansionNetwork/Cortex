@@ -9,14 +9,14 @@
 //
 //   1. the recurrence vs the host reference: the FP32 floor of the old path,
 //   2. the chunked path vs the host reference: the number that matters for the model,
-//   3. chunked vs recurrence directly: the observable switch STRATA_GDN_CHUNK flips.
+//   3. chunked vs recurrence directly: the observable switch CORTEX_GDN_CHUNK flips.
 //
 // Both GPU paths go through the REAL dispatch (`gdn_recurrence`), A/B'd with the env switch, so the tail
 // (< 64 tokens) and the output norm are part of what is compared - the recurrence kernels' raw FP32 output for
 // the kernel comparisons (0.1.38's gdn_out_norm_kernel leaves it in place and writes only the FP16 copy), and
 // the norm's FP16 output once against the host reference's normalized values.
-#include "strata/prefill/gdn_chunk.hpp"
-#include "strata/prefill/kernels.hpp"
+#include "cortex/prefill/gdn_chunk.hpp"
+#include "cortex/prefill/kernels.hpp"
 
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
@@ -57,7 +57,7 @@ struct Rng {
     }
 };
 
-/// The GDN chunk as a double-precision transcription of the recurrence in strata/kernels/gdn.hpp: the state
+/// The GDN chunk as a double-precision transcription of the recurrence in cortex/kernels/gdn.hpp: the state
 /// (S, h_v, S) f32 layout, decay BEFORE the rank-1 update, modulo head pairing.  `yraw_out` is the raw output
 /// the recurrence kernels leave for gdn_out_norm_kernel; `y_out` is the norm's value, formed exactly as
 /// gdn_out_norm_kernel forms it (sqrt(S) in the oc scale, +eps on the SCALED squared norm).
@@ -183,10 +183,10 @@ void run_case(int64_t T, uint64_t seed) {
         y_fast(y_ref.size()), st_fast(st0.size()), y_fma(y_ref.size()), st_fma(st0.size());
     auto run = [&](const char* chunk, const char* warp, std::vector<float>& y, std::vector<float>& st,
                    std::vector<float>* y16f = nullptr) {
-        setenv("STRATA_GDN_CHUNK", chunk, 1);
-        setenv("STRATA_GDN_REC_WARP", warp, 1);
+        setenv("CORTEX_GDN_CHUNK", chunk, 1);
+        setenv("CORTEX_GDN_REC_WARP", warp, 1);
         check(cudaMemcpy(d_st, d_st0, st0.size() * 4, cudaMemcpyDeviceToDevice), "D2D");
-        strata::prefill::gdn_recurrence(d_st, d_h, d_g, d_b, d_z, d_ga, eps, d_y, d_y16, T, nullptr);
+        cortex::prefill::gdn_recurrence(d_st, d_h, d_g, d_b, d_z, d_ga, eps, d_y, d_y16, T, nullptr);
         check(cudaDeviceSynchronize(), "sync");
         check(cudaMemcpy(y.data(), d_y, y.size() * 4, cudaMemcpyDeviceToHost), "D2H");
         check(cudaMemcpy(st.data(), d_st, st.size() * 4, cudaMemcpyDeviceToHost), "D2H");
@@ -269,7 +269,7 @@ int main(int argc, char** argv) {
             return 77;
         }
     }
-    if (!strata::prefill::gdn_chunk_available())
+    if (!cortex::prefill::gdn_chunk_available())
         std::printf("note: not a V100 (cc 7.0) - the parity still runs; the engine dispatch keeps the recurrence\n");
     run_case(64, 1);
     run_case(128, 2);

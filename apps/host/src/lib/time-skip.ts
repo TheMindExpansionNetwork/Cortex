@@ -2,7 +2,7 @@
  * One Time-skip run.
  *
  * A run is either a **developer preview** (the scripted timeline, kept for design review) or a
- * **real job** driven by Strata Control through `/api/timeskip`. When `job` is present the panel
+ * **real job** driven by Cortex Control through `/api/timeskip`. When `job` is present the panel
  * renders the job's own phases, decisions and check outcomes; the scripted moments still supply the
  * motion and layout, but they no longer decide anything.
  *

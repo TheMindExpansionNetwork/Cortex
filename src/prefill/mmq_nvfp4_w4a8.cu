@@ -11,14 +11,14 @@
 
 #undef BLACKWELL_MMA_AVAILABLE
 #define blackwell_mma_available(cc) false
-#define mul_mat_q_switch_J strata_w4a8_mul_mat_q_switch_J
-#define mul_mat_q_case strata_w4a8_mul_mat_q_case
+#define mul_mat_q_switch_J cortex_w4a8_mul_mat_q_switch_J
+#define mul_mat_q_case cortex_w4a8_mul_mat_q_case
 #include "mmq.cuh"
 
 DECL_MMQ_CASE(GGML_TYPE_NVFP4);
 
-namespace strata::prefill::mmq {
+namespace cortex::prefill::mmq {
 void run_nvfp4_w4a8(ggml_backend_cuda_context& ctx, const mmq_args& a, cudaStream_t s) {
-    strata_w4a8_mul_mat_q_case<GGML_TYPE_NVFP4>(ctx, a, s);
+    cortex_w4a8_mul_mat_q_case<GGML_TYPE_NVFP4>(ctx, a, s);
 }
-}  // namespace strata::prefill::mmq
+}  // namespace cortex::prefill::mmq

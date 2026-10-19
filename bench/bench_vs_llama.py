@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Strata vs llama.cpp head-to-head (stream 1402-h).  Measurement only.
+"""Cortex vs llama.cpp head-to-head (stream 1402-h).  Measurement only.
 
 Both engines are driven through their OpenAI-compatible HTTP servers (/v1/chat/completions), with the same prompt
-text, same sampler settings and the same GGUF.  Server-side timings (llama.cpp's names, which Strata's server also
+text, same sampler settings and the same GGUF.  Server-side timings (llama.cpp's names, which Cortex's server also
 emits) give prompt tok/s and decode tok/s; time to first token is the server's prompt_ms (non-streaming request,
 so TTFT = prompt processing time).  Peak VRAM comes from nvidia-smi polling (minus the idle baseline), RAM from the
 engine process tree (psutil RSS, which counts mmap'd file pages) and the system's used-memory delta.
@@ -12,7 +12,7 @@ engine process tree (psutil RSS, which counts mmap'd file pages) and the system'
     python bench_vs_llama.py quality  --machine CFG.json --out DIR [--configs a,b]
     python bench_vs_llama.py summary  --out DIR
 
-CFG.json: {"gguf": ..., "strata_cfg": ..., "llama_server": ..., "configs": [{"name","kind":"llama|strata","args":[...]}]}
+CFG.json: {"gguf": ..., "cortex_cfg": ..., "llama_server": ..., "configs": [{"name","kind":"llama|cortex","args":[...]}]}
 Interleaving: engines cannot be loaded together (12 GB card, 64 GB RAM), so one ROUND runs every config once
 (start, warm-up, cells, stop), and rounds alternate the config order.  Medians are taken over rounds.
 The caller holds the machine's GPU lock.  Processes are stopped by PID only.
@@ -70,7 +70,7 @@ class Engine:
         if c["kind"] == "llama":
             return [self.m["llama_server"], "-m", self.m["gguf"], "--port", str(PORT), "--host", "127.0.0.1",
                     "-np", "1", "--no-webui", "--jinja"] + c["args"]
-        scfg = json.load(open(self.m["strata_cfg"], encoding="utf-8-sig"))
+        scfg = json.load(open(self.m["cortex_cfg"], encoding="utf-8-sig"))
         scfg["port"] = PORT
         scfg.pop("vision", None)
         args = [a for a in scfg["args"]]
@@ -80,11 +80,11 @@ class Engine:
             else:
                 args += [k, v]
         scfg["args"] = args + c["args"]
-        if self.m.get("strata_exe"):
-            scfg["exe"] = self.m["strata_exe"]
-        p = Path(self.out) / ("strata-cfg-%s.json" % c["name"])
+        if self.m.get("cortex_exe"):
+            scfg["exe"] = self.m["cortex_exe"]
+        p = Path(self.out) / ("cortex-cfg-%s.json" % c["name"])
         p.write_text(json.dumps(scfg, indent=1))
-        return [sys.executable, str(Path(self.m["serve"]) / "server.py"), "--engine", "strata", "--config", str(p),
+        return [sys.executable, str(Path(self.m["serve"]) / "server.py"), "--engine", "cortex", "--config", str(p),
                 "--port", str(PORT)]
 
     def start(self, out):
@@ -158,7 +158,7 @@ class Engine:
 
 def cmd_prompts(a):
     sys.path.insert(0, str(Path(a.repo) / "tools"))
-    import strata_tokenizer as ST
+    import cortex_tokenizer as ST
     tp = Path(a.tokenizer)
     vocab = json.loads((tp / "vocab.json").read_text(encoding="utf-8"))
     toks = [None] * len(vocab)

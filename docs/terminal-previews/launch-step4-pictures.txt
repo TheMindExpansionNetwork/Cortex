@@ -1,7 +1,7 @@
-# strata launch preview: step4-pictures
+# cortex launch preview: step4-pictures
 # (text of the screen as drawn at the size named in tests/terminal/launch_previews.py)
 
- STRATA  Set up   Step 4 of 9: Pictures
+ CORTEX  Set up   Step 4 of 9: Pictures
  ────────────────────────────────────────────────────────────────────────────────────────────────────────────
  Should the model read pictures?
  › No pictures

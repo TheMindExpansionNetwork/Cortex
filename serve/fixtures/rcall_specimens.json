@@ -288,7 +288,7 @@
    "tools": [
     "terminal"
    ],
-   "input": "Strata şu anda IQ3_XXS modelini port 8080'de serving ediyor ve görsel modaliteleri destekliyor. GPU PC'deki Hermes kurulumu `<private-path>\n\n\n<tool_call>\n<function=terminal>\n<parameter=command>\n/c/Windows/System32/OpenSSH/ssh.exe -o BatchMode=yes <host> 'echo \"=== hermes version ===\" …\n</parameter>\n</function>\n</tool_call>",
+   "input": "Cortex şu anda IQ3_XXS modelini port 8080'de serving ediyor ve görsel modaliteleri destekliyor. GPU PC'deki Hermes kurulumu `<private-path>\n\n\n<tool_call>\n<function=terminal>\n<parameter=command>\n/c/Windows/System32/OpenSSH/ssh.exe -o BatchMode=yes <host> 'echo \"=== hermes version ===\" …\n</parameter>\n</function>\n</tool_call>",
    "calls": [
     "terminal"
    ]

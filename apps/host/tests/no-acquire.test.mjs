@@ -16,58 +16,58 @@ const spy = pathToFileURL(fileURLToPath(new URL('./helpers/acquire-spy.mjs', imp
 const delay = ms => new Promise(r => setTimeout(r, ms));
 async function freePort() { const s = createServer(); await new Promise(r => s.listen(0, '127.0.0.1', r)); const p = s.address().port; await new Promise(r => s.close(r)); return p; }
 
-test('the host-side switch: STRATA_NO_ACQUIRE or the packaged app forbids acquiring, nothing else does', () => {
+test('the host-side switch: CORTEX_NO_ACQUIRE or the packaged app forbids acquiring, nothing else does', () => {
   assert.equal(forbidden({}), false);
-  for (const v of ['1', 'true', 'YES', 'on']) assert.equal(forbidden({ STRATA_NO_ACQUIRE: v }), true, v);
-  for (const v of ['0', 'false', '', 'no']) assert.equal(forbidden({ STRATA_NO_ACQUIRE: v }), false, v);
-  assert.equal(forbidden({ STRATA_PACKAGED: '1' }), true);
-  assert.throws(() => requireAcquisition('the llama.cpp engine', undefined, { STRATA_NO_ACQUIRE: '1' }), AcquisitionRefused);
+  for (const v of ['1', 'true', 'YES', 'on']) assert.equal(forbidden({ CORTEX_NO_ACQUIRE: v }), true, v);
+  for (const v of ['0', 'false', '', 'no']) assert.equal(forbidden({ CORTEX_NO_ACQUIRE: v }), false, v);
+  assert.equal(forbidden({ CORTEX_PACKAGED: '1' }), true);
+  assert.throws(() => requireAcquisition('the llama.cpp engine', undefined, { CORTEX_NO_ACQUIRE: '1' }), AcquisitionRefused);
   assert.doesNotThrow(() => requireAcquisition('x', undefined, {}));
 });
 
 test('the llama.cpp and cloudflared fetches refuse before any request is made', async () => {
-  const previous = process.env.STRATA_NO_ACQUIRE;
-  process.env.STRATA_NO_ACQUIRE = '1';
+  const previous = process.env.CORTEX_NO_ACQUIRE;
+  process.env.CORTEX_NO_ACQUIRE = '1';
   const realFetch = globalThis.fetch;
   let requests = 0;
   globalThis.fetch = async () => { requests++; throw new Error('network'); };
-  const directory = await mkdtemp(join(tmpdir(), 'strata-no-acquire-'));
+  const directory = await mkdtemp(join(tmpdir(), 'cortex-no-acquire-'));
   try {
     await assert.rejects(engineInstall.install({ force: true }), err => err instanceof AcquisitionRefused && /llama\.cpp/.test(err.message) && err.status === 409);
     await assert.rejects(engineInstall.findRelease(), AcquisitionRefused);
     let connectorRequests = 0;
-    const installer = createConnectorInstaller({ directory, platform: 'linux', arch: 'x64', env: { STRATA_CLOUDFLARED_SEARCH: 'own' }, fetchImpl: async () => { connectorRequests++; return { ok: false }; } });
+    const installer = createConnectorInstaller({ directory, platform: 'linux', arch: 'x64', env: { CORTEX_CLOUDFLARED_SEARCH: 'own' }, fetchImpl: async () => { connectorRequests++; return { ok: false }; } });
     await assert.rejects(installer.ensure(), err => err instanceof AcquisitionRefused && /optional connector component/.test(err.message));
     assert.equal(requests + connectorRequests, 0, 'nothing was requested');
     assert.equal(existsSync(join(directory, '.install-')), false);
   } finally {
     globalThis.fetch = realFetch;
-    if (previous === undefined) delete process.env.STRATA_NO_ACQUIRE; else process.env.STRATA_NO_ACQUIRE = previous;
+    if (previous === undefined) delete process.env.CORTEX_NO_ACQUIRE; else process.env.CORTEX_NO_ACQUIRE = previous;
     await rm(directory, { recursive: true, force: true });
   }
 });
 
 test('a connector placed in the component folder is used as it is; it is never fetched', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'strata-connector-component-'));
+  const directory = await mkdtemp(join(tmpdir(), 'cortex-connector-component-'));
   const components = join(directory, 'components', 'cloudflared');
   await mkdir(components, { recursive: true });
   const name = process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared';
   await writeFile(join(components, name), 'binary', { mode: 0o755 });
   try {
-    const installer = createConnectorInstaller({ directory: join(directory, 'own'), componentDirectory: components, env: { STRATA_CLOUDFLARED_SEARCH: 'own' }, run: async () => 'cloudflared version 2026.5.0', fetchImpl: async () => { throw new Error('no network'); } });
+    const installer = createConnectorInstaller({ directory: join(directory, 'own'), componentDirectory: components, env: { CORTEX_CLOUDFLARED_SEARCH: 'own' }, run: async () => 'cloudflared version 2026.5.0', fetchImpl: async () => { throw new Error('no network'); } });
     assert.equal(await installer.locate(), join(components, name));
     assert.equal(await installer.ensure(), join(components, name));
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 async function runHost({ env, calls }) {
-  const home = await mkdtemp(join(tmpdir(), 'strata-no-acquire-host-'));
+  const home = await mkdtemp(join(tmpdir(), 'cortex-no-acquire-host-'));
   const log = join(home, 'spy.log');
   await writeFile(log, '');
   const port = await freePort(), base = `http://127.0.0.1:${port}`;
   const host = spawn(process.execPath, ['--import', spy, 'server/index.mjs'], {
     cwd: root, stdio: 'ignore',
-    env: { ...process.env, STRATA_HOME: home, STRATA_MODELS_DIR: join(home, 'models'), STRATA_PORT: String(port), STRATA_SHARE_PORT: String(await freePort()), STRATA_TUNNEL_PORT: String(await freePort()), STRATA_REAL_ENGINE: '1', STRATA_CLOUDFLARED_SEARCH: 'own', ACQUIRE_SPY_LOG: log, ...env },
+    env: { ...process.env, CORTEX_HOME: home, CORTEX_MODELS_DIR: join(home, 'models'), CORTEX_PORT: String(port), CORTEX_SHARE_PORT: String(await freePort()), CORTEX_TUNNEL_PORT: String(await freePort()), CORTEX_REAL_ENGINE: '1', CORTEX_CLOUDFLARED_SEARCH: 'own', ACQUIRE_SPY_LOG: log, ...env },
   });
   const call = async (path, method = 'GET', body) => {
     const response = await fetch(base + path, { method, headers: { 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -96,7 +96,7 @@ const probes = async call => ({
 });
 
 test('the packaged host serves, and every download/install route is refused without one attempt', { timeout: 60000 }, async () => {
-  const { results, attempts } = await runHost({ env: { STRATA_PACKAGED: '1', STRATA_NO_ACQUIRE: '1' }, calls: probes });
+  const { results, attempts } = await runHost({ env: { CORTEX_PACKAGED: '1', CORTEX_NO_ACQUIRE: '1' }, calls: probes });
   assert.equal(results.health.status, 200);
   assert.equal(results.binary.status, 409);
   assert.match(results.binary.body.error ?? results.binary.body.message ?? JSON.stringify(results.binary.body), /never downloads/);
@@ -106,6 +106,6 @@ test('the packaged host serves, and every download/install route is refused with
 });
 
 test('the spy is live: without the switch the same routes DO attempt to download (and are blocked)', { timeout: 60000 }, async () => {
-  const { attempts } = await runHost({ env: { STRATA_PACKAGED: '', STRATA_NO_ACQUIRE: '' }, calls: async call => { await call('/api/engine/binary', 'POST'); await call('/api/serving/tunnel', 'POST', { action: 'prepare' }); } });
+  const { attempts } = await runHost({ env: { CORTEX_PACKAGED: '', CORTEX_NO_ACQUIRE: '' }, calls: async call => { await call('/api/engine/binary', 'POST'); await call('/api/serving/tunnel', 'POST', { action: 'prepare' }); } });
   assert.ok(attempts.some(a => a.kind === 'fetch' && /api\.github\.com\/repos\/ggml-org\/llama\.cpp/.test(a.detail)), JSON.stringify(attempts));
 });

@@ -3,10 +3,10 @@
 // weights (cold), as one graph, per-layer microseconds.  Bench only (no parity: the kernels are the engine's own).
 //
 //     build/router_chain_bench [T=2] [reps=20]
-#include "strata/kernels/bf16_gemv.hpp"
-#include "strata/kernels/elementwise.hpp"
-#include "strata/kernels/native_router.hpp"
-#include "strata/kernels/verify_kernels.hpp"
+#include "cortex/kernels/bf16_gemv.hpp"
+#include "cortex/kernels/elementwise.hpp"
+#include "cortex/kernels/native_router.hpp"
+#include "cortex/kernels/verify_kernels.hpp"
 
 #include <cuda_runtime.h>
 
@@ -18,7 +18,7 @@
 #include <random>
 #include <vector>
 
-namespace K = strata::kernels;
+namespace K = cortex::kernels;
 
 #define CK(x) do { cudaError_t e_ = (x); if (e_ != cudaSuccess) { std::fprintf(stderr, "%s: %s\n", #x, cudaGetErrorString(e_)); std::exit(1); } } while (0)
 
@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
     CK(cudaMemset(dz, 0, 16));
     cudaStream_t s;
     CK(cudaStreamCreate(&s));
-    {   // outputs of the router GEMV for several shapes and token counts as FNV hashes: compare across STRATA_MMVF_PF=0/1
+    {   // outputs of the router GEMV for several shapes and token counts as FNV hashes: compare across CORTEX_MMVF_PF=0/1
         const int shapes[][2] = {{2560, 512}, {2560, 256}, {2560, 64}, {1280, 513}, {640, 100}, {4096, 50}, {2048, 7}, {256, 33}, {8192, 90}};
         for (const auto& sh : shapes) {
             const int ni = sh[0], no = sh[1];
@@ -103,7 +103,7 @@ int main(int argc, char** argv) {
     cudaEvent_t e0, e1;
     CK(cudaEventCreate(&e0));
     CK(cudaEventCreate(&e1));
-    {   // the BF16 GEMV by shape and token count, 48 distinct weight copies in one graph: us per call (STRATA_MMVF_PF=0 / 1 to compare)
+    {   // the BF16 GEMV by shape and token count, 48 distinct weight copies in one graph: us per call (CORTEX_MMVF_PF=0 / 1 to compare)
         const int outs[] = {512, 256, 128, 64, 48, 8, 1};
         const int ins[] = {2560, 2560, 2560, 2560, 2560, 2560, 2560};
         for (int si = 0; si < 7; ++si) {

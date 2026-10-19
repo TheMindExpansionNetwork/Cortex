@@ -5,24 +5,24 @@ on:
     paths:
       - .github/workflows/terminal-minimal-server.yml
       - requirements.txt
-      - strata.py
-      - strata_cli/**
-      - strata_control/**
+      - cortex.py
+      - cortex_cli/**
+      - cortex_control/**
       - serve/**
       - tests/terminal/test_runtime.py
       - tools/minimal_server_smoke.py
-      - tools/strata_tokenizer.py
+      - tools/cortex_tokenizer.py
   pull_request:
     paths:
       - .github/workflows/terminal-minimal-server.yml
       - requirements.txt
-      - strata.py
-      - strata_cli/**
-      - strata_control/**
+      - cortex.py
+      - cortex_cli/**
+      - cortex_control/**
       - serve/**
       - tests/terminal/test_runtime.py
       - tools/minimal_server_smoke.py
-      - tools/strata_tokenizer.py
+      - tools/cortex_tokenizer.py
   workflow_dispatch:
 
 permissions:
@@ -43,8 +43,8 @@ jobs:
       - name: Install only pinned runtime requirements
         shell: bash
         run: |
-          python -m venv "$RUNNER_TEMP/strata-runtime-venv"
-          "$RUNNER_TEMP/strata-runtime-venv/bin/python" -m pip install -r requirements.txt
+          python -m venv "$RUNNER_TEMP/cortex-runtime-venv"
+          "$RUNNER_TEMP/cortex-runtime-venv/bin/python" -m pip install -r requirements.txt
       - name: Check fake-engine serving without terminal packages
         shell: bash
         run: |
@@ -54,7 +54,7 @@ jobs:
           from pathlib import Path
 
           report = Path(os.environ['RUNNER_TEMP']) / 'minimal-server-smoke.json'
-          python = str(Path(os.environ['RUNNER_TEMP']) / 'strata-runtime-venv' / 'bin' / 'python')
+          python = str(Path(os.environ['RUNNER_TEMP']) / 'cortex-runtime-venv' / 'bin' / 'python')
           subprocess.run([python, 'tools/minimal_server_smoke.py',
                           '--report', str(report)], check=True)
           print(report.read_text())
@@ -62,4 +62,4 @@ jobs:
       - name: Run full server suite without terminal packages
         shell: bash
         run: |
-          "$RUNNER_TEMP/strata-runtime-venv/bin/python" -m unittest discover -s serve -p 'test_*.py'
+          "$RUNNER_TEMP/cortex-runtime-venv/bin/python" -m unittest discover -s serve -p 'test_*.py'

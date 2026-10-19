@@ -1,6 +1,6 @@
-# Strata Phase B qualification kit
+# Cortex Phase B qualification kit
 
-**Purpose.** This Mac cannot run a real Strata model (see `IMPLEMENTATION_STATUS.md` §3.2 for the
+**Purpose.** This Mac cannot run a real Cortex model (see `IMPLEMENTATION_STATUS.md` §3.2 for the
 exact reason and evidence). Everything that *can* be verified without weights has been verified
 here. This document is the executable procedure for the checks that need a machine with enough
 memory and disk to hold a pack, so that work can continue without this conversation.
@@ -39,8 +39,8 @@ between baseline and candidate measurements.
 ## 2. Environment bootstrap
 
 ```sh
-ROOT=/path/to/strata-work
-cd "$ROOT/strata-rebuild"
+ROOT=/path/to/cortex-work
+cd "$ROOT/cortex-rebuild"
 
 # Python 3.10+ is required. macOS ships 3.9, so use setup.sh's bundled interpreter or a 3.11+
 # (this checkout was developed against a Homebrew python3.11 venv).
@@ -62,7 +62,7 @@ Record: `sw_vers`, `uname -m`, `sysctl -n machdep.cpu.brand_string hw.memsize`, 
 ## 3. Build the engine and capture its identity
 
 ```sh
-cd "$ROOT/strata-rebuild"
+cd "$ROOT/cortex-rebuild"
 
 # metal-cpp (Apple's headers), pinned by SHA-256 in metal/setup_mac.py
 curl -sSL -o /tmp/metal-cpp.zip https://developer.apple.com/metal/cpp/files/metal-cpp_26.zip
@@ -75,21 +75,21 @@ git -C "$ROOT/toolchain/llama.cpp" checkout 3cf03257f219afbe7334045ff7c6a06ac68c
 cmake -S metal -B build-metal -G Ninja -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" \
       -DMETAL_CPP_DIR="$ROOT/toolchain/metal-cpp" \
-      -DSTRATA_GGML_DIR="$ROOT/toolchain/llama.cpp"
-ninja -C build-metal strata -j 6
+      -DCORTEX_GGML_DIR="$ROOT/toolchain/llama.cpp"
+ninja -C build-metal cortex -j 6
 
-./build-metal/strata --version      # expect: strata 0.1.44.1-metal
-shasum -a 256 ./build-metal/strata  # RECORD THIS — it is the engine build hash
+./build-metal/cortex --version      # expect: cortex 0.1.44.1-metal
+shasum -a 256 ./build-metal/cortex  # RECORD THIS — it is the engine build hash
 ```
 
-**Assertion E1:** `strata --version` prints `strata 0.1.44.1-metal`.
-**Assertion E2:** the SHA-256 of `build-metal/strata` is recorded in the result record.
+**Assertion E1:** `cortex --version` prints `cortex 0.1.44.1-metal`.
+**Assertion E2:** the SHA-256 of `build-metal/cortex` is recorded in the result record.
 
 ### 3.1 Kernel parity (no model needed — run this first on any new machine)
 
 ```sh
 cmake -S metal -B build-metal-kern -G Ninja -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" -DSTRATA_METAL_ENGINE=OFF
+      -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" -DCORTEX_METAL_ENGINE=OFF
 ninja -C build-metal-kern -j 8
 for t in gemv_parity mma_parity dense_mm_parity expert_parity gdn_parity gdn_prompt_parity \
          qsa_parity qsa_prompt_parity prompt_parity gr_parity gr2_parity fuse_parity \
@@ -110,7 +110,7 @@ this also fails on the qualifying GPU is a required observation — record it ei
 ```
 
 This is the only step that downloads. After it completes, record every produced file's SHA-256
-(they live under the data dir `setup.py` reports, plus `strata-<model>.json`).
+(they live under the data dir `setup.py` reports, plus `cortex-<model>.json`).
 
 **Assertion M1 (offline reuse, P06/P07/P09):** after preparation, re-running
 
@@ -126,13 +126,13 @@ from the downloader's log) or by running with egress blocked and confirming it s
 ## 4. Real inference
 
 ```sh
-python3 -m serve.server --config strata-Q2_0.json --port 8095
+python3 -m serve.server --config cortex-Q2_0.json --port 8095
 ```
 
 **Assertion I1 (R09):** `/health` reports ready **only** after the engine prints
 `READY <ctx>`; `max_context` is 0 until then, so a "ready" that precedes it is a bug.
 **Assertion I2 (R11):** `/v1/models`, `/v1/status`, `/props` answer, and `/v1/status` carries
-`"service": "strata"`, the model id, the context and the three dialects.
+`"service": "cortex"`, the model id, the context and the three dialects.
 **Assertion I3:** a non-streaming `/v1/chat/completions` returns real text with a `usage` block.
 **Assertion I4:** a streaming one (`"stream": true`) emits SSE chunks and terminates with
 `data: [DONE]`, heartbeats appear as `: keep-alive` comments.
@@ -143,8 +143,8 @@ client-observed timings. State the exact prompts and `max_tokens`.
 
 ```sh
 Rscript -e '...'   # no: use the terminal client instead
-python3 strata.py status --url http://127.0.0.1:8095
-python3 strata.py monitor --url http://127.0.0.1:8095
+python3 cortex.py status --url http://127.0.0.1:8095
+python3 cortex.py monitor --url http://127.0.0.1:8095
 ```
 
 **Assertion I7 (A07/U03):** the six monitor views render, `q` detaches **without stopping** the
@@ -159,7 +159,7 @@ continuing trend line.
 **Assertion C1 (R12):** start two conversations, cancel one. Only the targeted request stops; the
 other completes. Record both.
 **Assertion C2 (R10):** ten cycles of load → generate → cancel → unload. Afterwards: no orphaned
-engine process (`pgrep -f 'strata --serve'`), no orphaned work in `/v1/status`, and memory returns
+engine process (`pgrep -f 'cortex --serve'`), no orphaned work in `/v1/status`, and memory returns
 to the pre-cycle level.
 **Assertion C3 (R09):** kill the engine process mid-generation. Readiness must go false, the
 affected request must report a typed failure, and unrelated workers must survive.
@@ -190,7 +190,7 @@ serve a real generation. **This currently fails on the development Mac** — see
 ## 7. Agent integration (Harness)
 
 The App Host must drive the Harness **Gateway** surface, not the SDK (see D03 in
-`IMPLEMENTATION_STATUS.md`, and `…/strata-work/RECON-HARNESS.md` for the file:line evidence).
+`IMPLEMENTATION_STATUS.md`, and `…/cortex-work/RECON-HARNESS.md` for the file:line evidence).
 
 Launch and connect:
 
@@ -203,7 +203,7 @@ dsh web --port 0 --no-open          # prints an authenticated URL
 
 | Assertion | What to prove |
 | --- | --- |
-| A1 (A01/A03) | Prompt → streamed answer, then a controlled read/edit/test tool round trip in a fixture workspace. The tool executes **once**, in Harness — not again in the Strata API. |
+| A1 (A01/A03) | Prompt → streamed answer, then a controlled read/edit/test tool round trip in a fixture workspace. The tool executes **once**, in Harness — not again in the Cortex API. |
 | A2 (A04) | Deny a tool: it must not execute, and the agent must receive an explicit denial it can handle. Also test an unavailable answerer and an expired approval. |
 | A3 (A05) | `session/cancel` returns `{accepted:true}` immediately; the run is only actually stopped when `api-session/status(sessionId, running:false)` arrives or the durable `turn/end {kind:'aborted'}` is committed. **Wait for quiescence before reporting Stopped.** |
 | A4 (A08) | Two sessions run independently; cancelling one must not disturb the other. |
@@ -215,7 +215,7 @@ dsh web --port 0 --no-open          # prints an authenticated URL
 
 ## 8. Time-skip
 
-Time-skip is **implemented** (`strata_control/time_skip.py`, `strata timeskip`). The state machine,
+Time-skip is **implemented** (`cortex_control/time_skip.py`, `cortex timeskip`). The state machine,
 the non-regression gate and the apply/restore safety are covered by 24 tests that pass on this Mac.
 What those tests cannot show is whether a *real model* produces a candidate worth keeping, which is
 what this section qualifies.
@@ -223,8 +223,8 @@ what this section qualifies.
 ### 8.1 The command
 
 ```sh
-# Declare checks for the workspace first: .strata/checks.json
-cat > .strata/checks.json <<'JSON'
+# Declare checks for the workspace first: .cortex/checks.json
+cat > .cortex/checks.json <<'JSON'
 {"checks": [
   {"id": "tests",  "command": "python -m pytest -q", "timeout_s": 900},
   {"id": "lint",   "command": "ruff check .",       "timeout_s": 300},
@@ -232,12 +232,12 @@ cat > .strata/checks.json <<'JSON'
 ]}
 JSON
 
-strata timeskip run --workspace "$PWD" --prompt "make the failing test pass" \
+cortex timeskip run --workspace "$PWD" --prompt "make the failing test pass" \
     --attempts 2 --revise-command "<python> <repo>/integrations/harness/revise_once.py --deadline 300"
-strata timeskip status <run-id>
-strata timeskip apply  <run-id> --dry-run
-strata timeskip apply  <run-id>            # refuses if the workspace changed; exit 6
-strata timeskip apply  <run-id> --restore
+cortex timeskip status <run-id>
+cortex timeskip apply  <run-id> --dry-run
+cortex timeskip apply  <run-id>            # refuses if the workspace changed; exit 6
+cortex timeskip apply  <run-id> --restore
 ```
 
 `--revise-command` is what makes the revision a real agent turn. **Exit 0 from it means an attempt
@@ -253,7 +253,7 @@ construction.
 | S03 | Break a previously passing check in the candidate: it is **rejected**, `decision.regressions` names it, and the workspace still holds the original. |
 | S04 | Run with a check whose command does not exist: `outcome` is `unknown`, `decision.outcome` is `inconclusive`, and `needs_user_review` is true. It must **not** read as a pass. |
 | S05 | Run twice with an unchanged workspace: the second run must not report an improvement. |
-| S06 | `strata timeskip apply <id> --dry-run` writes nothing; the real apply keeps a rollback copy; a subsequent apply after you edit a file yourself exits **6** and leaves your edit alone. |
+| S06 | `cortex timeskip apply <id> --dry-run` writes nothing; the real apply keeps a rollback copy; a subsequent apply after you edit a file yourself exits **6** and leaves your edit alone. |
 | S07 | Send SIGINT during the `generating` phase: the run ends `cancelled`, the baseline stays selected, and the workspace is unchanged. |
 | S08 | Kill the Harness mid-attempt: the run ends `failed`, the baseline stays selected, and the reason is recorded. |
 | S09 | Compare cost honestly: report the baseline's and the revision's token or time cost and the total wall-clock latency. **Do not infer a speed or quality gain from the name "Time-skip."** |
@@ -263,7 +263,7 @@ selected, and the run id, digests and raw `run.json` retained as evidence.
 
 ## 9. Engine tuning
 
-The job contract is implemented (`strata_control/tuning.py`, `strata tune`), with 31 tests covering
+The job contract is implemented (`cortex_control/tuning.py`, `cortex tune`), with 31 tests covering
 the selection rule, failure recording, the exclusive lease and the exported-configuration retest.
 **The measurement harness is not written**, so no sweep has run against a real model — on this Mac
 there is no runnable workload, and inventing one would defeat the point. This section is what to do
@@ -274,7 +274,7 @@ on a machine that has one.
 Always start here. The plan is the review surface, and it is safe to run anywhere:
 
 ```sh
-strata tune plan --engine /path/to/strata --backend metal \
+cortex tune plan --engine /path/to/cortex --backend metal \
     --model qwen3.8-flash-next --objective generation --trials 16 --repeats 3
 ```
 
@@ -299,7 +299,7 @@ from a **task check**, not from a comparison against the baseline's text.
 | ID | Observation |
 | --- | --- |
 | T01 | The tuner is optional: with it removed, serving and manual settings still work. |
-| T02 | Every candidate's argv contains only flags the engine accepts; the sweep never mutates the active profile (`strata-<model>.json` is byte-identical before and after). |
+| T02 | Every candidate's argv contains only flags the engine accepts; the sweep never mutates the active profile (`cortex-<model>.json` is byte-identical before and after). |
 | T03 | Trigger a boot failure, an OOM, a timeout and a cancellation. All four are retained in the report with their status; only the sweep's own devices are affected. |
 | T04 | At least three paired repeats per candidate plus a baseline rerun. The report's `drift` section shows the baseline's two medians. Include the decode, a prompt-heavy and a multi-turn/tool workload. |
 | T05 | Take a winner whose advantage came from `prompt_cache_tail`; confirm it is **not** in the exported args and that the exported configuration is re-measured before the recommendation stands. |
@@ -310,10 +310,10 @@ from a **task check**, not from a comparison against the baseline's text.
 ### 9.4 The HyperCore-Tune position, for whoever qualifies CUDA
 
 HyperCore-Tune is not the optimizer; it was evaluated at pin `4f9ab7fa` and is documented in
-`IMPLEMENTATION_STATUS.md` §1.12 as a *candidate* adapter behind the Strata job. If you qualify it on
-CUDA, it supplies the search and the per-candidate boot; the Strata job still owns the lease, the
+`IMPLEMENTATION_STATUS.md` §1.12 as a *candidate* adapter behind the Cortex job. If you qualify it on
+CUDA, it supplies the search and the per-candidate boot; the Cortex job still owns the lease, the
 evidence, the dimension validation and the exported retest. Two things to check first: its
-`strata_env.py` locates Strata by walking up from its own directory (pass `--strata-root` instead),
+`cortex_env.py` locates Cortex by walking up from its own directory (pass `--cortex-root` instead),
 and it writes `max_run_<model>.{json,sh,bat}` next to that root — make sure that is not your active
 profile.
 

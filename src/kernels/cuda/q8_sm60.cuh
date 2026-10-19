@@ -1,7 +1,7 @@
 // src/kernels/cuda/q8_sm60.cuh - a Q8_0 decode GEMV for Pascal GP100 (compute capability 6.0), opt-in with
-// STRATA_Q8_SM60=1.  Included by native_mmvq.cu, and by a standalone parity/speed check, so both run this code.
+// CORTEX_Q8_SM60=1.  Included by native_mmvq.cu, and by a standalone parity/speed check, so both run this code.
 //
-// Reads the packed planes of STRATA_Q8_PACKED (the SAME int8 values row-major, n_in bytes per row, then one fp16 scale
+// Reads the packed planes of CORTEX_Q8_PACKED (the SAME int8 values row-major, n_in bytes per row, then one fp16 scale
 // per 32 of them) for every Q8_0 dense matrix and the head, whatever their shape.  Why the packed kernel above is slow
 // on a GP100 die (measured on PH402, 1050 MHz: ~137 GB/s for the dense projections, ~160 for the head, against
 // 220-270 for this layout): one workgroup per row, eight bytes per thread per pass and a __syncthreads() per row - a
@@ -12,7 +12,7 @@
 //   * a workgroup first copies the window's activations into shared memory as an int8 plane per column and a float
 //     scale per 32 (once; the workgroup then loops over rows), so every activation read is a 16-byte shared load;
 //   * TPR threads own a row (a whole warp for n_in >= 2048, a half or a quarter for narrower rows) and read its
-//     weights 16 bytes at a time through the read-only cache; the dot of 4 ints is STRATA_DP4A (vmad on sm_60);
+//     weights 16 bytes at a time through the read-only cache; the dot of 4 ints is CORTEX_DP4A (vmad on sm_60);
 //   * the sum is a shuffle within those TPR lanes - no shared memory, no barrier per row.
 // The per-32 products are added in another order than the exact kernels', so outputs are not bitwise theirs (float
 // rounding only; the int8 dots are exact).
@@ -64,10 +64,10 @@ __global__ void kernel(const int8_t* __restrict__ qs, const half* __restrict__ d
 #pragma unroll
                 for (int j = 0; j < NCOLS; ++j) {
                     const int4 xv = reinterpret_cast<const int4*>(sx + std::size_t(j) * n_in)[c];
-                    int s = STRATA_DP4A(wv.x, xv.x, 0);
-                    s = STRATA_DP4A(wv.y, xv.y, s);
-                    s = STRATA_DP4A(wv.z, xv.z, s);
-                    s = STRATA_DP4A(wv.w, xv.w, s);
+                    int s = CORTEX_DP4A(wv.x, xv.x, 0);
+                    s = CORTEX_DP4A(wv.y, xv.y, s);
+                    s = CORTEX_DP4A(wv.z, xv.z, s);
+                    s = CORTEX_DP4A(wv.w, xv.w, s);
                     acc[j] += dw * sd[j * nb + (c >> 1)] * float(s);
                 }
             }
@@ -83,10 +83,10 @@ __global__ void kernel(const int8_t* __restrict__ qs, const half* __restrict__ d
 }
 
 // One workgroup per SM would leave too few rows in flight on a 48-SM die; four per SM is what the shapes of
-// Qwen3.8-Flash-Next measured best (STRATA_Q8_SM60_BPS overrides it).
+// Qwen3.8-Flash-Next measured best (CORTEX_Q8_SM60_BPS overrides it).
 inline int blocks_per_sm() {
     static const int v = [] {
-        const char* e = std::getenv("STRATA_Q8_SM60_BPS");
+        const char* e = std::getenv("CORTEX_Q8_SM60_BPS");
         const int n = e ? std::atoi(e) : 0;
         return n > 0 ? n : 4;
     }();

@@ -1,4 +1,4 @@
-Strata lässt **[Qwen3.8-Flash-Next](https://huggingface.co/Qwen/Qwen3.8-Flash-Next)** auf einem normalen PC laufen.
+Cortex lässt **[Qwen3.8-Flash-Next](https://huggingface.co/Qwen/Qwen3.8-Flash-Next)** auf einem normalen PC laufen.
 Das ist ein großes, kluges KI-Modell, das sonst meist einen Server braucht. Es chattet, schreibt Code, versteht
 Bilder und arbeitet mit deinen Apps und Coding-Agents zusammen. Nichts verlässt deinen PC.
 
@@ -38,7 +38,7 @@ NVIDIA: Q2_0 mit Engine 0.1.36, die anderen Zeilen mit 0.1.26 (4K Antworten, 32K
 Tabellen stehen in [DETAILS.md](docs/DETAILS.md#speed-measured). Eine Karte mit mehr VRAM ist schneller: Eine
 RTX 3090 (24 GB) sollte etwa 100-140 Tokens pro Sekunde schreiben. Lange Chats un
 
-Strata fait tourner **[Qwen3.8-Flash-Next](https://huggingface.co/Qwen/Qwen3.8-Flash-Next)** sur un PC normal. C'est
+Cortex fait tourner **[Qwen3.8-Flash-Next](https://huggingface.co/Qwen/Qwen3.8-Flash-Next)** sur un PC normal. C'est
 un grand modèle d'IA, très capable, qui demande d'habitude un serveur. Il discute, écrit du code, lit des images et
 fonctionne avec vos applications et vos agents de code. Rien ne quitte votre PC.
 
@@ -74,7 +74,7 @@ Nous l'avons mesurée sur deux PC de jeu ordinaires. Un token correspond à envi
 
 NVIDIA : Q2_0 avec le moteur 0.1.36, les autres lignes ave
 
-Strata を使うと、**[Qwen3.8-Flash-Next](https://huggingface.co/Qwen/Qwen3.8-Flash-Next)** を一般的な PC で動かせます。
+Cortex を使うと、**[Qwen3.8-Flash-Next](https://huggingface.co/Qwen/Qwen3.8-Flash-Next)** を一般的な PC で動かせます。
 通常はサーバーを必要とする大規模で高性能な AI モデルで、チャットやコードの生成、画像の読み取りができます。
 アプリやコーディングエージェントとも連携でき、データは PC の外に送信されません。
 
@@ -95,7 +95,7 @@ Strata を使うと、**[Qwen3.8-Flash-Next](https://huggingface.co/Qwen/Qwen3.8
 | **IQ2_XS** | 79 tokens/s | 2,090 tokens/s |
 |
 
-Strata 能在普通电脑上运行 **[Qwen3.8-Flash-Next](https://huggingface.co/Qwen/Qwen3.8-Flash-Next)**。这是一个又大又聪明的
+Cortex 能在普通电脑上运行 **[Qwen3.8-Flash-Next](https://huggingface.co/Qwen/Qwen3.8-Flash-Next)**。这是一个又大又聪明的
 AI 模型，通常要用服务器才能跑。它能聊天、写代码、看图片，还能配合你的应用和编程智能体一起工作。所有数据都留在你的电脑上。
 
 ## 速度有多快？

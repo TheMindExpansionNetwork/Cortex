@@ -1,7 +1,7 @@
 """The app reports its version as 0.2.0-beta; the update check must compare it, not choke on it."""
 import unittest
 
-from strata_control import feed as feedmod
+from cortex_control import feed as feedmod
 
 
 class AppPrereleaseVersionTests(unittest.TestCase):
@@ -17,10 +17,10 @@ class AppPrereleaseVersionTests(unittest.TestCase):
         import json
         from tests.terminal import update_fixture as fx
         key = fx.make_key()
-        doc = {"schema_version": 1, "feed": "strata-updates", "channel": "stable", "sequence": 1, "generated_at": "2026-10-19T00:00:00Z", "expires_at": None,
+        doc = {"schema_version": 1, "feed": "cortex-updates", "channel": "stable", "sequence": 1, "generated_at": "2026-10-19T00:00:00Z", "expires_at": None,
                "app": {"version": "0.2.0-beta", "notes": "", "pub_date": "2026-10-19T00:00:00Z",
                        "platforms": {"windows-x86_64": {"url": "a.exe", "signature": "s", "sha256": "a" * 64, "size": 1}}}}
-        from strata_control import signing
+        from cortex_control import signing
         payload = (json.dumps(doc, sort_keys=True) + "\n").encode()
         loaded = feedmod.verify_and_parse(payload, json.dumps(signing.sign_bytes(key, payload)).encode(), source="x", trusted=fx.trusted_of(key))
         self.assertEqual(loaded.app.version, "0.2.0-beta")

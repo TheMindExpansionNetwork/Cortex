@@ -17,7 +17,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-$NodeVersion = if ($env:STRATA_NODE_VERSION) { $env:STRATA_NODE_VERSION } else { '24.12.0' }
+$NodeVersion = if ($env:CORTEX_NODE_VERSION) { $env:CORTEX_NODE_VERSION } else { '24.12.0' }
 $Target = 'win-x64'
 # SHA-256 of node-v24.12.0-win-x64.zip from nodejs.org's SHASUMS256.txt; keep equal to fetch-node.sh.
 $Expected = '9c125f61ae947b52e779095830f9cac267846a043ef7192183c84016aaad2812'
@@ -35,7 +35,7 @@ if ($Check) {
 }
 
 $Archive = "node-v$NodeVersion-$Target.zip"
-$Work = Join-Path ([IO.Path]::GetTempPath()) ("strata-node-" + [Guid]::NewGuid().ToString('N'))
+$Work = Join-Path ([IO.Path]::GetTempPath()) ("cortex-node-" + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $Work | Out-Null
 try {
     $Zip = Join-Path $Work $Archive

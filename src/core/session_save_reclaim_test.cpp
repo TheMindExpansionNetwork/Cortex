@@ -1,5 +1,5 @@
 // CPU only: pressure is injected through telemetry, not by exhausting the host.
-#include "strata/core/session_save_reclaim.hpp"
+#include "cortex/core/session_save_reclaim.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <new>
@@ -13,7 +13,7 @@ void* operator new(std::size_t n) {
 void operator delete(void* p) noexcept { std::free(p); }
 void operator delete(void* p, std::size_t) noexcept { std::free(p); }
 
-using namespace strata::core;
+using namespace cortex::core;
 static int checks_run = 0;
 static void check(bool ok, const char* label) {
     ++checks_run;

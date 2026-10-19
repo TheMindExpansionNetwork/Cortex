@@ -16,12 +16,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
-from strata_cli.cli import main as source_main
+from cortex_cli.cli import main as source_main
 
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILDER = ROOT / "packaging/monitor_bundle.py"
-SPEC = importlib.util.spec_from_file_location("strata_monitor_bundle_builder", BUILDER)
+SPEC = importlib.util.spec_from_file_location("cortex_monitor_bundle_builder", BUILDER)
 assert SPEC is not None and SPEC.loader is not None
 BUILDER_MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(BUILDER_MODULE)
@@ -120,7 +120,7 @@ class MonitorBundleTests(unittest.TestCase):
                     rollback(target, if_active_sha256=next_sha, if_rollback_sha256=old["sha256"])
             self.assertEqual(verify(target / "next-monitor.pyz")["sha256"], next_sha)
             self.assertEqual(verify(previous / "monitor.pyz")["sha256"], old["sha256"])
-            self.assertFalse(list(root.glob(".strata-monitor-swap-*")))
+            self.assertFalse(list(root.glob(".cortex-monitor-swap-*")))
             restored = subprocess.run([sys.executable, str(BUILDER), "rollback", "--target", str(target),
                                        "--if-active-sha256", next_sha,
                                        "--if-rollback-sha256", old["sha256"]],
@@ -167,7 +167,7 @@ class MonitorBundleTests(unittest.TestCase):
                            if_candidate_sha256=next_sha)
             self.assertEqual(verify(target / "monitor.pyz")["sha256"], old["sha256"])
             self.assertFalse((root / "optional-monitor.previous").exists())
-            self.assertFalse(list(root.glob(".strata-monitor-install-*")))
+            self.assertFalse(list(root.glob(".cortex-monitor-install-*")))
 
             original_stage = BUILDER_MODULE._stage_copy
 
@@ -188,7 +188,7 @@ class MonitorBundleTests(unittest.TestCase):
                            if_candidate_sha256=next_sha)
             self.assertNotEqual(verify(target / "monitor.pyz")["sha256"], old["sha256"])
             self.assertFalse((root / "optional-monitor.previous").exists())
-            self.assertFalse(list(root.glob(".strata-monitor-install-*")))
+            self.assertFalse(list(root.glob(".cortex-monitor-install-*")))
 
     def test_offline_install_plan_and_remove_touch_only_monitor_files(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -255,7 +255,7 @@ class MonitorBundleTests(unittest.TestCase):
                 with self.assertRaisesRegex(OSError, "disk full"):
                     install(bundle, target, if_candidate_sha256=built["sha256"])
             self.assertFalse(target.exists())
-            self.assertFalse(list(root.glob(".strata-monitor-install-*")))
+            self.assertFalse(list(root.glob(".cortex-monitor-install-*")))
 
     def test_bundle_verification_rejects_large_or_linked_input(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -283,16 +283,16 @@ class MonitorBundleTests(unittest.TestCase):
                 verify(bundle)
 
     def test_bundle_carries_every_module_its_entry_point_imports(self):
-        """The import closure of strata_cli.monitor_commands (lazy imports included) minus the launch package must be in the bundle."""
+        """The import closure of cortex_cli.monitor_commands (lazy imports included) minus the launch package must be in the bundle."""
         import ast
-        needed, todo = set(), ["strata_cli/monitor_commands.py"]
+        needed, todo = set(), ["cortex_cli/monitor_commands.py"]
         while todo:
             name = todo.pop()
             if name in needed:
                 continue
             needed.add(name)
             for node in ast.walk(ast.parse((ROOT / name).read_text(encoding="utf-8"))):
-                if isinstance(node, ast.ImportFrom) and node.module and node.module.split(".")[0] == "strata_cli":
+                if isinstance(node, ast.ImportFrom) and node.module and node.module.split(".")[0] == "cortex_cli":
                     names = [node.module] + [node.module + "." + a.name for a in node.names]
                 elif isinstance(node, ast.Import):
                     names = [a.name for a in node.names]
@@ -300,16 +300,16 @@ class MonitorBundleTests(unittest.TestCase):
                     continue
                 for module in names:
                     path = module.replace(".", "/") + ".py"
-                    if module.startswith("strata_cli") and (ROOT / path).is_file() and "/launch/" not in path:
+                    if module.startswith("cortex_cli") and (ROOT / path).is_file() and "/launch/" not in path:
                         todo.append(path)
         self.assertLessEqual(needed, set(BUILDER_MODULE.SOURCES))
 
     def test_plain_monitor_runs_when_the_launch_package_is_not_bundled(self):
-        """The pyz has no strata_cli.launch: interactive `monitor` must fall back to the plain Monitor, not fail."""
-        from strata_cli import monitor as monitor_module
-        from strata_cli import monitor_commands
+        """The pyz has no cortex_cli.launch: interactive `monitor` must fall back to the plain Monitor, not fail."""
+        from cortex_cli import monitor as monitor_module
+        from cortex_cli import monitor_commands
         ran = []
-        blocked = {"strata_cli.launch.monitor_ext": None}       # None in sys.modules makes the import raise ImportError
+        blocked = {"cortex_cli.launch.monitor_ext": None}       # None in sys.modules makes the import raise ImportError
         with mock.patch.dict(sys.modules, blocked),                 mock.patch.object(monitor_module.MonitorApp, "run", lambda self: ran.append(self.endpoint.base_url)),                 mock.patch.object(sys.stdout, "isatty", return_value=True):
             code = monitor_commands.main(["monitor", "--url", "http://127.0.0.1:9"])
         self.assertEqual((code, ran), (0, ["http://127.0.0.1:9"]))
@@ -325,21 +325,21 @@ class MonitorBundleTests(unittest.TestCase):
             for old_bundle, version in ((current, 1), (previous, 2), (old_visual, 3)):
                 with zipfile.ZipFile(modern) as source, zipfile.ZipFile(old_bundle, "w", zipfile.ZIP_DEFLATED) as legacy:
                     for item in source.infolist():
-                        if item.filename not in ("strata_cli/detail_dashboard.py", "strata_cli/nav.py",
-                                                 "strata_cli/consoleinfo.py", "strata_cli/overview.py") and \
-                                (version >= 3 or item.filename != "strata_cli/dashboard.py") and \
+                        if item.filename not in ("cortex_cli/detail_dashboard.py", "cortex_cli/nav.py",
+                                                 "cortex_cli/consoleinfo.py", "cortex_cli/overview.py") and \
+                                (version >= 3 or item.filename != "cortex_cli/dashboard.py") and \
                                 (version != 1 or item.filename != "LICENSE"):
                             legacy.writestr(item, source.read(item.filename))
                 report = json.loads((root / "next-monitor.pyz.manifest.json").read_text())
                 report["schema_version"] = version
                 report["bundle"] = old_bundle.name
                 report["sha256"] = hashlib.sha256(old_bundle.read_bytes()).hexdigest()
-                del report["files"]["strata_cli/detail_dashboard.py"]
-                del report["files"]["strata_cli/nav.py"]
-                del report["files"]["strata_cli/consoleinfo.py"]
-                del report["files"]["strata_cli/overview.py"]
+                del report["files"]["cortex_cli/detail_dashboard.py"]
+                del report["files"]["cortex_cli/nav.py"]
+                del report["files"]["cortex_cli/consoleinfo.py"]
+                del report["files"]["cortex_cli/overview.py"]
                 if version < 3:
-                    del report["files"]["strata_cli/dashboard.py"]
+                    del report["files"]["cortex_cli/dashboard.py"]
                 if version == 1:
                     del report["files"]["LICENSE"]
                     for field in ("compatibility", "license", "license_file"):
@@ -351,8 +351,8 @@ class MonitorBundleTests(unittest.TestCase):
             self.assertEqual(verify(modern)["schema_version"], 6)
             with zipfile.ZipFile(modern) as archive:
                 self.assertIn(b"MIT License", archive.read("LICENSE"))
-                self.assertIn(b"render_dashboard", archive.read("strata_cli/dashboard.py"))
-                self.assertIn(b"render_detail_dashboard", archive.read("strata_cli/detail_dashboard.py"))
+                self.assertIn(b"render_dashboard", archive.read("cortex_cli/dashboard.py"))
+                self.assertIn(b"render_detail_dashboard", archive.read("cortex_cli/detail_dashboard.py"))
             target = root / "optional-monitor"
             install(current, target, if_candidate_sha256=verify(current)["sha256"])
             preview = update(modern, target, plan=True)
@@ -431,7 +431,7 @@ class MonitorBundleTests(unittest.TestCase):
         thread.start()
         try:
             with tempfile.TemporaryDirectory() as directory:
-                bundle = Path(directory) / "strata-monitor.pyz"
+                bundle = Path(directory) / "cortex-monitor.pyz"
                 subprocess.run([sys.executable, str(BUILDER), "build", str(bundle)], check=True,
                                capture_output=True, text=True)
                 subprocess.run([sys.executable, str(BUILDER), "verify", str(bundle)], check=True,
@@ -439,12 +439,12 @@ class MonitorBundleTests(unittest.TestCase):
                 self.assertLess(bundle.stat().st_size, 96 * 1024)
                 with zipfile.ZipFile(bundle) as archive:
                     self.assertIn(b"MIT License", archive.read("LICENSE"))
-                    self.assertIn("strata_cli/dashboard.py", archive.namelist())
+                    self.assertIn("cortex_cli/dashboard.py", archive.namelist())
                 if importlib.util.find_spec("textual") is not None:
                     import_check = subprocess.run(
                         [sys.executable, "-I", "-c",
                          "import sys; sys.path.insert(0, " + repr(str(bundle)) + "); "
-                         "from strata_cli.monitor import MonitorApp; print(MonitorApp.__name__)"],
+                         "from cortex_cli.monitor import MonitorApp; print(MonitorApp.__name__)"],
                         cwd=directory, capture_output=True, text=True, check=True)
                     self.assertEqual(import_check.stdout.strip(), "MonitorApp")
                 url = f"http://127.0.0.1:{server.server_port}"
@@ -452,12 +452,12 @@ class MonitorBundleTests(unittest.TestCase):
                 with redirect_stdout(source_output):
                     self.assertEqual(source_main(["monitor", "--once", "--json", "--url", url]), 0)
                 clean_env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")}
-                clean_env["STRATA_CONNECTION_DIR"] = str(Path(directory) / "connections")
+                clean_env["CORTEX_CONNECTION_DIR"] = str(Path(directory) / "connections")
                 portable = subprocess.run([sys.executable, "-S", str(bundle), "monitor", "--once", "--json",
                                            "--url", url], cwd=directory, env=clean_env, check=True,
                                           capture_output=True, text=True)
                 self.assertEqual(json.loads(portable.stdout), json.loads(source_output.getvalue()))
-                bare_source = subprocess.run([sys.executable, "-S", str(ROOT / "strata.py"), "monitor",
+                bare_source = subprocess.run([sys.executable, "-S", str(ROOT / "cortex.py"), "monitor",
                                               "--once", "--json", "--url", url], cwd=directory, env=clean_env,
                                              check=True, capture_output=True, text=True)
                 self.assertEqual(json.loads(bare_source.stdout), json.loads(portable.stdout))

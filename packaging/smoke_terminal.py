@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """Smoke-test a terminal archive in a clean environment.
 
-    python packaging/smoke_terminal.py release/artifacts/strata-terminal-0.1.45-windows-x86_64.zip [--json out.json]
+    python packaging/smoke_terminal.py release/artifacts/cortex-terminal-0.1.45-windows-x86_64.zip [--json out.json]
 
 The archive is extracted into a fresh folder whose name has a space in it (so a moved or awkward path is part of
 the test), and every command runs with a PATH that holds no Python (Windows: System32 only; POSIX: a folder with
 dirname/readlink/cat and nothing else), no PYTHON* variables, a private user profile, and a dead HTTP proxy so that
 anything reaching for the internet fails loudly. It then checks, through the bundled launcher:
 
-    strata --version              must name the interpreter inside the extracted folder
-    strata doctor                 read-only inventory
-    strata profile list           saved profiles (none in a clean profile)
-    strata serve --engine mock    the server on the scripted engine: /health, /v1/models and a chat answer
-    strata install               must refuse (no installer in the archive) with exit 5, not fetch anything
+    cortex --version              must name the interpreter inside the extracted folder
+    cortex doctor                 read-only inventory
+    cortex profile list           saved profiles (none in a clean profile)
+    cortex serve --engine mock    the server on the scripted engine: /health, /v1/models and a chat answer
+    cortex install               must refuse (no installer in the archive) with exit 5, not fetch anything
 
 The script is one foreground run: the mock server it starts is a child that is stopped (whole tree) before it exits.
 """
@@ -82,7 +82,7 @@ def clean_env(sandbox: Path) -> tuple[dict, list[str]]:
 
 
 def launcher(root: Path) -> list[str]:
-    return [str(root / "bin" / "strata.cmd")] if os.name == "nt" else [str(root / "bin" / "strata")]
+    return [str(root / "bin" / "cortex.cmd")] if os.name == "nt" else [str(root / "bin" / "cortex")]
 
 
 def as_command(args: list[str]):
@@ -135,7 +135,7 @@ def main() -> int:
     ap.add_argument("--keep", action="store_true", help="keep the extracted folder")
     a = ap.parse_args()
     archive = Path(a.archive).resolve()
-    sandbox = Path(tempfile.mkdtemp(prefix="strata smoke "))
+    sandbox = Path(tempfile.mkdtemp(prefix="cortex smoke "))
     results: dict = {"archive": archive.name, "sandbox_has_space": " " in str(sandbox), "checks": {}}
     ok = True
     proc = None
@@ -143,7 +143,7 @@ def main() -> int:
         root = extract(archive, sandbox / "extract")
         env, _ = clean_env(sandbox)
         results["root"] = str(root)
-        strata = launcher(root)
+        cortex = launcher(root)
 
         # no other Python can be found from this environment
         if os.name == "nt":
@@ -166,25 +166,25 @@ def main() -> int:
             ok &= bool(cond)
             print(("PASS " if cond else "FAIL ") + name)
 
-        r = run([*strata, "--version"], env, root)
+        r = run([*cortex, "--version"], env, root)
         inside = inside_archive(root, r["stdout"])
-        check("version", r["rc"] == 0 and r["stdout"].startswith("strata ") and inside,
+        check("version", r["rc"] == 0 and r["stdout"].startswith("cortex ") and inside,
               rc=r["rc"], output=r["stdout"].strip(), interpreter_inside_archive=inside)
 
         if os.name == "nt":
             ps = Path(env["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
-            r = run([str(ps), "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(root / "bin" / "strata.ps1"),
+            r = run([str(ps), "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(root / "bin" / "cortex.ps1"),
                      "--version"], env, root)
-            check("version (strata.ps1)", r["rc"] == 0 and inside_archive(root, r["stdout"]),
+            check("version (cortex.ps1)", r["rc"] == 0 and inside_archive(root, r["stdout"]),
                   rc=r["rc"], output=r["stdout"].strip(), stderr=r["stderr"].strip()[:200])
 
-        r = run([*strata, "doctor"], env, root)
+        r = run([*cortex, "doctor"], env, root)
         check("doctor", r["rc"] == 0, rc=r["rc"], output=r["stdout"].strip()[:600])
 
-        r = run([*strata, "profile", "list"], env, root)
+        r = run([*cortex, "profile", "list"], env, root)
         check("profile list", r["rc"] == 0, rc=r["rc"], output=r["stdout"].strip()[:300])
 
-        r = run([*strata, "install"], env, root)
+        r = run([*cortex, "install"], env, root)
         check("install refuses without an installer", r["rc"] == 5 and "no installer" in r["stderr"],
               rc=r["rc"], stderr=r["stderr"].strip()[:300])
 
@@ -193,13 +193,13 @@ def main() -> int:
         cfg_dir.mkdir()
         (cfg_dir / "engine.exe").write_bytes(b"not an engine")
         (cfg_dir / "tokenizer.json").write_text("{}", encoding="utf-8")
-        cfg = cfg_dir / "strata-mock.json"
+        cfg = cfg_dir / "cortex-mock.json"
         cfg.write_text(json.dumps({"exe": str(cfg_dir / "engine.exe"), "tokenizer": str(cfg_dir / "tokenizer.json"),
                                    "args": [], "model_name": "mock"}), encoding="utf-8")
         port = free_port()
         log = sandbox / "serve.log"
         with log.open("wb") as lf:
-            proc = subprocess.Popen(as_command([*strata, "serve", "--profile", str(cfg), "--engine", "mock",
+            proc = subprocess.Popen(as_command([*cortex, "serve", "--profile", str(cfg), "--engine", "mock",
                                                 "--port", str(port), "--host", "127.0.0.1"]),
                                     env=env, cwd=str(root), stdout=lf, stderr=subprocess.STDOUT,
                                     stdin=subprocess.DEVNULL)

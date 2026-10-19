@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Collect the shared libraries an engine binary needs into one folder, ready for packaging/package_engine.py (Linux).
 
-    python packaging/collect_libs.py --binary build/strata --search /usr/local/cuda/lib64 --out stage/ \
+    python packaging/collect_libs.py --binary build/cortex --search /usr/local/cuda/lib64 --out stage/ \
         [--also 'libcublasLt.so*'] [--data /opt/rocm/lib/rocblas/library=rocblas/library --data-glob '*gfx1201*']
 
 What it does: runs `ldd` on the binary with LD_LIBRARY_PATH set to --search, copies every dependency that is NOT

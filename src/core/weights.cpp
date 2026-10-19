@@ -1,10 +1,10 @@
 // src/core/weights.cpp - the dense-weight loader.  See the header for the engine-vs-pack distinction.
-#include "strata/core/weights.hpp"
+#include "cortex/core/weights.hpp"
 #include <vector>
 #include <cmath>
 
-#include "strata/kernels/f16_bits.hpp"
-#include "strata/platform/memory.hpp"
+#include "cortex/kernels/f16_bits.hpp"
+#include "cortex/platform/memory.hpp"
 
 #include <cinttypes>
 #include <cuda_runtime.h>
@@ -21,7 +21,7 @@
 #include <unistd.h>
 #endif
 
-namespace strata::core {
+namespace cortex::core {
 namespace {
 
 constexpr uint64_t CHUNK = 8ull << 20;   // 8 MiB of SOURCE per staging round
@@ -316,7 +316,7 @@ bool WeightTable::load(const std::string& pack_dir, void* arena_base, uint64_t a
             // ask for this file's remaining rows up front so their reads overlap
             for (size_t j = row_i; j < rows.size(); ++j)
                 if (rows[j].file == r.file && !skipped[j])
-                    strata::platform::advise_willneed(fileno(cur), rows[j].src_off, rows[j].src_bytes);
+                    cortex::platform::advise_willneed(fileno(cur), rows[j].src_off, rows[j].src_bytes);
 #endif
         }
 
@@ -434,7 +434,7 @@ bool WeightTable::load(const std::string& pack_dir, void* arena_base, uint64_t a
                         for (uint64_t i = 0; i < elems; ++i) {
                             float v;
                             std::memcpy(&v, src + i * 4, 4);
-                            const uint16_t h = strata::kernels::f16_from_f32(v);
+                            const uint16_t h = cortex::kernels::f16_from_f32(v);
                             std::memcpy(o + i * 2, &h, 2);
                         }
                         host_src = stage_out;
@@ -451,7 +451,7 @@ bool WeightTable::load(const std::string& pack_dir, void* arena_base, uint64_t a
                         for (uint64_t i = 0; i < elems; ++i) {
                             uint16_t h;
                             std::memcpy(&h, src + i * 2, 2);
-                            o[i] = strata::kernels::f32_from_f16(h);
+                            o[i] = cortex::kernels::f32_from_f16(h);
                         }
                         host_src = stage_out;
                         out_at = s.dst_off + done * 2;
@@ -532,7 +532,7 @@ bool WeightTable::load_hc_q8(const std::string& pack_dir, uint64_t& bytes, std::
         // the pack holds BF16 either promoted to f32 (4 B/elem) or as it is in the GGUF (a native pack, 2 B/elem)
         if (w.kind != WeightKind::Bf16InF32 || w.ne0 % 32 != 0 ||
             (w.src_bytes != (uint64_t) w.elements * 4 && w.src_bytes != (uint64_t) w.elements * 2)) {
-            err = "STRATA_HC_REQ8: " + name + " is not a BF16 tensor of whole 32-value blocks";
+            err = "CORTEX_HC_REQ8: " + name + " is not a BF16 tensor of whole 32-value blocks";
             return false;
         }
         todo.push_back(&w);
@@ -542,7 +542,7 @@ bool WeightTable::load_hc_q8(const std::string& pack_dir, uint64_t& bytes, std::
     uint64_t total = 0;
     for (const WeightRef* w : todo) total += al((uint64_t) w->elements) + al((uint64_t) w->elements / 32 * 4);
     uint8_t* dev = nullptr;
-    if (cudaMalloc((void**) &dev, total) != cudaSuccess) { err = "STRATA_HC_REQ8: cudaMalloc failed"; return false; }
+    if (cudaMalloc((void**) &dev, total) != cudaSuccess) { err = "CORTEX_HC_REQ8: cudaMalloc failed"; return false; }
     std::vector<float> src;
     std::vector<int8_t> q;
     std::vector<float> sc;
@@ -551,7 +551,7 @@ bool WeightTable::load_hc_q8(const std::string& pack_dir, uint64_t& bytes, std::
         const char* fn = file_name(w->file_id);
         const std::string path = pack_dir + "/" + (fn ? fn : "?");
         std::FILE* f = std::fopen(path.c_str(), "rb");
-        if (!f) { err = "STRATA_HC_REQ8: cannot open " + path; return false; }
+        if (!f) { err = "CORTEX_HC_REQ8: cannot open " + path; return false; }
         src.resize((size_t) w->elements);
         const bool raw16 = w->src_bytes == (uint64_t) w->elements * 2;
 #if defined(_WIN32)
@@ -570,7 +570,7 @@ bool WeightTable::load_hc_q8(const std::string& pack_dir, uint64_t& bytes, std::
             ok = std::fread(src.data(), 4, src.size(), f) == src.size();
         }
         std::fclose(f);
-        if (!ok) { err = "STRATA_HC_REQ8: cannot read the source bytes"; return false; }
+        if (!ok) { err = "CORTEX_HC_REQ8: cannot read the source bytes"; return false; }
         const size_t nb = src.size() / 32;
         q.resize(src.size());
         sc.resize(nb);
@@ -587,7 +587,7 @@ bool WeightTable::load_hc_q8(const std::string& pack_dir, uint64_t& bytes, std::
         at += al(sc.size() * 4);
         if (cudaMemcpy(codes, q.data(), q.size(), cudaMemcpyHostToDevice) != cudaSuccess ||
             cudaMemcpy(scales, sc.data(), sc.size() * 4, cudaMemcpyHostToDevice) != cudaSuccess) {
-            err = "STRATA_HC_REQ8: upload failed";
+            err = "CORTEX_HC_REQ8: upload failed";
             return false;
         }
         w->data = codes;
@@ -599,4 +599,4 @@ bool WeightTable::load_hc_q8(const std::string& pack_dir, uint64_t& bytes, std::
     return true;
 }
 
-}  // namespace strata::core
+}  // namespace cortex::core

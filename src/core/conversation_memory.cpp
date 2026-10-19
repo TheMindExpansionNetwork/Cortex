@@ -1,4 +1,4 @@
-#include "strata/core/conversation_memory.hpp"
+#include "cortex/core/conversation_memory.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -19,7 +19,7 @@
 #include <windows.h>
 #endif
 
-namespace strata::core {
+namespace cortex::core {
 
 namespace fs = std::filesystem;
 
@@ -270,7 +270,7 @@ std::optional<HostMemoryReading> sample_host_memory(const MemoryProbePaths& path
         if (explicit_limit != 0) return {};
         static std::atomic<bool> warned{false};
         if (!warned.exchange(true))
-            std::fprintf(stderr, "[strata] memory guard: the cgroup memory files could not be read or parsed, using "
+            std::fprintf(stderr, "[cortex] memory guard: the cgroup memory files could not be read or parsed, using "
                                  "MemAvailable; set --memory-limit-mib to the container's limit\n");
         cg = CgroupScan{};
     }
@@ -297,4 +297,4 @@ std::optional<uint64_t> available_host_bytes() {
     return reading->available;
 }
 
-} // namespace strata::core
+} // namespace cortex::core

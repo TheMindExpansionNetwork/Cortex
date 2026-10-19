@@ -17,7 +17,7 @@ import tracemalloc
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from strata_cli.client import Endpoint
+from cortex_cli.client import Endpoint
 
 
 class SyntheticTelemetry:
@@ -118,7 +118,7 @@ def handler_for(service: SyntheticTelemetry):
 
 async def soak(seconds: float, interval: float, *, exercise_ui: bool = False) -> dict:
     try:
-        from strata_cli.monitor import MonitorApp
+        from cortex_cli.monitor import MonitorApp
     except ImportError as exc:
         raise RuntimeError("the optional Textual monitor dependency is required") from exc
     service = SyntheticTelemetry(exercise_ui=exercise_ui)
@@ -281,7 +281,7 @@ async def soak(seconds: float, interval: float, *, exercise_ui: bool = False) ->
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Headless synthetic Strata Monitor soak")
+    parser = argparse.ArgumentParser(description="Headless synthetic Cortex Monitor soak")
     parser.add_argument("--seconds", type=float, default=1800)
     parser.add_argument("--interval", type=float, default=0.5)
     parser.add_argument("--exercise-ui", action="store_true",

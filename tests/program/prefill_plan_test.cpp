@@ -3,9 +3,9 @@
 #include <cstdlib>
 #include <vector>
 
-#include "strata/program/prefill_plan.hpp"
+#include "cortex/program/prefill_plan.hpp"
 
-using namespace strata::program::prefill_plan;
+using namespace cortex::program::prefill_plan;
 
 static int failed = 0;
 #define CHECK(x) do { if (!(x)) { std::fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x); ++failed; } } while (0)

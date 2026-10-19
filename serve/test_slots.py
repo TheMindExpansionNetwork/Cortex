@@ -19,14 +19,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from serve.frontend import ChatTemplate  # noqa: E402
-from serve.server import (ByteTokenizer, Service, StrataEngine, serve, slot_filename_problem,  # noqa: E402
+from serve.server import (ByteTokenizer, Service, CortexEngine, serve, slot_filename_problem,  # noqa: E402
                           slot_save_dir)
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class FakeProc:
-    """Stands in for the engine process: answers SAVE / RESTORE lines like `strata --serve` does."""
+    """Stands in for the engine process: answers SAVE / RESTORE lines like `cortex --serve` does."""
 
     def __init__(self, engine):
         self.engine = engine
@@ -80,9 +80,9 @@ class FakeProc:
         return -9
 
 
-class FakeEngine(StrataEngine):
+class FakeEngine(CortexEngine):
     def __init__(self):
-        super().__init__("strata", ["--max-context", "65536"], lazy=True)
+        super().__init__("cortex", ["--max-context", "65536"], lazy=True)
         self.max_context = 65536
         self.unloaded, self.ended = False, False
         self.lines = queue.Queue()

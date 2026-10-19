@@ -7,8 +7,8 @@
     python apps/desktop/scripts/stage-control.py --check               # verify what is staged
 
 What lands in `control/`: the pinned CPython 3.12.15 (python-build-standalone, digest-checked), the hash-locked wheels
-(`packaging/locks/runtime-<target>-cp312.txt`, installed with --require-hashes at build time), strata_control,
-strata_cli, serve, tools/strata_tokenizer.py + gguf_reader.py, and BUNDLE.json (version, interpreter and lock digests,
+(`packaging/locks/runtime-<target>-cp312.txt`, installed with --require-hashes at build time), cortex_control,
+cortex_cli, serve, tools/cortex_tokenizer.py + gguf_reader.py, and BUNDLE.json (version, interpreter and lock digests,
 the digest of the archive it came from). It is the same bundle as the Terminal archive (packaging/package_terminal.py):
 one Python runtime-core for both products. The app then never runs pip, npm, git or a compiler to start or serve.
 
@@ -48,14 +48,14 @@ def build_archive(work: Path, wheelhouse: str | None) -> Path:
     if wheelhouse:
         command += ["--wheelhouse", wheelhouse]
     subprocess.run(command, check=True, cwd=str(ROOT))
-    archives = sorted(work.glob("strata-terminal-*.zip")) + sorted(work.glob("strata-terminal-*.tar.gz"))
+    archives = sorted(work.glob("cortex-terminal-*.zip")) + sorted(work.glob("cortex-terminal-*.tar.gz"))
     if len(archives) != 1:
         raise SystemExit(f"expected one archive in {work}, found {archives}")
     return archives[0]
 
 
 def extract(archive: Path, destination: Path) -> Path:
-    """Unpack the archive; returns the folder that holds python/ and strata.py."""
+    """Unpack the archive; returns the folder that holds python/ and cortex.py."""
     scratch = destination.parent / (destination.name + ".incoming")
     shutil.rmtree(scratch, ignore_errors=True)
     scratch.mkdir(parents=True)
@@ -74,7 +74,7 @@ def extract(archive: Path, destination: Path) -> Path:
 
 
 #: What the app's installer needs on top of the Terminal bundle: the model catalog, GPU probe and install job. The list and the copy
-#: live in packaging/package_terminal.py (the Terminal archive carries the same files, for `strata launch`).
+#: live in packaging/package_terminal.py (the Terminal archive carries the same files, for `cortex launch`).
 INSTALLER_FILES, INSTALLER_TOOLS, INSTALLER_DATA = pt.INSTALLER_FILES, pt.INSTALLER_TOOLS, pt.INSTALLER_DATA
 local_imports = pt.local_imports
 
@@ -90,7 +90,7 @@ def add_installer(folder: Path) -> dict:
 #: `dirname` can fail to start (Ubuntu 26.04's coreutils: "libsystemd.so.0: version LIBSYSTEMD_254 not found"), so it uses shell built-ins
 #: only. The first version called `dirname`; that left the folder empty and "Control stopped" on such a computer.
 LAUNCHER = """#!/bin/sh
-# Strata: this name only starts the real interpreter beside it (the bundle keeps one copy, not one per name). Built-ins only: no dirname.
+# Cortex: this name only starts the real interpreter beside it (the bundle keeps one copy, not one per name). Built-ins only: no dirname.
 case "$0" in */*) dir=${0%%/*} ;; *) dir=. ;; esac
 here=$(cd "$dir" && pwd)
 exec "$here/%s" "$@"
@@ -128,7 +128,7 @@ def write_bundle_record(folder: Path, archive: Path) -> dict:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
     target = manifest.get("target") or pt.host_target()
     record = {
-        "schema_version": 1, "component": "strata-control",
+        "schema_version": 1, "component": "cortex-control",
         "version": (folder / "VERSION").read_text(encoding="utf-8").strip(),
         "target": target,
         "python": {"version": pt.PYTHON_VERSION, "build": pt.PBS_RELEASE, "sha256": pt.PYTHON_PINS[target]["sha256"]},
@@ -146,24 +146,24 @@ def check(folder: Path) -> int:
     target = pt.host_target()
     python = folder / pt.PYTHON_PINS[target]["python"]
     problems = []
-    for need in (python, folder / "strata.py", folder / "strata_control", folder / "serve" / "server.py", folder / "BUNDLE.json",
-                 folder / "setup.py", folder / "tools" / "strata_mcp.py", folder / "tools" / "iq_pack.py", folder / "data" / "draft_vocab.bin"):
+    for need in (python, folder / "cortex.py", folder / "cortex_control", folder / "serve" / "server.py", folder / "BUNDLE.json",
+                 folder / "setup.py", folder / "tools" / "cortex_mcp.py", folder / "tools" / "iq_pack.py", folder / "data" / "draft_vocab.bin"):
         if not need.exists():
             problems.append(f"missing {need}")
     if problems:
         print("\n".join(problems), file=sys.stderr)
         return 1
-    env = {"PYTHONNOUSERSITE": "1", "PYTHONDONTWRITEBYTECODE": "1", "STRATA_NO_ACQUIRE": "1", "SYSTEMROOT": __import__("os").environ.get("SYSTEMROOT", "")}
-    done = subprocess.run([str(python), str(folder / "strata.py"), "--version"], capture_output=True, text=True, env=env,
+    env = {"PYTHONNOUSERSITE": "1", "PYTHONDONTWRITEBYTECODE": "1", "CORTEX_NO_ACQUIRE": "1", "SYSTEMROOT": __import__("os").environ.get("SYSTEMROOT", "")}
+    done = subprocess.run([str(python), str(folder / "cortex.py"), "--version"], capture_output=True, text=True, env=env,
                           cwd=str(folder), timeout=60)
     print(done.stdout.strip() or done.stderr.strip())
     if done.returncode:
         return done.returncode
     # the installer: its catalog, a GPU probe and its imports work on the bundled Python alone (nothing is installed or fetched)
     probe = ("import sys; sys.path.insert(0, %r); import importlib.util as u; s = u.spec_from_file_location('s', %r); m = u.module_from_spec(s); "
-             "s.loader.exec_module(m); import iq_pack, strata_pack, pack_index, mtp_fetch; "
+             "s.loader.exec_module(m); import iq_pack, cortex_pack, pack_index, mtp_fetch; "
              "print('installer ok: %%d models, %%d families' %% (len(m.MODELS), len(m.FAMILIES)))") % (str(folder / "tools"), str(folder / "setup.py"))
-    env["STRATA_CONTROL_INSTALL"] = "1"
+    env["CORTEX_CONTROL_INSTALL"] = "1"
     again = subprocess.run([str(python), "-c", probe], capture_output=True, text=True, env=env, cwd=str(folder), timeout=120)
     print(again.stdout.strip() or again.stderr.strip()[-600:])
     return again.returncode
@@ -178,7 +178,7 @@ def main() -> int:
     a = ap.parse_args()
     if a.check:
         return check(a.out)
-    with tempfile.TemporaryDirectory(prefix="strata-stage-control-") as work:
+    with tempfile.TemporaryDirectory(prefix="cortex-stage-control-") as work:
         archive = a.archive.resolve() if a.archive else build_archive(Path(work), a.wheelhouse)
         keep = [p for p in a.out.iterdir() if p.name == ".gitignore"] if a.out.exists() else []
         if a.out.exists():

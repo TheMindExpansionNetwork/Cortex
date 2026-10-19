@@ -5,9 +5,9 @@ on:
     paths:
       - .github/workflows/terminal-portable-monitor.yml
       - packaging/monitor_bundle.py
-      - strata.py
-      - strata_cli/**
-      - strata_control/**
+      - cortex.py
+      - cortex_cli/**
+      - cortex_control/**
       - tools/minimal_cli_smoke.py
       - tools/portable_monitor_smoke.py
       - tools/portable_monitor_pty_smoke.py
@@ -17,9 +17,9 @@ on:
     paths:
       - .github/workflows/terminal-portable-monitor.yml
       - packaging/monitor_bundle.py
-      - strata.py
-      - strata_cli/**
-      - strata_control/**
+      - cortex.py
+      - cortex_cli/**
+      - cortex_control/**
       - tools/minimal_cli_smoke.py
       - tools/portable_monitor_smoke.py
       - tools/portable_monitor_pty_smoke.py
@@ -69,7 +69,7 @@ jobs:
           import sys
           from pathlib import Path
 
-          bundle = Path(os.environ['RUNNER_TEMP']) / 'strata-monitor.pyz'
+          bundle = Path(os.environ['RUNNER_TEMP']) / 'cortex-monitor.pyz'
           report = bundle.with_name('monitor-stdlib-smoke.json')
           subprocess.run([sys.executable, 'packaging/monitor_bundle.py',
                           'build', str(bundle)], check=True)
@@ -90,7 +90,7 @@ jobs:
           import sys
           from pathlib import Path
 
-          bundle = Path(os.environ['RUNNER_TEMP']) / 'strata-monitor.pyz'
+          bundle = Path(os.environ['RUNNER_TEMP']) / 'cortex-monitor.pyz'
           report = bundle.with_name('monitor-interactive-smoke.json')
           subprocess.run([sys.executable, 'tools/portable_monitor_smoke.py',
                           '--bundle', str(bundle), '--interactive',
@@ -107,7 +107,7 @@ jobs:
           import sys
           from pathlib import Path
 
-          bundle = Path(os.environ['RUNNER_TEMP']) / 'strata-monitor.pyz'
+          bundle = Path(os.environ['RUNNER_TEMP']) / 'cortex-monitor.pyz'
           report = bundle.with_name('monitor-pty-smoke.json')
           subprocess.run([sys.executable, 'tools/portable_monitor_pty_smoke.py',
                           '--bundle', str(bundle), '--report', str(report)], check=True)

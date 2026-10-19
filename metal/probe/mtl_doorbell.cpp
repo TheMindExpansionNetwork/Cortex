@@ -1,4 +1,4 @@
-// mtl_doorbell.cpp - can Strata's doorbell protocol run on Metal?
+// mtl_doorbell.cpp - can Cortex's doorbell protocol run on Metal?
 //  A. in-kernel spin: a running kernel polls a shared-memory word that the CPU writes later (the CUDA doorbell model)
 //  B. MTLSharedEvent ping-pong: the GPU signals "routing ready" (value 2l+1), the host sees it, does its part, sets
 //     2l+2 from the CPU, and the GPU (encodeWait inside the same, already committed command buffer) goes on.

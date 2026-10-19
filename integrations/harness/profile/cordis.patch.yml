@@ -1,9 +1,9 @@
-# The Strata profile: DeepSeek Harness as the agent backend for a *local* model.
+# The Cortex profile: DeepSeek Harness as the agent backend for a *local* model.
 #
 # This is a patch layer over the shipped base + web-app bundles (see package.json). It does two
 # things and nothing else:
 #
-#   1. points the agent's model at `strata-local`, the Strata API worker on loopback;
+#   1. points the agent's model at `cortex-local`, the Cortex API worker on loopback;
 #   2. declares that route to the pi-ai adapter as an ordinary OpenAI-completions endpoint with
 #      explicit capabilities.
 #
@@ -13,7 +13,7 @@
 - id: agent-default-model
   name: "@deepseek-ai/dsh-agent-default-model"
   config:
-    provider: strata-local
+    provider: cortex-local
     model: qwen3.8-flash-next
 
 - id: llm-pi-ai
@@ -24,14 +24,14 @@
   # `no adapter registered for provider "<route>"`.
   config:
     providers:
-      strata-local:
-        displayName: Strata (local)
+      cortex-local:
+        displayName: Cortex (local)
         # An OpenAI-compatible dialect. `supportedProtocols()` in llm-pi-ai is
-        # openai-completions | openai-responses | anthropic-messages; the Strata worker implements
+        # openai-completions | openai-responses | anthropic-messages; the Cortex worker implements
         # the documented subsets of all three, and chat completions is the one exercised here.
         api: openai-completions
         baseURL: http://127.0.0.1:8095/v1
-        # The Strata worker does not require a key on loopback, but pi-ai's OpenAI-compatible
+        # The Cortex worker does not require a key on loopback, but pi-ai's OpenAI-compatible
         # client insists on one before it will send a request at all. Two things were tried and
         # both fail before reaching the worker, which is worth recording:
         #   * `apiKeyEnv: <NAME>` with the variable unset -> `no credential for provider route`
@@ -40,7 +40,7 @@
         # one, and is scoped to loopback by baseURL. If the worker is started with `--api-key`,
         # this must become an `apiKeyEnv` credential reference instead.
         headers:
-          Authorization: "Bearer strata-local"
+          Authorization: "Bearer cortex-local"
         compat:
           # The worker's Chat Completions implementation is plain OpenAI; disable the provider
           # conveniences pi-ai would otherwise assume.

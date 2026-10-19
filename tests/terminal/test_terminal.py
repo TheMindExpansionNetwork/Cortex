@@ -12,10 +12,10 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from strata_cli.cli import main
-from strata_cli.client import (ClientError, Endpoint, normalize_legacy, normalize_status_only,
+from cortex_cli.cli import main
+from cortex_cli.client import (ClientError, Endpoint, normalize_legacy, normalize_status_only,
                                sanitize_telemetry, server_url)
-from strata_cli.render import display_width, field, render_view, safe
+from cortex_cli.render import display_width, field, render_view, safe
 from serve.server import (configure_batch_telemetry_env, parse_batch_window_sample,
                           parse_stage_in_flight_sample, parse_engine_stage_line,
                           read_engine_stage_log, visible_device_order)
@@ -36,7 +36,7 @@ def four_gpu_snapshot():
         "requests": [{"finish": "stop", "prompt_tokens": 100, "output_tokens": 20}],
         "totals": {"requests": 1, "output_tokens": 20},
     }
-    status = {"service": "strata", "model": "test-model", "loaded": True,
+    status = {"service": "cortex", "model": "test-model", "loaded": True,
               "concurrency": {"serving": 8}, "started": 1_789_999_000}
     return normalize_legacy(metrics, status)
 
@@ -60,7 +60,7 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(clean["work"]["requests"][0]["replica"], 1)
         self.assertEqual(clean["topology"]["replica_devices"][1]["devices"], [2, 3])
         from rich.console import Console
-        from strata_cli.dashboard import MonitorHistory, render_dashboard
+        from cortex_cli.dashboard import MonitorHistory, render_dashboard
         output = io.StringIO()
         Console(file=output, width=110, color_system=None).print(render_dashboard(
             clean, width=108, height=28, history=MonitorHistory(), color=False))
@@ -187,15 +187,15 @@ class ContractTests(unittest.TestCase):
                     self.assertTrue(all(display_width(line) <= width for line in view.splitlines()), name)
 
     def test_batch_telemetry_opt_in_and_explicit_disable_are_reversible(self):
-        env = {"STRATA_BATCH_TELEMETRY": "1"}
+        env = {"CORTEX_BATCH_TELEMETRY": "1"}
         configure_batch_telemetry_env(env, {}, None)
-        self.assertEqual(env["STRATA_BATCH_TELEMETRY"], "1")
+        self.assertEqual(env["CORTEX_BATCH_TELEMETRY"], "1")
         configure_batch_telemetry_env(env, {"batch_telemetry": False}, None)
-        self.assertNotIn("STRATA_BATCH_TELEMETRY", env)
+        self.assertNotIn("CORTEX_BATCH_TELEMETRY", env)
         configure_batch_telemetry_env(env, {"batch_telemetry": False}, True)
-        self.assertEqual(env["STRATA_BATCH_TELEMETRY"], "1")
+        self.assertEqual(env["CORTEX_BATCH_TELEMETRY"], "1")
         configure_batch_telemetry_env(env, {"batch_telemetry": True}, False)
-        self.assertNotIn("STRATA_BATCH_TELEMETRY", env)
+        self.assertNotIn("CORTEX_BATCH_TELEMETRY", env)
 
     def test_batch_window_sample_distinguishes_processed_rows_from_active_slots(self):
         self.assertEqual(parse_batch_window_sample("BSTAT 3 18 9 1000\n"),
@@ -240,7 +240,7 @@ class ContractTests(unittest.TestCase):
         self.assertIn("80/70/60/50%", render_view(clean, "engine", 40, 12))
         self.assertIn("GPU kernel occupancy unavailable", render_view(clean, "engine", 80, 24))
         from rich.console import Console
-        from strata_cli.dashboard import MonitorHistory, render_dashboard
+        from cortex_cli.dashboard import MonitorHistory, render_dashboard
         old_stage = copy.deepcopy(clean)
         old_stage["work"]["stage_sample_age_s"] = 5.1
         output = io.StringIO()
@@ -266,7 +266,7 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(rejected["quality"]["stage_in_flight"], "unavailable")
 
     def test_engine_stage_log_is_bounded_and_reports_only_valid_final_ranges(self):
-        line = ("strata serve: layer split: layers 0-11 (CUDA0), 12-23 (CUDA1), "
+        line = ("cortex serve: layer split: layers 0-11 (CUDA0), 12-23 (CUDA1), "
                 "24-35 (CUDA2), 36-47 (CUDA3), one hand-off per window")
         self.assertEqual([row["layer_start"] for row in parse_engine_stage_line(line)], [0, 12, 24, 36])
         for bad in (line.replace("12-23", "13-23"), line.replace("CUDA3", "CUDA99"),
@@ -409,7 +409,7 @@ class ContractTests(unittest.TestCase):
             self.assertIn("read 250 new", shown)
             self.assertLessEqual(len(shown.splitlines()), height)
             self.assertTrue(all(len(line) <= width for line in shown.splitlines()))
-        with mock.patch("strata_cli.render.time.time", return_value=1_800_000_000.0):
+        with mock.patch("cortex_cli.render.time.time", return_value=1_800_000_000.0):
             shown = render_view(s, "serving", 80, 24, serving_pane="requests")
         self.assertIn("wait 5.0 s", shown)
         self.assertIn("wait 1.0 s", shown)
@@ -448,7 +448,7 @@ class ContractTests(unittest.TestCase):
             self.assertLessEqual(len(output.splitlines()), height)
             self.assertTrue(all(len(line) <= width for line in output.splitlines()))
             if (width, height) == (40, 12):
-                self.assertEqual(output.count("More: strata status --json"), 1)
+                self.assertEqual(output.count("More: cortex status --json"), 1)
 
     def test_recent_request_detail_scrolls_and_wide_serving_tabs_select_panes(self):
         s = four_gpu_snapshot()
@@ -592,7 +592,7 @@ class ContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             profile = Path(directory) / "model.json"
             profile.write_text('{"host":"0.0.0.0","args":[]}', encoding="utf-8")
-            with mock.patch.dict(os.environ, {"STRATA_API_KEY": ""}), redirect_stdout(io.StringIO()):
+            with mock.patch.dict(os.environ, {"CORTEX_API_KEY": ""}), redirect_stdout(io.StringIO()):
                 self.assertEqual(main(["serve", "--profile", str(profile)]), 2)
 
     def test_direct_server_rejects_remote_bind_before_engine_load(self):
@@ -601,8 +601,8 @@ class ContractTests(unittest.TestCase):
             profile = Path(directory) / "model.json"
             profile.write_text('{"args":[]}', encoding="utf-8")
             with mock.patch.dict(os.environ, {}, clear=True), \
-                    mock.patch.object(server, "StrataEngine", side_effect=AssertionError("engine started")):
-                self.assertEqual(server.main(["--engine", "strata", "--config", str(profile),
+                    mock.patch.object(server, "CortexEngine", side_effect=AssertionError("engine started")):
+                self.assertEqual(server.main(["--engine", "cortex", "--config", str(profile),
                                               "--host", "0.0.0.0", "--port", "0"]), 2)
 
     def test_code_run_uses_missing_component_exit_until_shared_harness_arrives(self):
@@ -615,7 +615,7 @@ class ContractTests(unittest.TestCase):
 
 
 try:
-    from strata_cli.monitor import MonitorApp, with_aggregate_rate
+    from cortex_cli.monitor import MonitorApp, with_aggregate_rate
 except ImportError:
     MonitorApp = None
 
@@ -709,7 +709,7 @@ class HeadlessMonitorTests(unittest.TestCase):
 
     def test_overview_uses_selected_cards_and_marks_missing_sensors(self):
         from rich.console import Console
-        from strata_cli.dashboard import MonitorHistory, render_dashboard
+        from cortex_cli.dashboard import MonitorHistory, render_dashboard
 
         sample = four_gpu_snapshot()
         sample["sampled_at"] = time.time()
@@ -756,7 +756,7 @@ class HeadlessMonitorTests(unittest.TestCase):
         self.assertRegex(output.getvalue(), r"GPU 0[^\n]*--/--G[^\n]*--\s+--")
 
     def test_monitor_history_bounds_device_indices_across_snapshots(self):
-        from strata_cli.dashboard import MonitorHistory, _output_trend
+        from cortex_cli.dashboard import MonitorHistory, _output_trend
 
         history = MonitorHistory()
         for start in (0, 16, 32):
@@ -774,7 +774,7 @@ class HeadlessMonitorTests(unittest.TestCase):
 
     def test_vram_history_is_per_card_and_missing_values_are_not_zero(self):
         from rich.console import Console
-        from strata_cli.dashboard import MonitorHistory, render_dashboard
+        from cortex_cli.dashboard import MonitorHistory, render_dashboard
 
         sample = four_gpu_snapshot()
         sample["sampled_at"] = time.time()
@@ -812,7 +812,7 @@ class HeadlessMonitorTests(unittest.TestCase):
 
     def test_overview_output_trend_is_bounded_and_resets_with_instance(self):
         from rich.console import Console
-        from strata_cli.dashboard import MonitorHistory, _output_trend, render_dashboard
+        from cortex_cli.dashboard import MonitorHistory, _output_trend, render_dashboard
 
         sample = four_gpu_snapshot()
         sample["sampled_at"] = time.time()
@@ -848,7 +848,7 @@ class HeadlessMonitorTests(unittest.TestCase):
 
     def test_batch_and_queue_histories_keep_replica_windows_separate(self):
         from rich.console import Console
-        from strata_cli.dashboard import MonitorHistory, render_dashboard
+        from cortex_cli.dashboard import MonitorHistory, render_dashboard
 
         sample = four_gpu_snapshot()
         sample["sampled_at"] = time.time()
@@ -931,7 +931,7 @@ class HeadlessMonitorTests(unittest.TestCase):
 
     def test_overview_slot_phases_require_complete_slot_report(self):
         from rich.console import Console
-        from strata_cli.dashboard import MonitorHistory, render_dashboard
+        from cortex_cli.dashboard import MonitorHistory, render_dashboard
 
         sample = four_gpu_snapshot()
         sample["sampled_at"] = time.time()
@@ -989,7 +989,7 @@ class HeadlessMonitorTests(unittest.TestCase):
 
     def test_connection_panel_hides_cached_work_until_recovery(self):
         from rich.console import Console
-        from strata_cli.dashboard import MonitorHistory, render_dashboard
+        from cortex_cli.dashboard import MonitorHistory, render_dashboard
 
         sample = four_gpu_snapshot()
         sample["sampled_at"] = time.time() - 4
@@ -1033,8 +1033,8 @@ class HeadlessMonitorTests(unittest.TestCase):
 
     def test_overview_dashboard_keeps_parallel_work_and_four_devices_on_one_screen(self):
         from rich.console import Console
-        from strata_cli.dashboard import MonitorHistory, _spark, render_dashboard
-        from strata_cli.monitor import choose_glyphs
+        from cortex_cli.dashboard import MonitorHistory, _spark, render_dashboard
+        from cortex_cli.monitor import choose_glyphs
 
         self.assertEqual(choose_glyphs("auto", "utf-8", "xterm-256color"), "unicode")
         self.assertEqual(choose_glyphs("auto", "ascii", "xterm-256color"), "ascii")
@@ -1114,7 +1114,7 @@ class HeadlessMonitorTests(unittest.TestCase):
 
     def test_wide_visual_overview_uses_real_rates_slots_and_request_rows(self):
         from rich.console import Console
-        from strata_cli.dashboard import MonitorHistory, render_dashboard
+        from cortex_cli.dashboard import MonitorHistory, render_dashboard
 
         sample = four_gpu_snapshot()
         sample["sampled_at"] = time.time()
@@ -1171,7 +1171,7 @@ class HeadlessMonitorTests(unittest.TestCase):
 
     def test_initial_attach_keeps_status_when_telemetry_is_unavailable(self):
         status_only = sanitize_telemetry(normalize_status_only(
-            {"service": "strata", "model": "fixture", "loaded": False,
+            {"service": "cortex", "model": "fixture", "loaded": False,
              "concurrency": {"serving": 4}}))
 
         class Source:
@@ -1584,10 +1584,10 @@ class HeadlessMonitorTests(unittest.TestCase):
                     self.assertEqual(app.selected_identity, identity)
                     self.assertTrue(app.detail)
                     if (width, height) == (40, 12):
-                        self.assertIn("More: strata status --json", content)
+                        self.assertIn("More: cortex status --json", content)
                         self.assertIn("q keeps server on", str(app.query_one("#message").render()))
                     elif (width, height) == (110, 30):
-                        self.assertNotIn("More: strata status --json", content)
+                        self.assertNotIn("More: cortex status --json", content)
                 await pilot.press("q")
         asyncio.run(exercise())
 

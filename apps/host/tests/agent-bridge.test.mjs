@@ -1,7 +1,7 @@
 /**
  * Agent bridge, end to end against the real pinned Harness and a scripted worker.
  *
- * Needs the built Harness: set STRATA_HARNESS_DIR to a checkout built with `pnpm install` and
+ * Needs the built Harness: set CORTEX_HARNESS_DIR to a checkout built with `pnpm install` and
  * `pnpm run build:artifacts`. Without it these tests skip, loudly, rather than pass.
  *
  * The model is scripted (tests/helpers/scripted-worker.mjs). What is real: the Harness process, its
@@ -18,8 +18,8 @@ import { startScriptedWorker } from './helpers/scripted-worker.mjs';
 import { createAgentBridge } from '../server/agent/agent-bridge.mjs';
 import { resolveHarness } from '../server/agent/harness-runtime.mjs';
 
-const HARNESS = process.env.STRATA_HARNESS_DIR;
-const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'STRATA_HARNESS_DIR is not set to a built Harness' : false;
+const HARNESS = process.env.CORTEX_HARNESS_DIR;
+const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'CORTEX_HARNESS_DIR is not set to a built Harness' : false;
 
 function cleanup(dir) {
   // The Harness's Windows sandbox adds access entries under the directories it works in, which can make a
@@ -31,7 +31,7 @@ const lines = file => readFileSync(file, 'utf8').split(/\r?\n/).filter(Boolean).
 
 async function rig(t, { connections = [], dataDir } = {}) {
   const worker = await startScriptedWorker({});
-  const dir = dataDir ?? mkdtempSync(join(tmpdir(), 'strata-agent-'));
+  const dir = dataDir ?? mkdtempSync(join(tmpdir(), 'cortex-agent-'));
   const ws = join(dir, 'ws'); mkdirSync(ws, { recursive: true });
   const local = [{ id: 'inst-1', label: 'Scripted', baseUrl: worker.url, modelId: 'scripted-model', context: 32768 }];
   const bridge = createAgentBridge({ dataDir: dir, localInstances: () => local, connections: () => connections, env: process.env, startTimeoutMs: 90_000 });
@@ -142,7 +142,7 @@ test('A05b Stop while an approval is pending denies it and ends the turn', { ski
 });
 
 test('A06 reopening a chat resumes its Harness session without replaying a tool', { skip }, async t => {
-  const dir = mkdtempSync(join(tmpdir(), 'strata-agent-resume-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-agent-resume-'));
   t.after(() => cleanup(dir));
   const first = await rig(t, { dataDir: dir });
   const turn1 = first.run('chat-a06', 'SCRIPT:tool resume.txt once', { answer: 'approve' });
@@ -197,7 +197,7 @@ test('a second send to a chat that is mid-turn is refused', { skip }, async t =>
 
 test('an API connection becomes a route; its key reaches the model by reference and nowhere else', { skip }, async t => {
   const secret = 'sk-test-SECRET-0123456789abcdef';
-  const dir = mkdtempSync(join(tmpdir(), 'strata-agent-keys-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-agent-keys-'));
   t.after(() => cleanup(dir));
   const apiWorker = await startScriptedWorker({ model: 'cloud-model' });
   t.after(() => apiWorker.close());
@@ -261,7 +261,7 @@ test('a leftover agent from a host that died is stopped at the next start, and a
   const { buildProfile } = await import('../server/agent/profile.mjs');
   const { writeFileSync } = await import('node:fs');
   const { spawn } = await import('node:child_process');
-  const dir = mkdtempSync(join(tmpdir(), 'strata-stale-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-stale-'));
   t.after(() => cleanup(dir));
   const profile = buildProfile({ local: [{ id: 'x', baseUrl: 'http://127.0.0.1:9/v1', modelId: 'm', context: 8192 }] });
   const patchFile = join(dir, 'p.patch.yml'); writeFileSync(patchFile, profile.patch);

@@ -23,8 +23,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from strata_control import tune_api  # noqa: E402
-from strata_control.tune_engine import MeasurementError, process_tree_peak_mib  # noqa: E402
+from cortex_control import tune_api  # noqa: E402
+from cortex_control.tune_engine import MeasurementError, process_tree_peak_mib  # noqa: E402
 
 
 class StreamFixture:

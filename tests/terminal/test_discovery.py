@@ -1,5 +1,5 @@
-"""Tester report 2026-10-18, T03 / T04 / T05: existing models are found the same way by the launch screens, `strata models list`, the
-own-files import and `strata launch` (strata_control/discovery.py), with a mock of the desktop app's folders and a Gyro-S file header
+"""Tester report 2026-10-18, T03 / T04 / T05: existing models are found the same way by the launch screens, `cortex models list`, the
+own-files import and `cortex launch` (cortex_control/discovery.py), with a mock of the desktop app's folders and a Gyro-S file header
 (TQK6 / TQK7 experts, the one-file layout)."""
 
 from __future__ import annotations
@@ -15,10 +15,10 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from strata_cli.launch import modelstate, settings as S
-from strata_cli.launch.catalog import Catalog
-from strata_cli.launch.runner import Runner
-from strata_control import discovery, models
+from cortex_cli.launch import modelstate, settings as S
+from cortex_cli.launch.catalog import Catalog
+from cortex_cli.launch.runner import Runner
+from cortex_control import discovery, models
 from tests.terminal.launch_support import HW_12
 
 GYRO_S = "Qwen3.8-Flash-Next-Gyro-S-TQ1_0.gguf"
@@ -58,7 +58,7 @@ class GuiLayout(unittest.TestCase):
     """The desktop app's folders, as the Windows (and Linux) app lays them out, plus an empty Terminal folder."""
 
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(prefix="strata-discovery-")
+        self.tmp = tempfile.TemporaryDirectory(prefix="cortex-discovery-")
         self.addCleanup(self.tmp.cleanup)
         base = Path(self.tmp.name)
         self.base = base
@@ -68,7 +68,7 @@ class GuiLayout(unittest.TestCase):
         patch = mock.patch.dict(os.environ, self.env)
         patch.start()
         self.addCleanup(patch.stop)
-        for key in ("STRATA_INSTALL_DIR", "STRATA_SETTINGS_FILE", "STRATA_COMPONENTS_DIR", "STRATA_DOCUMENTS_DIR"):
+        for key in ("CORTEX_INSTALL_DIR", "CORTEX_SETTINGS_FILE", "CORTEX_COMPONENTS_DIR", "CORTEX_DOCUMENTS_DIR"):
             patch = mock.patch.dict(os.environ)
             patch.start()
             self.addCleanup(patch.stop)
@@ -80,7 +80,7 @@ class GuiLayout(unittest.TestCase):
         p.start()
         self.addCleanup(p.stop)
         self.install = discovery.app_install_dir()
-        self.docs = base / "home" / "Documents" / "Strata"
+        self.docs = base / "home" / "Documents" / "Cortex"
         gyro = self.docs / "Models" / "gyro-Gyro-S"
         gyro.mkdir(parents=True)
         self.gguf = gyro / GYRO_S
@@ -97,11 +97,11 @@ class GuiLayout(unittest.TestCase):
         engine.write_bytes(b"e")
         tok = self.docs / "packs" / "gyro-gyro-s" / "tokenizer"
         (tok / "vocab.json").write_text("{}")
-        self.cfg = {"exe": "component:strata-engine", "tokenizer": str(tok), "model_name": "qwen3.8-flash-next-gyro-gyro-s",
+        self.cfg = {"exe": "component:cortex-engine", "tokenizer": str(tok), "model_name": "qwen3.8-flash-next-gyro-gyro-s",
                     "args": ["--pack", str(self.docs / "packs" / "gyro-gyro-s"), "--native", str(self.gguf), "--ple-gguf", str(self.gguf),
                              "--mtp", str(self.docs / "mtp" / "rt"), "--max-context", "131072", "--kv", "int8", "--vision"],
                     "vision": {"exe": str(engine), "mmproj": str(self.mmproj), "model": str(self.gguf), "gpu": False}}
-        self.config_path = self.install / "strata-gyro-gyro-s.json"
+        self.config_path = self.install / "cortex-gyro-gyro-s.json"
         self.config_path.write_text(json.dumps(self.cfg))
         (self.install.parent / "app-settings.json").write_text(json.dumps({"data_dir": str(self.docs), "installs": [str(self.install)]}))
 
@@ -125,7 +125,7 @@ class GuiLayout(unittest.TestCase):
     def test_cli_list_names_where_it_looked_when_nothing_is_found(self):
         self.config_path.unlink()
         out = io.StringIO()
-        from strata_cli.cli import main
+        from cortex_cli.cli import main
         with redirect_stdout(out):
             code = main(["models", "list"])
         self.assertEqual(code, 0)
@@ -139,10 +139,10 @@ class GuiLayout(unittest.TestCase):
         self.assertEqual([p.source for p in discovery.places(explicit=str(other))], ["explicit"])
 
     def test_a_remembered_older_install_and_the_app_install_are_both_listed(self):
-        old = self.base / "T-Strata"
+        old = self.base / "T-Cortex"
         old.mkdir()
-        (old / "strata-qwen-iq3_xxs.json").write_text(json.dumps({"exe": "e", "tokenizer": "t", "args": []}))
-        settings = Path(os.environ["APPDATA"]) / "Strata" / "settings.json"
+        (old / "cortex-qwen-iq3_xxs.json").write_text(json.dumps({"exe": "e", "tokenizer": "t", "args": []}))
+        settings = Path(os.environ["APPDATA"]) / "Cortex" / "settings.json"
         settings.parent.mkdir(parents=True)
         settings.write_text(json.dumps({"installs": [str(old)]}))
         got = models.list_installed()
@@ -150,12 +150,12 @@ class GuiLayout(unittest.TestCase):
         self.assertEqual(got["install_dir_source"], "remembered")
 
     def test_inside_the_app_an_older_install_is_still_not_adopted(self):
-        old = self.base / "T-Strata"
+        old = self.base / "T-Cortex"
         old.mkdir()
-        (old / "strata-x.json").write_text(json.dumps({"exe": "e", "tokenizer": "t", "args": []}))
+        (old / "cortex-x.json").write_text(json.dumps({"exe": "e", "tokenizer": "t", "args": []}))
         app_settings = self.install.parent / "app-settings.json"
-        with mock.patch.dict(os.environ, {"STRATA_SETTINGS_FILE": str(app_settings)}):
-            settings = Path(os.environ["APPDATA"]) / "Strata" / "settings.json"
+        with mock.patch.dict(os.environ, {"CORTEX_SETTINGS_FILE": str(app_settings)}):
+            settings = Path(os.environ["APPDATA"]) / "Cortex" / "settings.json"
             settings.parent.mkdir(parents=True)
             settings.write_text(json.dumps({"installs": [str(old)]}))
             self.assertEqual([m["id"] for m in models.list_installed()["models"]], ["gyro-gyro-s"])
@@ -193,7 +193,7 @@ class GuiLayout(unittest.TestCase):
         plan = models.plan_import(str(folder))
         self.assertIn("multiple_model_groups", plan["issues"])
         self.assertEqual(sorted((h["family"], h["model"]) for h in plan["folder_holds"]), [("gyro", "Gyro-M"), ("gyro", "Gyro-S")])
-        from strata_cli.cli import _import_problem
+        from cortex_cli.cli import _import_problem
         text = _import_problem(plan)
         self.assertIn("more than one model", text)
         self.assertIn("holds 2 models", text)
@@ -239,7 +239,7 @@ class GuiLayout(unittest.TestCase):
     def test_an_own_setting_beats_the_apps_folder(self):
         mine = self.base / "mine"
         mine.mkdir()
-        settings = Path(os.environ["APPDATA"]) / "Strata" / "settings.json"
+        settings = Path(os.environ["APPDATA"]) / "Cortex" / "settings.json"
         settings.parent.mkdir(parents=True, exist_ok=True)
         settings.write_text(json.dumps({"data_dir": str(mine)}))
         self.assertEqual(self.catalog().data_dir().resolve(), mine.resolve())

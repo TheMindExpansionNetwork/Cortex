@@ -7,9 +7,9 @@ import { NATIVE_FIELDS } from '../server/native-settings.mjs';
 import { openTextFile, textEditorCommand } from '../server/open-text-file.mjs';
 
 const good = `{
-  "exe": "/opt/strata/strata",
+  "exe": "/opt/cortex/cortex",
   "args": ["--native", "/m/a.gguf", "--max-context", "65536"],
-  "env": {"STRATA_PCIE_FRAC_DEFAULT": "old"},
+  "env": {"CORTEX_PCIE_FRAC_DEFAULT": "old"},
   "sampling": {"temperature": 0.7, "repeat_penalty": 1.1},
   "parallel": 2,
   "aliases": "chat, coding",
@@ -46,13 +46,13 @@ test('an unknown key is a warning with the nearest real name, and does not hold 
     ['warning', 'unknown-key-near', 'paralel', 'parallel', 2],
     ['warning', 'unknown-key-near', 'idle_unload_secs', 'idle_unload_s', 3],
     ['warning', 'unknown-key', 'totally_made_up_thing', '', 4]]);
-  assert.match(result.issues[0].message, /"paralel" is not a setting Strata reads, so it is ignored\. Did you mean "parallel"\?/);
+  assert.match(result.issues[0].message, /"paralel" is not a setting Cortex reads, so it is ignored\. Did you mean "parallel"\?/);
   assert.equal(nearestKey('Lazy-Load'), 'lazy_load');
   assert.equal(nearestKey('zzzzzzzz'), null);
 });
 
 test('a bad value is an error that names the key, the line, what is allowed and what was found', () => {
-  const text = '{\n  "parallel": 12,\n  "lazy_load": "yes",\n  "anthropic_thinking": "sometimes",\n  "idle_unload_s": 1.5,\n  "port": 70000,\n  "args": ["--ple-io", 4],\n  "env": {"PATH": "/x", "STRATA_Y": 2},\n  "sampling": {"temperature": -1, "top_k": 0.5, "banana": 3},\n  "gpu": "first",\n  "layer_split": "32,16",\n  "reasoning_effort": "max"\n}';
+  const text = '{\n  "parallel": 12,\n  "lazy_load": "yes",\n  "anthropic_thinking": "sometimes",\n  "idle_unload_s": 1.5,\n  "port": 70000,\n  "args": ["--ple-io", 4],\n  "env": {"PATH": "/x", "CORTEX_Y": 2},\n  "sampling": {"temperature": -1, "top_k": 0.5, "banana": 3},\n  "gpu": "first",\n  "layer_split": "32,16",\n  "reasoning_effort": "max"\n}';
   const result = checkRunConfig(text);
   assert.equal(result.ok, false);
   const by = key => result.issues.filter(i => i.key === key);
@@ -62,7 +62,7 @@ test('a bad value is an error that names the key, the line, what is allowed and 
   assert.equal(by('idle_unload_s')[0].code, 'whole-range');
   assert.equal(by('port')[0].code, 'number-range');
   assert.equal(by('args')[0].code, 'args-type');
-  assert.deepEqual(by('env').map(i => i.code), ['env-value'], 'names other than STRATA_ (PATH) are kept, only a non-text value is wrong');
+  assert.deepEqual(by('env').map(i => i.code), ['env-value'], 'names other than CORTEX_ (PATH) are kept, only a non-text value is wrong');
   assert.deepEqual(by('sampling').map(i => [i.code, i.params.key]), [['number-range', 'sampling.temperature'], ['whole-range', 'sampling.top_k'], ['unknown-key', 'sampling.banana']]);
   assert.equal(by('gpu')[0].code, 'gpu');
   assert.equal(by('layer_split')[0].code, 'layer-split');
@@ -81,14 +81,14 @@ test('--host, --port and --api-key in args are a warning, not a refusal', () => 
 });
 
 test('the text editor: Notepad on Windows, text mode on a Mac, the system text-file program on Linux', async () => {
-  assert.deepEqual(await textEditorCommand('C:\\s\\strata-q.json', { platform: 'win32' }), ['notepad.exe', ['C:\\s\\strata-q.json']]);
-  assert.deepEqual(await textEditorCommand('/s/strata-q.json', { platform: 'darwin' }), ['open', ['-t', '/s/strata-q.json']]);
+  assert.deepEqual(await textEditorCommand('C:\\s\\cortex-q.json', { platform: 'win32' }), ['notepad.exe', ['C:\\s\\cortex-q.json']]);
+  assert.deepEqual(await textEditorCommand('/s/cortex-q.json', { platform: 'darwin' }), ['open', ['-t', '/s/cortex-q.json']]);
   const ask = async (command, args) => command === 'xdg-mime' ? 'org.gnome.gedit.desktop\n' : args[1] === 'command -v gtk-launch' ? '/usr/bin/gtk-launch\n' : '';
-  assert.deepEqual(await textEditorCommand('/s/strata-q.json', { platform: 'linux', ask }), ['/usr/bin/gtk-launch', ['org.gnome.gedit.desktop', '/s/strata-q.json']]);
+  assert.deepEqual(await textEditorCommand('/s/cortex-q.json', { platform: 'linux', ask }), ['/usr/bin/gtk-launch', ['org.gnome.gedit.desktop', '/s/cortex-q.json']]);
   const noEditor = async () => '';
   const seen = [];
-  await openTextFile('/s/strata-q.json', { platform: 'linux', ask: noEditor, recorder: seen });
-  assert.deepEqual(seen, [['xdg-open', '/s/strata-q.json']], 'with no text editor known the file’s own program opens it');
+  await openTextFile('/s/cortex-q.json', { platform: 'linux', ask: noEditor, recorder: seen });
+  assert.deepEqual(seen, [['xdg-open', '/s/cortex-q.json']], 'with no text editor known the file’s own program opens it');
 });
 
 test('every issue sentence exists in all eight languages and keeps its slots', async () => {
@@ -99,7 +99,7 @@ test('every issue sentence exists in all eight languages and keeps its slots', a
     { code: 'json', line: 3, params: { line: 3 } }, { code: 'json', line: null, params: { line: 0 } }, { code: 'not-object', params: {} },
     { code: 'unknown-key-near', params: { key: 'paralel', near: 'parallel' } }, { code: 'unknown-key', params: { key: 'zzz' } },
     { code: 'args-type', params: {} }, { code: 'args-managed', params: {} }, { code: 'env-type', params: {} },
-    { code: 'env-value', params: { name: 'STRATA_X' } }, { code: 'sampling-type', params: {} }, { code: 'bool', params: { key: 'lazy_load', value: '"yes"' } },
+    { code: 'env-value', params: { name: 'CORTEX_X' } }, { code: 'sampling-type', params: {} }, { code: 'bool', params: { key: 'lazy_load', value: '"yes"' } },
     { code: 'number-range', params: { key: 'port', min: 1, max: 65535, value: '0' } }, { code: 'whole-range', params: { key: 'parallel', min: 1, max: 8, value: '12' } },
     { code: 'choice', params: { key: 'gpu_order', choices: 'auto, as_given', value: '"x"' } }, { code: 'text', params: { key: 'aliases' } },
     { code: 'layer-split', params: {} }, { code: 'gpu', params: {} },

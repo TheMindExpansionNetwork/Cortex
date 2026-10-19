@@ -21,7 +21,7 @@ import { isViewStep } from './agent/plan.mjs';
 /** The note both agents carry on every step: the work is in a copy, unattended, on whatever machine this is. */
 export const UNATTENDED = 'This work runs in a copy of the folder with nobody watching. Never open a visible window and never wait for a program to close. To check a web page use the headless browser tool if you have one; otherwise read the file and say plainly what you could not check. A check that cannot be done here is noted in one sentence and the step is finished.';
 
-const SKIP = new Set(['.git', '.strata', '.timeskip', 'node_modules', '__pycache__']);
+const SKIP = new Set(['.git', '.cortex', '.timeskip', 'node_modules', '__pycache__']);
 const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'interrupted']);
 
 /** Copy a project folder for a trial, without dependency/VCS folders. */

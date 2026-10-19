@@ -1,4 +1,4 @@
-"""ModelScope as a download source (--source / STRATA_SOURCE): which source is used, the URL mapping, and that a file
+"""ModelScope as a download source (--source / CORTEX_SOURCE): which source is used, the URL mapping, and that a file
 from ModelScope is checked against the SHA-256 ModelScope publishes (a wrong one is deleted).  No network: a local
 HTTP server plays ModelScope.
 
@@ -40,7 +40,7 @@ class Base(unittest.TestCase):
         env = mock.patch.dict(os.environ, {}, clear=False)
         env.start()
         self.addCleanup(env.stop)
-        for k in ("STRATA_SOURCE", "HF_ENDPOINT", "MODELSCOPE_ENDPOINT"):
+        for k in ("CORTEX_SOURCE", "HF_ENDPOINT", "MODELSCOPE_ENDPOINT"):
             os.environ.pop(k, None)
         setup._sources.clear()
         setup._ms_files.clear()
@@ -52,7 +52,7 @@ class Source(Base):
         for value, want in (("modelscope", "modelscope"), ("ms", "modelscope"), ("huggingface", "huggingface"),
                             ("hf", "huggingface")):
             setup._sources.clear()
-            os.environ["STRATA_SOURCE"] = value
+            os.environ["CORTEX_SOURCE"] = value
             self.assertEqual(setup.model_source(), want, value)
 
     def test_auto_is_huggingface_and_never_asks_the_network(self):
@@ -97,7 +97,7 @@ class Download(Base):
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)
         os.environ["MODELSCOPE_ENDPOINT"] = "http://127.0.0.1:%d" % self.server.server_address[1]
-        os.environ["STRATA_SOURCE"] = "modelscope"
+        os.environ["CORTEX_SOURCE"] = "modelscope"
         self.dst = Path(self.tmp.name) / "out" / Path(PATH).name
         # a file with no pin of its own (the hash ModelScope publishes is the check); the pinned case is below
         pins = {**setup.REPO_PINS, REPO: {k: v for k, v in setup.REPO_PINS[REPO].items() if k != Path(PATH).name}}

@@ -6,9 +6,9 @@
 // 3. kv_append_q4_step and kv_gather_q4_step through paged pool against host reference.
 // 4. Invariance of dot products under Walsh-Hadamard rotation: (H*q) . (H*k) == q . k.
 
-#include "strata/kernels/f16_bits.hpp"
-#include "strata/kernels/kv_q4.hpp"
-#include "strata/kernels/qsa.hpp"
+#include "cortex/kernels/f16_bits.hpp"
+#include "cortex/kernels/kv_q4.hpp"
+#include "cortex/kernels/qsa.hpp"
 
 #include <cuda_runtime.h>
 
@@ -20,7 +20,7 @@
 #include <random>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 

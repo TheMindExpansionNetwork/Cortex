@@ -12,8 +12,8 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from strata_cli.cli import main
-from strata_control import journal, profiles, recipes
+from cortex_cli.cli import main
+from cortex_control import journal, profiles, recipes
 
 
 class RecipeTests(unittest.TestCase):
@@ -21,7 +21,7 @@ class RecipeTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        environment = mock.patch.dict(os.environ, {"STRATA_PROFILE_DIR": str(self.root / "profiles"),
+        environment = mock.patch.dict(os.environ, {"CORTEX_PROFILE_DIR": str(self.root / "profiles"),
                                                 "XDG_CONFIG_HOME": str(self.root / "settings")})
         environment.start()
         self.addCleanup(environment.stop)
@@ -55,7 +55,7 @@ class RecipeTests(unittest.TestCase):
         journal.begin_direct("local", "bench.run", revision, intent, operation_id=job_id)
         request = {"schema_version": 1, "action": "bench.job", "profile": "local",
                    "params": {"job_id": job_id}}
-        process = subprocess.run([sys.executable, "-m", "strata_control.management"],
+        process = subprocess.run([sys.executable, "-m", "cortex_control.management"],
                                  input=json.dumps(request), text=True, capture_output=True,
                                  cwd=Path(__file__).resolve().parents[2], timeout=10, check=True)
         response = json.loads(process.stdout)
@@ -79,9 +79,9 @@ class RecipeTests(unittest.TestCase):
         self.assertEqual(recipes.load("local", "restart"), (before, revision))
         self.assertEqual(self._cli("set", "restart", "startup_wait_s=45")[0], 0)
         self.assertFalse(self._cli("set", "restart", "startup_wait_s=45", "--plan")[1]["would_save"])
-        with mock.patch("strata_control.runtime.plan_restart", return_value={"ok": True,
+        with mock.patch("cortex_control.runtime.plan_restart", return_value={"ok": True,
                          "state": "ready", "would_drain": False}), \
-                mock.patch("strata_control.runtime.restart", return_value={"ok": True,
+                mock.patch("cortex_control.runtime.restart", return_value={"ok": True,
                            "state": "ready", "instance_id": "next"}) as restart:
             code, planned = self._cli("plan", "restart")
             self.assertEqual(code, 0)
@@ -94,7 +94,7 @@ class RecipeTests(unittest.TestCase):
             self.assertEqual(ran["operation"]["result"]["instance_id"], "next")
             restart.assert_called_once_with("local", startup_wait=45)
         self.assertEqual(self._cli("run", "check")[0], 0)
-        with mock.patch("strata_control.runtime.restart") as restart:
+        with mock.patch("cortex_control.runtime.restart") as restart:
             code, invalid = self._cli("run", "restart", "--exclusive")
             self.assertEqual(code, 2)
             self.assertFalse(invalid["ok"])
@@ -123,8 +123,8 @@ class RecipeTests(unittest.TestCase):
                                "tok_s": 12.1, "seconds": 30}}
 
         with mock.patch("tools.calibrate.run", side_effect=fake_runner), \
-                mock.patch("strata_control.calibration._hardware_key", return_value="fake-gpu"), \
-                mock.patch("strata_control.calibration._port_active", return_value=False):
+                mock.patch("cortex_control.calibration._hardware_key", return_value="fake-gpu"), \
+                mock.patch("cortex_control.calibration._port_active", return_value=False):
             first = self._cli("run", "calibrate", "--exclusive")
             second = self._cli("run", "calibrate", "--exclusive")
         self.assertEqual(first[0], 0)
@@ -150,8 +150,8 @@ class RecipeTests(unittest.TestCase):
         self.assertEqual(recipes.load("local", "check")[0]["params"], {})
         self.assertEqual(self._cli("set", "check", "live=true")[0], 0)
         cards = "\n".join(f"{i}, RTX 6000 test, GPU-test-{i}, 49140, 580.95" for i in range(4))
-        with mock.patch("strata_control.doctor.shutil.which", return_value="/fake/nvidia-smi"), \
-                mock.patch("strata_control.doctor.subprocess.run",
+        with mock.patch("cortex_control.doctor.shutil.which", return_value="/fake/nvidia-smi"), \
+                mock.patch("cortex_control.doctor.subprocess.run",
                            return_value=mock.Mock(returncode=0, stdout=cards)) as probe:
             code, preview = self._cli("plan", "check")
             self.assertEqual(code, 0)
@@ -183,7 +183,7 @@ class RecipeTests(unittest.TestCase):
         original, first = recipes.load("local", "restart")
         proposed, revision = recipes.propose_value("local", "restart", "startup_wait_s=60")
         recipes.save("local", "restart", proposed, revision)
-        with mock.patch("strata_control.runtime.restart") as restart:
+        with mock.patch("cortex_control.runtime.restart") as restart:
             code, stale = self._cli("run", "restart", "--if-revision", first)
             self.assertEqual(code, 6)
             self.assertFalse(stale["ok"])
@@ -241,7 +241,7 @@ class RecipeTests(unittest.TestCase):
 
     def test_failed_and_uncertain_runs_keep_distinct_journal_states_without_raw_result(self):
         recipes.initialize("local")
-        with mock.patch("strata_control.runtime.restart", return_value={"ok": False,
+        with mock.patch("cortex_control.runtime.restart", return_value={"ok": False,
                          "state": "ready", "error": "new_instance_failed", "exit_code": 6,
                          "private_trace": "TOPSECRET"}):
             code, executed = self._cli("run", "restart")
@@ -249,7 +249,7 @@ class RecipeTests(unittest.TestCase):
         failed = journal.load("local", executed["operation"]["operation_id"])
         self.assertEqual(failed["state"], "failed")
         self.assertNotIn("TOPSECRET", json.dumps(failed))
-        with mock.patch("strata_control.runtime.restart",
+        with mock.patch("cortex_control.runtime.restart",
                         side_effect=profiles.ProfileError("runtime operation wait expired", 8)):
             code, timed_out = self._cli("run", "restart")
         self.assertEqual(code, 8)
@@ -258,7 +258,7 @@ class RecipeTests(unittest.TestCase):
         uncertain = journal.load("local", newest["operation_id"])
         self.assertEqual(uncertain["state"], "completion_unknown")
         self.assertEqual(uncertain["result"]["exit_code"], 8)
-        with mock.patch("strata_control.runtime.restart", side_effect=KeyboardInterrupt):
+        with mock.patch("cortex_control.runtime.restart", side_effect=KeyboardInterrupt):
             code, interrupted = self._cli("run", "restart")
         self.assertEqual(code, 130)
         self.assertFalse(interrupted["ok"])

@@ -56,7 +56,7 @@ def normalize(v, t: Path):
     if isinstance(v, list):
         return [normalize(x, t) for x in v]
     if isinstance(v, str):
-        return re.sub(rf"(?<![w.-]){re.escape(setup.EXE)}(?![w.-])", "<EXE>", v.replace(str(t), "<T>").replace("\\", "/"))   # #973: only the whole name, not "strata-x.log" on Linux
+        return re.sub(rf"(?<![w.-]){re.escape(setup.EXE)}(?![w.-])", "<EXE>", v.replace(str(t), "<T>").replace("\\", "/"))   # #973: only the whole name, not "cortex-x.log" on Linux
     return v
 
 
@@ -64,7 +64,7 @@ def install(ram, found, argv, answers=None, extra=(), avx512=False, configs=()):
     """setup.main() on a mocked PC -> (exit code, printed text, the written config or None, the questions asked).
     answers: None = --yes (a question fails the run), "" = Enter for every question, a list of answers in order, or
     {words of a question: its answer} (Enter for the others).
-    extra: more patches (mock.patch objects).  configs: (name, dict) run configs already in the Strata folder."""
+    extra: more patches (mock.patch objects).  configs: (name, dict) run configs already in the Cortex folder."""
     with tempfile.TemporaryDirectory() as tmp:
         t = Path(tmp)
         (t / "data" / "mtp" / "rt").mkdir(parents=True)
@@ -136,7 +136,7 @@ def install(ram, found, argv, answers=None, extra=(), avx512=False, configs=()):
                     code = setup.main()
                 except SystemExit as e:
                     code = e.code
-        written = sorted(t.glob("strata-*.json"), key=lambda p: p.stat().st_mtime)
+        written = sorted(t.glob("cortex-*.json"), key=lambda p: p.stat().st_mtime)
         cfg = None
         if written and code == 0:
             cfg = normalize(json.loads(written[-1].read_text(encoding="utf-8")), t)

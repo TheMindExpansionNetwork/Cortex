@@ -9,9 +9,9 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/kernels/f16_bits.hpp"
-#include "strata/kernels/kv_q8.hpp"
-#include "strata/kernels/qsa.hpp"
+#include "cortex/kernels/f16_bits.hpp"
+#include "cortex/kernels/kv_q8.hpp"
+#include "cortex/kernels/qsa.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -20,7 +20,7 @@
 #include <random>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 int g_fail = 0;

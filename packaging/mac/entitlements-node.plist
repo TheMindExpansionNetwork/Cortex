@@ -23,7 +23,7 @@
          com.apple.security.cs.disable-library-validation
             Library validation makes a hardened program load only libraries signed by Apple or by the same Team ID. Every addon and
             library in these bundles is re-signed by sign-and-notarize.sh with the one Developer ID, so they match. Add this key
-            ONLY if a tester reports "code signature ... different Team IDs" when Strata loads a library that is not part of the
+            ONLY if a tester reports "code signature ... different Team IDs" when Cortex loads a library that is not part of the
             bundle (for example a native addon an MCP server installs into the user's folder and loads with this node).
        -->
   <key>com.apple.security.cs.allow-jit</key>

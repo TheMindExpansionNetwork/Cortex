@@ -13,15 +13,15 @@
 //
 // IQ3_XXS, IQ3_S and IQ2_S also have a gathered decode (Fmt32<118>, <121>, <122>): the grid indices built in a
 // register and read with one vpgather, the same words into the same lanes, so the same bits.  Where it is faster
-// depends on the core, so STRATA_IQ256_GATHER picks it per thread (expert_layout.hpp, cpu_gather_fast_here).
+// depends on the core, so CORTEX_IQ256_GATHER picks it per thread (expert_layout.hpp, cpu_gather_fast_here).
 //
 // Where the CPU has AVX-VNNI (cpu_avxvnni_ok: Alder Lake, Sapphire Rapids and later) the row kernels take a second
 // copy with vpdpwssd / vpdpbusd (iq_avx2_rows.inl), the same integer sums.
 //
 // This file is compiled for AVX2 and must not run anything before the engine's cpu_avx2_ok() check: no runtime
 // initializer at namespace scope (#391, 016ea2e), the switches are read on first use.
-#include "strata/kernels/cpu/iq_avx2.hpp"
-#include "strata/kernels/cpu/expert_layout.hpp"
+#include "cortex/kernels/cpu/iq_avx2.hpp"
+#include "cortex/kernels/cpu/expert_layout.hpp"
 
 #define GGML_COMMON_DECL_CPP
 #define GGML_COMMON_IMPL_CPP
@@ -33,18 +33,18 @@
 #include <cstdlib>
 #include <cstring>
 
-// STRATA_AVXVNNI (CMake: the compiler has the AVX-VNNI intrinsics): GCC and Clang compile them only inside functions
+// CORTEX_AVXVNNI (CMake: the compiler has the AVX-VNNI intrinsics): GCC and Clang compile them only inside functions
 // with target("avxvnni") - the VNNI copy of iq_avx2_rows.inl.
-#if !defined(STRATA_AVXVNNI)
-#define STRATA_AVXVNNI 0
+#if !defined(CORTEX_AVXVNNI)
+#define CORTEX_AVXVNNI 0
 #endif
-#if STRATA_AVXVNNI && (defined(__GNUC__) || defined(__clang__))
-#define STRATA_AVXVNNI_FN __attribute__((target("avxvnni")))
+#if CORTEX_AVXVNNI && (defined(__GNUC__) || defined(__clang__))
+#define CORTEX_AVXVNNI_FN __attribute__((target("avxvnni")))
 #else
-#define STRATA_AVXVNNI_FN
+#define CORTEX_AVXVNNI_FN
 #endif
 
-namespace strata::kernels::cpu {
+namespace cortex::kernels::cpu {
 namespace {
 
 inline float h2f(uint16_t h) { return _mm_cvtss_f32(_mm_cvtph_ps(_mm_cvtsi32_si128((int) h))); }
@@ -96,9 +96,9 @@ inline __m256i sc32(int s) { return _mm256_set1_epi16(s); }
 //
 // Computed at COMPILE time (constexpr), so this file has no static constructor at all.  This TU is compiled
 // for AVX2, and a runtime constructor here runs before main() on every CPU: MSVC turned its variable shift
-// into BMI2 `shlx` (#391, demetree: strata.exe exited 0xC000001D before printing anything on a Sandy Bridge
+// into BMI2 `shlx` (#391, demetree: cortex.exe exited 0xC000001D before printing anything on a Sandy Bridge
 // Xeon) and GCC vectorised the loop into AVX2 (`vpbroadcastb`, found on an AVX-only Xeon E5 by the
-// Strata_Dirigo fork).  ksigns_iq2xs[i] is i's 7 bits plus an even-parity bit 7 (ggml-common.h); a const
+// Cortex_Dirigo fork).  ksigns_iq2xs[i] is i's 7 bits plus an even-parity bit 7 (ggml-common.h); a const
 // array is not usable in a constant expression, so the byte is derived the same way here, and
 // native_expert_parity checks these kernels against ggml-cpu's.
 struct EvenSigns {
@@ -176,13 +176,13 @@ inline float hsum8(__m256 v) {
 
 // E-2 (iq_avx512.cpp) on the AVX-2 path: the pool streams the expert rows from DRAM at ~25 GB/s (4 KB pages
 // when large pages are refused), so ask for the bytes a few blocks before the decode needs them - 2048 B is
-// two gate/up rows ahead, a row is ~1 KB.  Same switch as the AVX-512 kernels: STRATA_IQ_PREFETCH is the
+// two gate/up rows ahead, a row is ~1 KB.  Same switch as the AVX-512 kernels: CORTEX_IQ_PREFETCH is the
 // distance in bytes, 0 = off, default 2048.  Measured on a Zen 3 5700X3D (no AVX-512) on IQ3_S decode: -4% on
 // the gate/up phase, +1.0 GB/s over the rows, -1.3% ms/round end to end.  The non-temporal hint measured
 // worse than T0 at the same distance, so this keeps T0.
 int prefetch_distance() {
     static const int d = [] {
-        const char* v = std::getenv("STRATA_IQ_PREFETCH");
+        const char* v = std::getenv("CORTEX_IQ_PREFETCH");
         return v ? std::atoi(v) : 2048;
     }();
     return d;
@@ -273,7 +273,7 @@ template <> struct Fmt32<21> {   // IQ3_S: d, qs[64], qh[8], signs[32], scales[4
     }
 };
 
-// ---- the gathered decodes (STRATA_IQ256_GATHER, see the top of the file): each its format's Fmt32 bit for bit
+// ---- the gathered decodes (CORTEX_IQ256_GATHER, see the top of the file): each its format's Fmt32 bit for bit
 // The 32 sign bits of a half from the j's 8 sign bytes: one broadcast and one shuffle (sgn_vec: two and an insert).
 inline __m256i sgn_half(const uint8_t* m8, int half) {
     const __m256i sb = _mm256_shuffle_epi8(
@@ -368,19 +368,19 @@ template <> struct Fmt32<23> {   // IQ4_XS: d, scales_h, scales_l[4], qs[128] - 
 
 // ---- the row kernels, twice: the AVX2 forms and the AVX-VNNI ones (iq_avx2_rows.inl)
 namespace plain {
-#define STRATA_ROWS_VNNI 0
-#define STRATA_ROWS_FN
+#define CORTEX_ROWS_VNNI 0
+#define CORTEX_ROWS_FN
 #include "iq_avx2_rows.inl"
 }  // namespace plain
-#if STRATA_AVXVNNI
+#if CORTEX_AVXVNNI
 namespace vnni {
-#define STRATA_ROWS_VNNI 1
-#define STRATA_ROWS_FN STRATA_AVXVNNI_FN
+#define CORTEX_ROWS_VNNI 1
+#define CORTEX_ROWS_FN CORTEX_AVXVNNI_FN
 #include "iq_avx2_rows.inl"
 }  // namespace vnni
 #endif
 
-bool vnni_on() { return STRATA_AVXVNNI && cpu_avxvnni_ok(); }
+bool vnni_on() { return CORTEX_AVXVNNI && cpu_avxvnni_ok(); }
 
 }  // namespace
 
@@ -456,7 +456,7 @@ void q8k_quant_avx2(const float* x, void* vy, int64_t k) {
 void iq256_gu_rows_exact_one(int type, const uint8_t* blob, size_t gu_row, size_t up_off, int n,
                              const void* act, float* ff, int r0, int r1) {
     const auto* y = (const block_q8_K*) act;
-#if STRATA_AVXVNNI
+#if CORTEX_AVXVNNI
     if (vnni_on()) {
         if (type == 16) vnni::gu_ggml_one<16>(blob, gu_row, up_off, n, y, ff, r0, r1);
         else if (type == 17) vnni::gu_ggml_one<17>(blob, gu_row, up_off, n, y, ff, r0, r1);
@@ -488,7 +488,7 @@ void iq256_gu_rows_exact_one(int type, const uint8_t* blob, size_t gu_row, size_
 }
 
 int iq256_variant() noexcept {
-    // STRATA_IQ256_GATHER=0/1 for every core; unset, where the calling thread's core gathers faster (per thread: a
+    // CORTEX_IQ256_GATHER=0/1 for every core; unset, where the calling thread's core gathers faster (per thread: a
     // hybrid CPU's pool runs on P- and E-cores).  AVX-VNNI where cpu_avxvnni_ok().  The same bits either way.
     const int s = iq256_gather_setting();
     return ((s >= 0 ? s == 1 : cpu_gather_fast_here()) ? kIq256Gather : 0) | (vnni_on() ? kIq256Vnni : 0);
@@ -499,7 +499,7 @@ int iq256_variants() noexcept { return kIq256Gather | (vnni_on() ? kIq256Vnni : 
 void iq256_gu_rows_v(int variant, int type, const uint8_t* blob, size_t gu_row, size_t up_off, int n,
                      const void* const* act, int nt, float* const* ff, int r0, int r1) {
     const bool g = (variant & kIq256Gather) != 0;
-#if STRATA_AVXVNNI
+#if CORTEX_AVXVNNI
     if (variant & kIq256Vnni) {
         if (g) vnni::gu_type<true>(type, nt, blob, gu_row, up_off, n, act, ff, r0, r1);
         else vnni::gu_type<false>(type, nt, blob, gu_row, up_off, n, act, ff, r0, r1);
@@ -513,7 +513,7 @@ void iq256_gu_rows_v(int variant, int type, const uint8_t* blob, size_t gu_row, 
 void iq256_rows_v(int variant, int type, const uint8_t* w, size_t row_bytes, int n, const void* const* act, int nt,
                   float* const* out, int r0, int r1) {
     const bool g = (variant & kIq256Gather) != 0;
-#if STRATA_AVXVNNI
+#if CORTEX_AVXVNNI
     if (variant & kIq256Vnni) {
         if (g) vnni::dot_type<true>(type, nt, w, row_bytes, n, act, out, r0, r1);
         else vnni::dot_type<false>(type, nt, w, row_bytes, n, act, out, r0, r1);
@@ -538,7 +538,7 @@ void iq4nl256_down_rows_v(int variant, const uint8_t* w, size_t row_bytes, int n
                           float* const* out, int r0, int r1) {
     const block_q8_0* y[8];
     for (int t = 0; t < nt; ++t) y[t] = (const block_q8_0*) hq[t];
-#if STRATA_AVXVNNI
+#if CORTEX_AVXVNNI
     if (variant & kIq256Vnni) {
         vnni::iq4nl_nt(w, row_bytes, n, y, nt, out, r0, r1);
         return;
@@ -553,4 +553,4 @@ void iq4nl256_down_rows(const uint8_t* w, size_t row_bytes, int n, const void* c
     iq4nl256_down_rows_v(vnni_on() ? kIq256Vnni : 0, w, row_bytes, n, hq, nt, out, r0, r1);
 }
 
-}  // namespace strata::kernels::cpu
+}  // namespace cortex::kernels::cpu

@@ -12,12 +12,12 @@
 // v2: 64-cell chunks (a quarter of the per-cell overhead), V packed two cells at a time as 32-byte contiguous stores,
 // K^T packed as 4-byte pairs with INT8 converted on the load, hi and lo halves of Q accumulated into one accumulator per
 // scale group, and one accumulator update per chunk after the whole P.V product has run in registers.
-#include "strata/kernels/qsa_prompt_attn_xmx.hpp"
-#include "strata/core/geometry.hpp"
-#include "strata/kernels/qsa_decode_attn.hpp"
-#include "strata/kernels/qsa.hpp"
-#include "strata/kernels/kv_q8.hpp"
-#include "strata/sycl_queue.hpp"
+#include "cortex/kernels/qsa_prompt_attn_xmx.hpp"
+#include "cortex/core/geometry.hpp"
+#include "cortex/kernels/qsa_decode_attn.hpp"
+#include "cortex/kernels/qsa.hpp"
+#include "cortex/kernels/kv_q8.hpp"
+#include "cortex/sycl_queue.hpp"
 #include <sycl/sycl.hpp>
 #include <sycl/ext/oneapi/matrix/matrix.hpp>
 #include <dpct/dpct.hpp>
@@ -26,11 +26,11 @@
 #include <cstdio>
 #include <cstdlib>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 namespace jm = sycl::ext::oneapi::experimental::matrix;
 constexpr int HD = 256, G = 12, SG = 16, NSG = 8, THREADS = SG * NSG, QS = HD + 8;
-static_assert(HD == strata::core::kCompiledGeometry.head_dim && G == strata::core::kCompiledGeometry.n_head / strata::core::kCompiledGeometry.n_head_kv,
+static_assert(HD == cortex::core::kCompiledGeometry.head_dim && G == cortex::core::kCompiledGeometry.n_head / cortex::core::kCompiledGeometry.n_head_kv,
               "qsa_prompt_attn_xmx is compiled for core/geometry.hpp");
 constexpr int QK4_0 = 32;
 struct q4_0_block { uint16_t d; uint8_t qs[QK4_0 / 2]; };
@@ -366,23 +366,23 @@ bool dispatch(const float* q, const QsaAttnPools& pools, const int32_t* ids, con
 
 bool qsa_prompt_attn_xmx(const float* q, const QsaAttnPools& pools, const int32_t* ids, const int32_t* steps, int64_t cap,
                          const QsaShapes& s, float* attn, int64_t n_q, void* stream) {
-    // STRATA_PROMPT_ATTN_XMX=1 (64-cell chunks) or =32 (32-cell chunks); unset or 0: the caller's fallback
-    static const int mode = [] { const char* v = std::getenv("STRATA_PROMPT_ATTN_XMX"); return v ? std::atoi(v) : 0; }();
+    // CORTEX_PROMPT_ATTN_XMX=1 (64-cell chunks) or =32 (32-cell chunks); unset or 0: the caller's fallback
+    static const int mode = [] { const char* v = std::getenv("CORTEX_PROMPT_ATTN_XMX"); return v ? std::atoi(v) : 0; }();
     if (mode == 0 || n_q <= 0) return false;
     if (pools.k_q4 != nullptr || s.head_dim != HD || s.n_head != (int64_t) G * s.n_head_kv || cap <= 0 || !ids || !steps ||
         !pools.page_table)
         return false;
-    dpct::queue_ptr st = strata::q_of(stream);
+    dpct::queue_ptr st = cortex::q_of(stream);
     const size_t have = st->get_device().get_info<sycl::info::device::local_mem_size>();
     const bool ch64 = mode != 32 && have >= Layout<64>::bytes;
     static bool told = false;
     if (!told) {
         told = true;
-        std::fprintf(stderr, "strata: prompt attention on XMX, %d-cell chunks (%zu of %zu bytes of local memory)\n",
+        std::fprintf(stderr, "cortex: prompt attention on XMX, %d-cell chunks (%zu of %zu bytes of local memory)\n",
                      ch64 ? 64 : 32, ch64 ? Layout<64>::bytes : Layout<32>::bytes, have);
     }
     if (!ch64 && have < Layout<32>::bytes) return false;
     return ch64 ? dispatch<64>(q, pools, ids, steps, cap, s, attn, n_q, st)
                 : dispatch<32>(q, pools, ids, steps, cap, s, attn, n_q, st);
 }
-}  // namespace strata::kernels
+}  // namespace cortex::kernels

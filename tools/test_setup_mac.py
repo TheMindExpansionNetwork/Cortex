@@ -112,7 +112,7 @@ class Config(unittest.TestCase):
         self.assertTrue(M.stream_mtp(False, 16) and M.stream_mtp(True, 128) and not M.stream_mtp(True, 64))
 
     def test_config_is_a_model_config_with_the_metal_backend(self):
-        cfg = M.mac_config(Path("/r/build-metal/strata"), ["--pack", "x"], Path("/p"), "qwen3.8-flash-next-q2_0",
+        cfg = M.mac_config(Path("/r/build-metal/cortex"), ["--pack", "x"], Path("/p"), "qwen3.8-flash-next-q2_0",
                            "Q2_0", 8080)
         self.assertEqual(cfg["backend"], "metal")
         self.assertEqual(cfg["tokenizer"], str(Path("/p") / "tokenizer"))
@@ -123,7 +123,7 @@ class Vision(unittest.TestCase):
     def test_the_projector_is_pinned_and_the_encoder_builds_with_metal(self):
         self.assertIn("mmproj-Qwen3.8-Flash-Next-BF16.gguf", M.VISION_SHA256)
         src = (ROOT / "metal" / "setup_mac.py").read_text(encoding="utf-8")
-        self.assertIn('"-DSTRATA_VISION_CUDA=OFF"', src)
+        self.assertIn('"-DCORTEX_VISION_CUDA=OFF"', src)
         self.assertIn('cfg["args"] += ["--vision"]', src)
 
 
@@ -231,10 +231,10 @@ class RepackGuard(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
-            gguf, exe = d / "m-metal.gguf", d / "strata"
+            gguf, exe = d / "m-metal.gguf", d / "cortex"
             gguf.write_bytes(b"x")
             exe.write_bytes(b"x")
-            cfg = d / "strata-x.json"
+            cfg = d / "cortex-x.json"
             cfg.write_text(json.dumps({"exe": str(exe), "args": ["--native", str(gguf)], "port": 8080}))
             (d / "m-metal.gguf.repack.lock").write_text(str(os.getppid()))
             with mock.patch.object(M.subprocess, "call", side_effect=AssertionError("started")), \
@@ -255,8 +255,8 @@ M4 = {"machdep.cpu.brand_string": "Apple M4", "hw.memsize": str(32 * 2 ** 30), "
 
 
 class ControlMode(unittest.TestCase):
-    """The app on a Mac (STRATA_CONTROL_INSTALL=1): model files and a run config naming the engine component. No source build, no
-    metal/setup_mac.py, no Command Line Tools; the Mac rules are strata_control/mac_fit.py's, the module setup_mac.py uses too."""
+    """The app on a Mac (CORTEX_CONTROL_INSTALL=1): model files and a run config naming the engine component. No source build, no
+    metal/setup_mac.py, no Command Line Tools; the Mac rules are cortex_control/mac_fit.py's, the module setup_mac.py uses too."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -275,7 +275,7 @@ class ControlMode(unittest.TestCase):
             self.files.append(f)
 
     def run_setup(self, hw=M4, argv=("--yes", "--no-start", "--family", "qwen", "--model", "Q2_0", "--context", "8192"), clt_rc=0):
-        from strata_control import engine_component, mac_fit
+        from cortex_control import engine_component, mac_fit
         ran = []
 
         def fake_tool(cmd, **kw):
@@ -310,13 +310,13 @@ class ControlMode(unittest.TestCase):
 
     def config(self, tag="q2_0"):
         import json
-        return json.loads((self.home / f"strata-{tag}.json").read_text(encoding="utf-8"))
+        return json.loads((self.home / f"cortex-{tag}.json").read_text(encoding="utf-8"))
 
     def test_the_install_writes_a_run_config_for_the_engine_component(self):
         rc, ran = self.run_setup()
         self.assertEqual(rc, 0)
         cfg = self.config()
-        self.assertEqual(cfg["exe"], "component:strata-engine")
+        self.assertEqual(cfg["exe"], "component:cortex-engine")
         self.assertEqual(cfg["backend"], "metal")
         args = cfg["args"]
         # a 32 GB Mac streams Q2_0's experts from the SSD: one token per step, no draft layer, the GGUF mapped in place
@@ -326,7 +326,7 @@ class ControlMode(unittest.TestCase):
         self.assertNotIn("--mtp", args)
         self.assertEqual(args[args.index("--suffix-draft") + 1], "0")
         self.assertEqual(args[args.index("--max-context") + 1], "8192")
-        self.assertEqual(cfg["env"], {"STRATA_METAL_STREAM": "1"})
+        self.assertEqual(cfg["env"], {"CORTEX_METAL_STREAM": "1"})
         self.assertEqual(cfg["tokenizer"], str(self.data / "packs" / "q2_0" / "tokenizer"))
         self.assertEqual(len(ran), 1, "only the pack is made (tools/iq_pack.py): no draft layer, no build")
         self.assertTrue(ran[0][1].endswith("iq_pack.py"))
@@ -337,7 +337,7 @@ class ControlMode(unittest.TestCase):
         self.assertEqual(rc, 0)
         cfg = self.config("iq3_xxs")
         self.assertIn("--mtp", cfg["args"])
-        self.assertEqual(cfg["env"], {"STRATA_METAL_STREAM": "0"})
+        self.assertEqual(cfg["env"], {"CORTEX_METAL_STREAM": "0"})
         self.assertEqual(cfg["args"][cfg["args"].index("--max-context") + 1], "65536")      # the default context by memory
 
     def test_no_command_line_tools_needed_and_the_unsloth_files_are_not_offered(self):
@@ -356,11 +356,11 @@ class Source(unittest.TestCase):
     """setup.py hands a Mac over before its own parser runs, so the Mac parser has to know --source:
     source_hint() recommends it on every platform (#2363)."""
 
-    def test_the_source_flag_reaches_strata_source(self):
+    def test_the_source_flag_reaches_cortex_source(self):
         env = mock.patch.dict(os.environ, {}, clear=False)
         env.start()
         self.addCleanup(env.stop)
-        os.environ.pop("STRATA_SOURCE", None)
+        os.environ.pop("CORTEX_SOURCE", None)
         warnings = []
         # setup.data_folder() is mocked: the real one moves the model files of this checkout and of the data folder in
         # the user's settings.json into --data-dir, and saves that dir as the new data folder; with a temp dir that
@@ -373,7 +373,7 @@ class Source(unittest.TestCase):
                 mock.patch.object(setup, "ok", lambda *a, **k: None), \
                 mock.patch.object(setup, "step", lambda *a, **k: None):
             M.main(["--source", "modelscope", "--yes", "--check", "--data-dir", tmp])
-        self.assertEqual(os.environ.get("STRATA_SOURCE"), "modelscope")
+        self.assertEqual(os.environ.get("CORTEX_SOURCE"), "modelscope")
         self.assertFalse([w for w in warnings if "--source" in w],
                          f"--source was not used: {warnings}")
 

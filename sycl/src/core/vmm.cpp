@@ -4,9 +4,9 @@
 // has no equivalent through dpct.  Every entry point therefore reports "not available", the same answer a GPU
 // without virtual memory management gives, so --vram-elastic and the elastic K/V (--kv-grow) refuse with their
 // usual message and nothing else changes.
-#include "strata/core/vmm.hpp"
+#include "cortex/core/vmm.hpp"
 
-namespace strata::core {
+namespace cortex::core {
 
 bool vmm_available() { return false; }
 uint64_t vmm_granularity() { return 0; }
@@ -24,4 +24,4 @@ bool VmmRange::map_one(int64_t, VmmChunk) { return false; }
 bool VmmRange::set_access(int64_t, int64_t) { return false; }
 bool VmmRange::commit_run(int64_t, int64_t) { return false; }
 
-}  // namespace strata::core
+}  // namespace cortex::core

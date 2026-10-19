@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the acceptance evidence matrix.
 
-`strata-acceptance-checklist.md` has 67 requirement rows, and Phase A is only complete when **every
+`cortex-acceptance-checklist.md` has 67 requirement rows, and Phase A is only complete when **every
 one of them has an explicit result** — passed, failed, pending hardware, pending signing/release
 evidence, or genuinely unsupported with a reason. This script holds that mapping as data so it can
 be regenerated as the results change, and so a missing row is a build error rather than an oversight.
@@ -41,7 +41,7 @@ ROWS: dict[str, tuple[str, str, str]] = {
             "The macOS .app builds, launches, serves the supplied UI from the host's origin and "
             "passes its own 8-step self-test from inside the mounted DMG. No global Node, Python, "
             "npm, pip or compiler is required: the bundle carries a pinned Node runtime. Real "
-            "generation through it is NOT proven -- no Strata pack fits this Mac (16 GiB RAM, "
+            "generation through it is NOT proven -- no Cortex pack fits this Mac (16 GiB RAM, "
             "~21 GiB free); that leg is pending hardware.",
             "docs/work/evidence/tauri-selftest-from-dmg.json, tauri-artifact.txt"),
     "P02": ("pending-hardware",
@@ -67,11 +67,11 @@ ROWS: dict[str, tuple[str, str, str]] = {
     "P06": ("passed",
             "A component's cache key is the digest of its artifact bytes, not its version label, so a rebuilt artifact with an unchanged version is a different entry and a cached payload is never reused on the strength of a string. The cache is never consumed by activation (the active directory is a copy), so a compatible application update reuses the installed engine instead of downloading it again. `prune_cache` keeps whatever the active and rollback versions refer to."
             ,
-            "strata_control/components.py, tests/tuning/test_components.py"),
+            "cortex_control/components.py, tests/tuning/test_components.py"),
     "P07": ("passed",
-            "Components are acquired by kind: the manifest declares `application`, `runtime`, `agent-runtime`, `tuning`, `engine` or `prepared-data`, each with its own platform and backend gates, and `strata components plan` reports whether a package may be used here without fetching anything. The backend families are held to the packet's own matrix, so a Windows SYCL or Intel-Mac Metal package is refused as unsupported rather than attempted."
+            "Components are acquired by kind: the manifest declares `application`, `runtime`, `agent-runtime`, `tuning`, `engine` or `prepared-data`, each with its own platform and backend gates, and `cortex components plan` reports whether a package may be used here without fetching anything. The backend families are held to the packet's own matrix, so a Windows SYCL or Intel-Mac Metal package is refused as unsupported rather than attempted."
             ,
-            "strata_control/components.py, `strata components backends`"),
+            "cortex_control/components.py, `cortex components backends`"),
     "P08": ("passed",
             "Desktop and Terminal read the same owner state and the same model directory; the "
             "terminal's `models list` reads the setup-written configs that Desktop's model surfaces "
@@ -108,7 +108,7 @@ ROWS: dict[str, tuple[str, str, str]] = {
     "R02": ("passed",
             "Pure serving and the read-only CLI run with no agent runtime, no tuning packages, no "
             "Textual and no UI present. Verified by running the server from the standalone bundle "
-            "and by importing strata_control.management and strata_cli.cli on a bare interpreter.",
+            "and by importing cortex_control.management and cortex_cli.cli on a bare interpreter.",
             "docs/work/evidence/terminal-dist.txt"),
     "R03": ("passed",
             "One owner per installation is enforced by an O_EXCL state file plus an flock held for "
@@ -123,7 +123,7 @@ ROWS: dict[str, tuple[str, str, str]] = {
             "process-tree cleanup for engine children ARE implemented (serve/winjob.py, tested). "
             "The Windows branch of the transport is exercised on macOS but has never run on "
             "Windows.",
-            "strata_control/owner_transport.py, docs/work/evidence/owner-transport-suite.txt"),
+            "cortex_control/owner_transport.py, docs/work/evidence/owner-transport-suite.txt"),
     "R05": ("passed",
             "Preflight refuses before load: the engine rejects a model whose metadata geometry "
             "differs from the compiled shape, naming the differing key; the GGUF preflight checks "
@@ -179,7 +179,7 @@ ROWS: dict[str, tuple[str, str, str]] = {
 
     # ---------------------------------------------------------------- agent, session, permissions
     "A01": ("passed",
-            "The supplied UI drives a turn through the pinned Harness against the local Strata API "
+            "The supplied UI drives a turn through the pinned Harness against the local Cortex API "
             "worker on loopback, with no cloud route declared in the profile and therefore no "
             "DeepSeek account required. The model is the built-in mock: this proves the route, not "
             "inference quality.",
@@ -237,7 +237,7 @@ ROWS: dict[str, tuple[str, str, str]] = {
             "running agent, which needs a real model.",
             "docs/work/QUALIFICATION-KIT.md 7"),
     "A14": ("passed",
-            "The Strata profile declares exactly one route, on loopback, and no cloud route at all, "
+            "The Cortex profile declares exactly one route, on loopback, and no cloud route at all, "
             "so a local failure cannot fall back to a hosted model -- there is nothing to fall back "
             "to. The host additionally refuses to simulate in a packaged build.",
             "integrations/harness/profile/cordis.patch.yml, docs/work/IMPLEMENTATION_STATUS.md 1.7"),
@@ -248,7 +248,7 @@ ROWS: dict[str, tuple[str, str, str]] = {
             "docs/work/evidence/serve-suite.txt"),
 
     "A03": ("passed",
-            "Verified end to end, and only after four defects were cleared. A scripted Strata worker "
+            "Verified end to end, and only after four defects were cleared. A scripted Cortex worker "
             "emits a bash tool call; the test's own peer opens the gateway's `$events` stream on "
             "`/api/remote.mux` and grants the escalation with `allowed-once`. Asserted: the turn "
             "completes, the tool ran exactly once (`marker_lines == 1`, so a replayed effect would "
@@ -324,7 +324,7 @@ ROWS: dict[str, tuple[str, str, str]] = {
             "cover the API mode, including that a reasoning-only stream, a missing usage block and a "
             "non-matching answer are refused rather than scored. Runs against the mock worker are "
             "labelled as harness tests, never as performance results.",
-            "strata_control/tune_api.py, tests/tuning/test_tune_api.py"),
+            "cortex_control/tune_api.py, tests/tuning/test_tune_api.py"),
     "T05": ("passed",
             "Benchmark-only levers are measured but stripped from the exported args, and "
             "verify_exported() re-measures the configuration as it would actually be written; a "
@@ -338,12 +338,12 @@ ROWS: dict[str, tuple[str, str, str]] = {
             "not, the reason in plain words. An unknown identity is never treated as a match, and "
             "incomparable history is retained rather than deleted. Twenty-one tests cover each "
             "element of the key separately.",
-            "tests/tuning/test_tune_history.py, strata_control/tune_history.py"),
+            "tests/tuning/test_tune_history.py, cortex_control/tune_history.py"),
     "T07": ("passed",
-            "`strata tune apply` revalidates the report hash, re-checks the sweep's artifact identity "
+            "`cortex tune apply` revalidates the report hash, re-checks the sweep's artifact identity "
             "against what is installed, refuses an incomplete sweep, a no-change result, material "
             "drift or a report edited after review, snapshots the previous bytes, and writes "
-            "atomically; `strata tune rollback` restores those exact bytes and refuses if the "
+            "atomically; `cortex tune rollback` restores those exact bytes and refuses if the "
             "configuration was edited since. Nothing applies automatically. The one gap is stated by "
             "the command itself: the candidate start is not verified against a running model because "
             "no supported model fits this Mac, so `--verify` is wired and tested but the CLI passes "
@@ -412,7 +412,7 @@ ROWS: dict[str, tuple[str, str, str]] = {
             "packaging/README.md, docs/work/evidence/tauri-artifact.txt"),
     "U12": ("passed",
             "A packaged build has no success path that uses demo responses or demo metrics: the "
-            "host refuses to simulate when STRATA_PACKAGED is set and returns a typed error "
+            "host refuses to simulate when CORTEX_PACKAGED is set and returns a typed error "
             "instead, the monitor reports `none` rather than invented readings, and this matrix "
             "records every failure, skip and remaining item.",
             "docs/work/IMPLEMENTATION_STATUS.md 1.7, this file"),
@@ -448,7 +448,7 @@ def main() -> int:
         f"Generated by `packaging/acceptance_matrix.py` at "
         f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')} for revision `{revision}`.",
         "",
-        "Every row of `strata-acceptance-checklist.md` appears exactly once, with an explicit "
+        "Every row of `cortex-acceptance-checklist.md` appears exactly once, with an explicit "
         "result. `--check` fails if a row is missing, so a gap is a build error rather than an "
         "oversight.",
         "",
@@ -496,15 +496,15 @@ def main() -> int:
 def _checklist_ids() -> set[str]:
     """The requirement IDs the handoff's checklist actually contains."""
     checklist = Path("/Users/nikoveit/Documents/deepseek-harness/ENDING PLAN/"
-                     "strata-acceptance-checklist.md")
+                     "cortex-acceptance-checklist.md")
     if not checklist.exists():
         # Resolve the containing directory of the handoff if it has moved, per the packet's own rule.
         for candidate in Path("/Users/nikoveit/Documents/deepseek-harness").rglob(
-                "strata-acceptance-checklist.md"):
+                "cortex-acceptance-checklist.md"):
             checklist = candidate
             break
     if not checklist.exists():
-        raise SystemExit("cannot find strata-acceptance-checklist.md")
+        raise SystemExit("cannot find cortex-acceptance-checklist.md")
     import re
     return set(re.findall(r"^\|\s*([A-Z][0-9]{2})\s*\|", checklist.read_text(encoding="utf-8"),
                           re.MULTILINE))

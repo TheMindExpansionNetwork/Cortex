@@ -2,10 +2,10 @@
 # The trellis MMQ overlay on a pinned llama.cpp: it generates, every copied header is the pinned one except the patched
 # ones, and the patched ones only gain lines (TQ routing, three externs, config copies of IQ2_XS's).
 get_filename_component(CMAKE_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
-include(${CMAKE_CURRENT_LIST_DIR}/strata_ggml_tq_overlay.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cortex_ggml_tq_overlay.cmake)
 file(REMOVE_RECURSE "${OUT}")
-strata_ggml_tq_overlay("${LLAMA}" "${OUT}")
-if(NOT STRATA_TQ_OVERLAY_OK)
+cortex_ggml_tq_overlay("${LLAMA}" "${OUT}")
+if(NOT CORTEX_TQ_OVERLAY_OK)
   message(FATAL_ERROR "overlay did not generate on ${LLAMA}")
 endif()
 set(CU "${LLAMA}/ggml/src/ggml-cuda")

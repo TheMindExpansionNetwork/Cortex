@@ -1,6 +1,6 @@
 # Image generation (Qwen-Image-2.1-Turbo)
 
-Strata's server can also make images: `POST /v1/images/generations`, OpenAI's images API. The model is
+Cortex's server can also make images: `POST /v1/images/generations`, OpenAI's images API. The model is
 [Qwen-Image-2.1-Turbo](https://huggingface.co/Qwen/Qwen-Image-2.1-Turbo) (8 steps, CFG 1) in
 [Unsloth's GGUF quants](https://huggingface.co/unsloth/Qwen-Image-2.1-Turbo-GGUF), run by
 [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) (`sd-cli`), which setup compiles for your GPU.
@@ -17,7 +17,7 @@ commercially.
 
 or, for an install that is already set up, without running the whole setup again:
 
-    .venv/bin/python tools/image/install.py --config strata-<model>.json
+    .venv/bin/python tools/image/install.py --config cortex-<model>.json
 
 Setup compiles `sd-cli` (stable-diffusion.cpp at a pinned commit) into `engine-image/`, downloads three files into
 the data folder's `models/qwen-image-2.1-turbo/` and checks each against its SHA-256, and writes an `"images"` section
@@ -51,11 +51,11 @@ time of sd.cpp's default half overlap.
 | `size` | `WIDTHxHEIGHT`, each side a multiple of 32 from 256 to 2048 (`max_side`); default and `auto`: `1024x1024` |
 | `n` | images, 1 to 4 (`max_n`); image *i* uses seed + *i* |
 | `response_format` | `b64_json` (default) or `url` (`/v1/images/files/<random name>.png`; the server keeps the newest 64) |
-| `seed` | Strata's: a whole number for a repeatable image (default: random; the answer says which) |
-| `steps` | Strata's: 8 (Turbo's schedule). Another count uses stable-diffusion.cpp's own schedule, which Turbo was not made for |
+| `seed` | Cortex's: a whole number for a repeatable image (default: random; the answer says which) |
+| `steps` | Cortex's: 8 (Turbo's schedule). Another count uses stable-diffusion.cpp's own schedule, which Turbo was not made for |
 
 The answer is OpenAI's shape (`created`, `data[].b64_json` or `data[].url`, `revised_prompt` = the prompt) plus
-`data[].seed` and a `strata` object with the seconds, steps and backend. The settings are the model card's for
+`data[].seed` and a `cortex` object with the seconds, steps and backend. The settings are the model card's for
 stable-diffusion.cpp: 8 steps, CFG 1, euler, Turbo's own sigmas, `--diffusion-fa`. An image from the API is the PNG
 plain `sd-cli` writes with the same arguments, byte for byte.
 

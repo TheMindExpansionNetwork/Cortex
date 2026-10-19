@@ -1,6 +1,6 @@
 import { tr } from '../lib/i18n';
 /**
- * Strata primitives.
+ * Cortex primitives.
  *
  * These wrap the kit's own component classes (`st-*` from ui/components.css)
  * rather than inventing a parallel set, so the app and the design reference stay
@@ -206,7 +206,7 @@ export function Field({ label, hint, impact, children, wide, }: {
     </FieldContext.Provider>);
 }
 /**
- * A listbox styled as a Strata field.
+ * A listbox styled as a Cortex field.
  *
  * This replaces a native `<select>`, whose popup the OS draws — on macOS a dark
  * system menu with a blue highlight, which shared nothing with the rest of the

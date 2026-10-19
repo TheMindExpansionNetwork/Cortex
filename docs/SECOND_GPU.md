@@ -35,7 +35,7 @@ compute capacity.
 The experiment requires the corresponding visible CUDA devices and a CUDA
 enabled build. Each card must keep at least 512 MiB free. Tiers must be enabled
 in order. Under WDDM (Windows, WSL2), CUDA registration of the host expert arena is capped at
-8 GiB to leave room for the contexts and MTP on CUDA0 (`STRATA_ARENA_PIN_GIB` overrides it; on Linux the whole
+8 GiB to leave room for the contexts and MTP on CUDA0 (`CORTEX_ARENA_PIN_GIB` overrides it; on Linux the whole
 arena is registered). The rest remains
 available to the CPU pool; the PCIe expert path is available only for the
 registered layers. Without secondary GPUs, the original uncapped registration
@@ -56,7 +56,7 @@ On Windows, from PowerShell in the installation folder:
 To test the layer placement instead, add `--gpu-placement layer` to the setup
 command. To go back, run the same command with `--gpu-placement stripe`. After
 the new engine is built, the mode can also be changed without a rebuild: edit
-`--expert-cache-remote-placement` in `strata-iq3_xxs.json` from `layer` to
+`--expert-cache-remote-placement` in `cortex-iq3_xxs.json` from `layer` to
 `stripe` or vice versa and restart the server. If the argument is absent, the
 default is `stripe`.
 
@@ -65,7 +65,7 @@ installation when prompted. Setup recompiles the engine, updates its server
 configuration, and starts it. Later starts keep those settings. To tune the
 slots without recompiling, edit the values after `--expert-cache-device1`,
 `--expert-cache-device2` and `--expert-cache-device3` in the stored
-`strata-iq3_xxs.json`, then restart with `.\run-iq3_xxs.bat`.
+`cortex-iq3_xxs.json`, then restart with `.\run-iq3_xxs.bat`.
 
 Compare identical requests at one, two and four GPUs, preferably with several
 repeats. VRAM use alone does not show useful offload: compare the per-request
@@ -91,7 +91,7 @@ above. The engine's default is off; since 0.1.39b setup adds it to a config on
 two or more GPUs (`--gpus`, or "use both" at start). It acts only when a helper
 cache is configured; a layer split runs exactly as before. To leave it out:
 setup's `--no-remote-expert-opt`, or `"remote_expert_opt": false` in the
-model's `strata-*.json` (kept when setup runs again). Measured by the PR's
+model's `cortex-*.json` (kept when setup runs again). Measured by the PR's
 author: dual RTX 4090 +63% mixed / +132% code decode over the plain helper
 path; RTX 5090 + 4090 +28% / +63%. The primary cache avoids admitting experts already held
 by a helper, and helpers replace cold experts with frequently routed CPU
@@ -146,7 +146,7 @@ alternative to the CUDA1-3 caches above, not a third tier beside them.
   bridge reported peer access, enabled it, and `cudaMemcpyPeerAsync` then copied nothing, so the peer computed on
   zeros and the first prompt came back NaN. A test copy each way now decides; if it arrives wrong the log says so
   and the prompt path uses the host route (the one without P2P: activations and rows through mapped host memory).
-  `STRATA_PEER_NO_P2P=1` asks for that route by hand.
+  `CORTEX_PEER_NO_P2P=1` asks for that route by hand.
 - `--peer-slots N` (default 0): cap the tier at N experts; 0 = as many as fit.
 - `--peer-adapt-swaps N` (default -1): swaps per adaptive round on the peer;
   -1 uses the primary's `--adapt-swaps`.
@@ -164,8 +164,8 @@ the device must be visible; it refuses otherwise. It also refuses
 `--layer-split` (a different second-GPU mode: use one or the other) and
 `--expert-cache-device1..3` (the peer tier already caches experts on that card):
 
-    strata generate: --peer-device cannot be combined with --layer-split (use one or the other)
-    strata generate: --peer-device cannot be combined with --expert-cache-device1..3 (the peer tier already caches experts there)
+    cortex generate: --peer-device cannot be combined with --layer-split (use one or the other)
+    cortex generate: --peer-device cannot be combined with --expert-cache-device1..3 (the peer tier already caches experts there)
 
 Without `--peer-device` the binary is unchanged; its output is byte-identical
 to the release. With `--peer-device` and the same expert set split across the
@@ -207,13 +207,13 @@ cache in real VRAM; freeing another app's sticky allocation on the same card
 was worth about the same again.  Prefer explicit counts on a card that shares
 its VRAM with anything else.
 
-## Choosing the primary device on Windows (`STRATA_PRIMARY_DEVICE`)
+## Choosing the primary device on Windows (`CORTEX_PRIMARY_DEVICE`)
 
 The engine runs the model on the device the runtime numbers 0.  Windows' HIP
 runtime enumerates the cards in a fixed order that `HIP_VISIBLE_DEVICES` only
 filters - it cannot reorder - so on a PC whose faster card comes second (an RX
 6800 after an RX 6600, say) a run with both visible could only put the model on
-the slow one.  `STRATA_PRIMARY_DEVICE=N` picks another visible ordinal as the
+the slow one.  `CORTEX_PRIMARY_DEVICE=N` picks another visible ordinal as the
 primary; unset or 0 is upstream's behavior.
 
 - the helper caches (`--expert-cache-device1..3`) take the visible devices

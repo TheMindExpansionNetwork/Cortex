@@ -16,13 +16,13 @@ test('the generated profile names credentials, never carries them, and declares 
   assert.deepEqual(Object.values(p.env).sort(), ['local-secret-key-1', 'sk-live-ABCDEFGH']);
   const entries = JSON.parse(p.patch.replace(/^#.*\n/, ''));
   const providers = entries.find(e => e.id === 'llm-pi-ai').config.providers;
-  assert.deepEqual(Object.keys(providers).sort(), ['api-c0nn-1234-ab', 'strata-local']);
-  assert.equal(providers['strata-local'].models[0].contextWindow, 32768);
-  assert.equal(providers['strata-local'].models[0].maxTokens, 9830, 'a local model gets 30 percent of its window for a reply (it was 8192, which cut big answers off) and the rest stays for the conversation, so the Harness can compact it');
-  assert.equal(providers['strata-local'].models[0].reasoning, true);
-  assert.equal(providers['strata-local'].compat.thinkingFormat, 'chat-template');
+  assert.deepEqual(Object.keys(providers).sort(), ['api-c0nn-1234-ab', 'cortex-local']);
+  assert.equal(providers['cortex-local'].models[0].contextWindow, 32768);
+  assert.equal(providers['cortex-local'].models[0].maxTokens, 9830, 'a local model gets 30 percent of its window for a reply (it was 8192, which cut big answers off) and the rest stays for the conversation, so the Harness can compact it');
+  assert.equal(providers['cortex-local'].models[0].reasoning, true);
+  assert.equal(providers['cortex-local'].compat.thinkingFormat, 'chat-template');
   assert.equal(providers['api-c0nn-1234-ab'].models[1].contextWindow, ASSUMED_API_CONTEXT, 'an unknown API window is a stated assumption, not a catalog default');
-  assert.equal(entries.find(e => e.id === 'agent-default-model').config.provider, 'strata-local', 'local stays the default');
+  assert.equal(entries.find(e => e.id === 'agent-default-model').config.provider, 'cortex-local', 'local stays the default');
   assert.equal(entries.find(e => e.id === 'session-title-llm').disabled, true);
 });
 
@@ -47,7 +47,7 @@ test('a route fingerprint changes when its key or address changes, and only then
 test('routeFor picks the chat\'s own choice', () => {
   const p = buildProfile({ local, connections: [conn] });
   assert.equal(routeFor(p, { connectionId: conn.id, modelId: 'm2' }).modelId, 'm2');
-  assert.equal(routeFor(p, { instanceId: 'inst-1' }).route, 'strata-local');
+  assert.equal(routeFor(p, { instanceId: 'inst-1' }).route, 'cortex-local');
   assert.equal(routeFor(p, { connectionId: 'gone', modelId: 'm1' }), null);
   assert.equal(outputBudget(2048), 1536, 'a small window keeps a quarter for the prompt');
   assert.equal(outputBudget(1_000_000), 32768, 'a big window with no known maximum gets a generous 32K, not 8K');
@@ -59,8 +59,8 @@ test('routeFor picks the chat\'s own choice', () => {
 });
 
 test('the agent environment keeps what a shell needs and drops ambient credentials', () => {
-  const env = agentEnvironment({ PATH: '/bin', HOME: '/h', OPENAI_API_KEY: 'x', GITHUB_TOKEN: 'y', AWS_SECRET_ACCESS_KEY: 'z', SSH_AUTH_SOCK: 's', SystemRoot: 'C:\\Windows' }, { STRATA_API_KEY_X: 'k' });
-  assert.deepEqual(Object.keys(env).sort(), ['DSH_PERMISSION_MODE', 'DSH_TELEMETRY_DISABLED', 'HOME', 'PATH', 'STRATA_API_KEY_X', 'SystemRoot']);
+  const env = agentEnvironment({ PATH: '/bin', HOME: '/h', OPENAI_API_KEY: 'x', GITHUB_TOKEN: 'y', AWS_SECRET_ACCESS_KEY: 'z', SSH_AUTH_SOCK: 's', SystemRoot: 'C:\\Windows' }, { CORTEX_API_KEY_X: 'k' });
+  assert.deepEqual(Object.keys(env).sort(), ['DSH_PERMISSION_MODE', 'DSH_TELEMETRY_DISABLED', 'HOME', 'PATH', 'CORTEX_API_KEY_X', 'SystemRoot']);
 });
 
 test('redact removes secret values and launch tokens from log text', () => {
@@ -151,8 +151,8 @@ test('the browser and the person\'s own tools have plain sentences, translated i
     ['mcp__browser__browser_tabs', 'Managing browser tabs', 'Managed browser tabs', "Couldn't manage the browser tabs"],
     ['mcp__browser__browser_close', 'Closing the browser page', 'Closed the browser page', "Couldn't close the browser page"],
     ['mcp__browser__browser_something_new', 'Using the browser', 'Used the browser', 'The browser step failed'],
-    ['mcp__strata-instructions__house_style', 'Reading your instructions', 'Read your instructions', "Couldn't read your instructions"],
-    ['mcp__strata-commands__check_site', 'Running your tool', 'Ran your tool', 'Your tool failed'],
+    ['mcp__cortex-instructions__house_style', 'Reading your instructions', 'Read your instructions', "Couldn't read your instructions"],
+    ['mcp__cortex-commands__check_site', 'Running your tool', 'Ran your tool', 'Your tool failed'],
     ['mcp__github__create_issue', 'Using a tool', 'Used a tool', 'The tool failed'],
   ];
   for (const [name, running, done, failed] of cases) {
@@ -161,7 +161,7 @@ test('the browser and the person\'s own tools have plain sentences, translated i
   }
   const nav = presentTool({ callId: 'c1', name: 'mcp__browser__browser_navigate', args: { url: 'https://example.com' } });
   assert.equal(nav.target, 'https://example.com'); assert.equal(nav.verb, 'Opening a page in the browser');
-  const own = presentTool({ callId: 'c2', name: 'mcp__strata-commands__check_site', args: {} });
+  const own = presentTool({ callId: 'c2', name: 'mcp__cortex-commands__check_site', args: {} });
   assert.equal(own.target, 'check site');
   assert.equal(presentTool({ callId: 'c3', name: 'mcp__github__create_issue', args: {} }).target, 'mcp__github__create_issue', 'an unknown connected tool keeps its name');
   assert.equal(presentTool({ callId: 'c4', name: 'mcp__browser__browser_snapshot', args: {} }).preview, '', 'no empty braces on a card');

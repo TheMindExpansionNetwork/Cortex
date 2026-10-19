@@ -1,5 +1,5 @@
 // src/prefill/moe_f16_kq.hpp - gfx11: the K-quant prompt experts on the F16 matrix cores (moe_f16_kq.cu; the switch,
-// STRATA_PF_F16=1 with STRATA_PF_FUSED_KQ=1, is moe_f16_common.cuh's).
+// CORTEX_PF_F16=1 with CORTEX_PF_FUSED_KQ=1, is moe_f16_common.cuh's).
 // Internal to moe_fused_iq.cu, which owns the native experts' tables and launches.
 #pragma once
 
@@ -7,10 +7,10 @@
 
 #include <cuda_runtime.h>
 
-#include "strata/prefill/moe_fused.hpp"
-#include "strata/prefill/moe_fused_iq.hpp"
+#include "cortex/prefill/moe_fused.hpp"
+#include "cortex/prefill/moe_fused_iq.hpp"
 
-namespace strata::prefill::fused::f16kq {
+namespace cortex::prefill::fused::f16kq {
 
 /// The gate/up type has a kernel here (and this build has gfx11 device code).
 bool covers(int gu_type);
@@ -27,4 +27,4 @@ bool covers_down(int d_type);
 void down(const Batch& b, const NativeGeom& g, const int32_t* ts, const int2* tiles, const int32_t* off, int64_t n, int n_expert,
           int64_t work_bound, const uint8_t* h, float* dm, cudaStream_t s);
 
-}  // namespace strata::prefill::fused::f16kq
+}  // namespace cortex::prefill::fused::f16kq

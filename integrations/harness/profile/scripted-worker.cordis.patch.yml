@@ -1,4 +1,4 @@
-# A TEST-ONLY overlay for the scripted Strata worker, layered over the product profile
+# A TEST-ONLY overlay for the scripted Cortex worker, layered over the product profile
 # (`cordis.patch.yml`) by `tool_flow_e2e.py --patch` order. It is not part of the shipped profile and
 # nothing but that test applies it: the product profile must keep answering title requests.
 #

@@ -2,7 +2,7 @@
 
 **Route** `#/serving` · **File** `src/screens/Serving.tsx` (329 lines)
 
-The screen for people wiring Strata into something else. It is the most
+The screen for people wiring Cortex into something else. It is the most
 "developer" surface in the app, which makes it the one most likely to be skimmed
 by someone who does not read API documentation for fun.
 

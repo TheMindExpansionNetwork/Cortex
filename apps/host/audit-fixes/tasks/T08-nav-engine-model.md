@@ -3,7 +3,7 @@
 **Phase 1** · 1 findings (1 high, 0 medium, 0 low) · Depends on: T01
 
 ## Goal
-Engine tuning is what makes Strata different, but it sits under More. Put Engine and Model in the primary nav and make the sidebar model card open Model.
+Engine tuning is what makes Cortex different, but it sits under More. Put Engine and Model in the primary nav and make the sidebar model card open Model.
 
 ## Files to change
 These are the likely files. Read them before editing, and change others only if the fix needs it.

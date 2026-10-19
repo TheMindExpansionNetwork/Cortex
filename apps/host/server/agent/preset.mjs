@@ -3,7 +3,7 @@
  * packages/bundle/web-app/presets/standard.patch.yml) with the differences the app needs, and nothing else.
  *
  * A patch replaces the whole preset row, so the list is restated here. `tests/agent-tools.test.mjs` compares this list
- * with the pinned Harness's own file (when STRATA_HARNESS_DIR is set), so a Harness update that adds or renames a
+ * with the pinned Harness's own file (when CORTEX_HARNESS_DIR is set), so a Harness update that adds or renames a
  * plugin fails a test instead of silently dropping a tool.
  *
  * Differences from `standard`, each with its reason:

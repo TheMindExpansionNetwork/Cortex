@@ -1,6 +1,6 @@
 // available_host_bytes(): MemAvailable, the cgroup limits above this process, and the operator's cap, on fixture
 // directories standing in for /proc/meminfo, /proc/self/cgroup and /sys/fs/cgroup.  CPU only, no GPU.
-#include "strata/core/conversation_memory.hpp"
+#include "cortex/core/conversation_memory.hpp"
 
 #ifdef _WIN32
 #include <process.h>
@@ -16,7 +16,7 @@
 #include <fstream>
 #include <string>
 
-using namespace strata::core;
+using namespace cortex::core;
 namespace fs = std::filesystem;
 
 namespace {
@@ -34,7 +34,7 @@ struct Fixture {
     fs::path dir;
     Fixture() {
         static int n = 0;
-        dir = fs::temp_directory_path() / ("strata_memory_guard_" + std::to_string((long) ::getpid()) + "_" + std::to_string(n++));
+        dir = fs::temp_directory_path() / ("cortex_memory_guard_" + std::to_string((long) ::getpid()) + "_" + std::to_string(n++));
         fs::remove_all(dir);
         fs::create_directories(dir / "cgroup");
     }
@@ -115,11 +115,11 @@ int main() {
     {
         Fixture f;
         f.meminfo(120 * GiB, 25 * GiB);   // the stale view: MemAvailable says 25 GiB
-        f.self("0::/system.slice/strata.service");
+        f.self("0::/system.slice/cortex.service");
         f.put("cgroup/memory.max", "max\n"); f.put("cgroup/memory.high", "max\n");
         f.put("cgroup/memory.current", 99 * GiB + 724 * MiB);
-        f.put("cgroup/system.slice/strata.service/memory.max", "max\n");
-        f.put("cgroup/system.slice/strata.service/memory.current", 97 * GiB);
+        f.put("cgroup/system.slice/cortex.service/memory.max", "max\n");
+        f.put("cgroup/system.slice/cortex.service/memory.current", 97 * GiB);
         check(f.sample() && f.sample()->available == 25 * GiB && f.sample()->source == MemorySource::meminfo,
               "without the cap the stale MemAvailable is believed");
         auto r = f.sample(100 * GiB);
@@ -267,12 +267,12 @@ int main() {
         };
         Fixture f;
         f.meminfo(120 * GiB, 25 * GiB);
-        f.self("0::/system.slice/strata.service");
+        f.self("0::/system.slice/cortex.service");
         f.put("cgroup/memory.max", "max\n"); f.put("cgroup/memory.high", "max\n");
         f.put("cgroup/memory.current", 98 * GiB + 324 * MiB);
         f.put("cgroup/memory.stat", stat(3 * GiB + 800 * MiB, 27 * GiB, 65 * GiB));
-        f.put("cgroup/system.slice/strata.service/memory.max", "max\n");
-        f.put("cgroup/system.slice/strata.service/memory.current", 90 * GiB);
+        f.put("cgroup/system.slice/cortex.service/memory.max", "max\n");
+        f.put("cgroup/system.slice/cortex.service/memory.current", 90 * GiB);
         // the operator's cap: the root's memory.current less the root's inactive_file; active_file and shmem are not credited
         auto r = f.sample(99 * GiB);
         check(r && r->source == MemorySource::flag && r->available == 99 * GiB - (98 * GiB + 324 * MiB - 3 * GiB - 800 * MiB),
@@ -307,12 +307,12 @@ int main() {
         }
         // a cgroup limit's own group is credited from its own memory.stat
         f.put("cgroup/memory.stat", stat(0, 0, 0));
-        f.put("cgroup/system.slice/strata.service/memory.max", 92 * GiB);
-        f.put("cgroup/system.slice/strata.service/memory.stat", stat(1 * GiB, 0, 0));
+        f.put("cgroup/system.slice/cortex.service/memory.max", 92 * GiB);
+        f.put("cgroup/system.slice/cortex.service/memory.stat", stat(1 * GiB, 0, 0));
         r = f.sample();
         check(r && r->source == MemorySource::cgroup && r->available == 3 * GiB && r->credit == 1 * GiB &&
                   r->limit == 92 * GiB && r->current == 90 * GiB, "a cgroup limit credits its own group's inactive_file");
-        f.put("cgroup/system.slice/strata.service/memory.stat", stat(500 * GiB, 0, 0));
+        f.put("cgroup/system.slice/cortex.service/memory.stat", stat(500 * GiB, 0, 0));
         f.meminfo(300 * GiB, 200 * GiB);
         r = f.sample();
         check(r && r->available == 92 * GiB && r->credit == 90 * GiB, "cgroup term: the credit stops at the usage too");

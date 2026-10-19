@@ -1,19 +1,19 @@
-# Strata UI fixes — handoff for Claude Code
+# Cortex UI fixes — handoff for Claude Code
 
-This package comes from the Strata UI audit of 7 October 2026: 177 findings across 210 screen states. Here they are split into 19 tasks. Each task file lists the findings it covers, the files to change, and how to check the result.
+This package comes from the Cortex UI audit of 7 October 2026: 177 findings across 210 screen states. Here they are split into 19 tasks. Each task file lists the findings it covers, the files to change, and how to check the result.
 
 ## What's inside
 - `tasks/` has one file per task, ready to give to a subagent.
 - `findings.json` has all 177 findings with severity, state, issue, suggested fix and assigned task.
 - `designs/` holds the reference designs for T09 (Model) and T10 (Engine v3). They are design-component source files: read them for structure, copy, colours and behaviour. They won't run on their own.
-- `.claude/agents/strata-fixer.md` is a subagent definition (Sonnet, focused on one task).
+- `.claude/agents/cortex-fixer.md` is a subagent definition (Sonnet, focused on one task).
 - `PROMPTS.md` has the prompts to paste into Claude Code.
 - `REVIEW.md` is the checklist for the review after each phase.
 - `PROGRESS.md` is the log that each task appends to.
 
 ## Setup
 1. Copy this folder into the repo root as `audit-fixes/` (so paths read `audit-fixes/tasks/T01-…`).
-2. Copy `audit-fixes/.claude/agents/strata-fixer.md` to `.claude/agents/strata-fixer.md` in the repo.
+2. Copy `audit-fixes/.claude/agents/cortex-fixer.md` to `.claude/agents/cortex-fixer.md` in the repo.
 3. Make sure `docs/evidence/audit-2026-10-07/` (the screenshots) is in the repo, because the task files point to it.
 4. Run `npm install`, then `npm run check` and `node --test tests/` once. Note anything that already fails, so it isn't blamed on a task.
 

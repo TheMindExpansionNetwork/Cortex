@@ -414,7 +414,7 @@ class SplitArtifactTests(unittest.TestCase):
             self.assertEqual(rc, 0, log)
             text = (root / "pack" / "native_experts.txt").read_text()
             head, line0, line1 = text.splitlines()
-            self.assertTrue(head.startswith("# strata native experts v4:"), head)
+            self.assertTrue(head.startswith("# cortex native experts v4:"), head)
             self.assertIn("(n_expert 4,", head)
             s2, s3 = paths[1].name, paths[2].name
             self.assertEqual(line0.split()[8:], [s2])
@@ -444,7 +444,7 @@ class SplitArtifactTests(unittest.TestCase):
             rc, log = run_pack(paths[0], root / "pack")
             self.assertEqual(rc, 0, log)
             head, line0, line1 = (root / "pack" / "native_experts.txt").read_text().splitlines()
-            self.assertTrue(head.startswith("# strata native experts v3: layer gu_type d_type offset blob_bytes "
+            self.assertTrue(head.startswith("# cortex native experts v3: layer gu_type d_type offset blob_bytes "
                                             "gate_off up_off down_off [shard] (n_expert 4, total "), head)
             self.assertEqual(line1.split()[8:], [paths[2].name])
 
@@ -572,7 +572,7 @@ class HadamardTests(unittest.TestCase):
     def test_explicit_signs_written(self):
         text = iq_pack.hadamard_spec(self.meta(), self.layout(), self.N_EMBD, self.N_FF)
         lines = text.splitlines()
-        self.assertTrue(lines[0].startswith("# strata hadamard v1"))
+        self.assertTrue(lines[0].startswith("# cortex hadamard v1"))
         self.assertEqual(lines[1], "block 128")
         self.assertEqual(lines[2].split()[:4], ["signs", str(self.N_FF), "1", "-1"])
         self.assertEqual(len(lines[3].split()), 2 + self.N_EMBD)
@@ -593,7 +593,7 @@ class HadamardTests(unittest.TestCase):
             with self.subTest(what):
                 got = iq_pack.hadamard_spec(m, self.layout(), self.N_EMBD, self.N_FF)
                 self.assertIsInstance(got, str)
-                self.assertFalse(got.startswith("# strata hadamard"))
+                self.assertFalse(got.startswith("# cortex hadamard"))
         got = iq_pack.hadamard_spec(self.meta(), self.layout(gu=42), self.N_EMBD, self.N_FF)
         self.assertIn("Q2_0", got)
 
@@ -603,14 +603,14 @@ class NativeExpertsV5Tests(unittest.TestCase):
     ROWS = "0 145 146 0 100 1 2 3\n1 145 146 100 100 4 5 6\n"
 
     def table(self, version, tail="(n_expert 2, total 200)"):
-        return "# strata native experts v%s: layer gu_type d_type offset ... %s\n" % (version, tail) + self.ROWS
+        return "# cortex native experts v%s: layer gu_type d_type offset ... %s\n" % (version, tail) + self.ROWS
 
     def test_v3_and_v4_become_v5(self):
         for v in ("3", "4"):
             with self.subTest(v):
                 got = iq_pack.native_experts_v5(self.table(v))
                 head, rest = got.split("\n", 1)
-                self.assertTrue(head.startswith("# strata native experts v5: layer gu_type"))
+                self.assertTrue(head.startswith("# cortex native experts v5: layer gu_type"))
                 self.assertTrue(head.endswith("(n_expert 2, total 200) - v5: Hadamard-folded experts, see hadamard.txt"))
                 self.assertEqual(rest, self.ROWS)
 
@@ -618,7 +618,7 @@ class NativeExpertsV5Tests(unittest.TestCase):
         for v in ("2", "5", "6", "10"):
             with self.subTest(v):
                 got = iq_pack.native_experts_v5(self.table(v))
-                self.assertFalse(got.startswith("# strata native experts"))
+                self.assertFalse(got.startswith("# cortex native experts"))
                 self.assertIn("v%s" % v, got)
                 self.assertIn("v3 and v4", got)
         got = iq_pack.native_experts_v5("# something else\n" + self.ROWS)
@@ -636,7 +636,7 @@ class NativeExpertsV5Tests(unittest.TestCase):
             paths = split_model(root, split_layer=False)
             out = root / "pack"
             with patch.object(iq_pack, "expert_layout", v6_layout), \
-                    patch.object(iq_pack, "hadamard_spec", return_value="# strata hadamard v1\nblock 32\n"):
+                    patch.object(iq_pack, "hadamard_spec", return_value="# cortex hadamard v1\nblock 32\n"):
                 rc, log = run_pack(paths[0], out)
             self.assertEqual(rc, 1)
             self.assertIn("native_experts.txt v6", log)

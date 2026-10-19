@@ -137,7 +137,7 @@ export function TuningScreen() {
         const url = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' }));
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'strata-engine.json';
+        a.download = 'cortex-engine.json';
         a.click();
         URL.revokeObjectURL(url);
     }

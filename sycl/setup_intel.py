@@ -9,11 +9,11 @@ setup.py's, unchanged.  What is replaced:
 
   - the GPU check: the Intel Arc is offered through setup's AMD path (the one that compiles locally), named and
     sized from sysfs;
-  - the engine step: the SYCL build (build-sycl-aot/strata, run in the strata-sycl-dev image by
-    sycl/serve/strata-sycl.sh; docs/INTEL.md) instead of a CUDA/HIP build;
-  - pictures (opt-in for now, see PICTURES_ON_BY_DEFAULT): read by the portable CPU reader (`strata-vision`, the program the AMD packages carry beside
+  - the engine step: the SYCL build (build-sycl-aot/cortex, run in the cortex-sycl-dev image by
+    sycl/serve/cortex-sycl.sh; docs/INTEL.md) instead of a CUDA/HIP build;
+  - pictures (opt-in for now, see PICTURES_ON_BY_DEFAULT): read by the portable CPU reader (`cortex-vision`, the program the AMD packages carry beside
     their engine, compiled here by setup's own step) on the host; it hands the image embeddings to the engine through
-    /dev/shm, which strata-sycl.sh shares with the container.  A SYCL GPU reader does not exist yet, so "gpu" is read as "cpu"
+    /dev/shm, which cortex-sycl.sh shares with the container.  A SYCL GPU reader does not exist yet, so "gpu" is read as "cpu"
     here; --vision no is the off switch;
   - the RAM rule: the CUDA engine keeps every expert in RAM, the SYCL port streams them from the GGUF into VRAM
     (--stream-experts), so RAM only bounds the KV streaming;
@@ -35,10 +35,10 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 import setup as S  # noqa: E402
 
-SYCL_WRAPPER = ROOT / "sycl" / "serve" / "strata-sycl.sh"
-SYCL_IMAGE = "strata-sycl-dev"
+SYCL_WRAPPER = ROOT / "sycl" / "serve" / "cortex-sycl.sh"
+SYCL_IMAGE = "cortex-sycl-dev"
 SERVER = ROOT / "sycl" / "serve" / "server_intel.py"
-MOUNT = Path(os.environ.get("STRATA_SYCL_ROOT") or ROOT.parent)   # what strata-sycl.sh mounts at /work
+MOUNT = Path(os.environ.get("CORTEX_SYCL_ROOT") or ROOT.parent)   # what cortex-sycl.sh mounts at /work
 
 # Battlemage / Alchemist PCI device ids -> (name, VRAM GB). lspci's database lags new cards (an Arc Pro B70 reads
 # "Intel Corporation Device [8086:e223]"), so the sysfs id is the reliable signal and the name table is ours.
@@ -50,7 +50,7 @@ INTEL_ARC = {"e223": ("Arc Pro B70", 32.0), "e221": ("Arc Pro B60", 24.0), "e211
 
 # Alchemist (DG2, the A-series) has no FP64 hardware and carries the driver's FP64 emulation. On i915 (the A750) a
 # single sycl::malloc_host past ~3 GiB also fails, so the experts load into a CPU-computed RAM arena instead of the
-# pinned mirror (--mmap-experts + STRATA_VERIFY_NO_HOST=0 - docs/INTEL.md, "Arc A750"). On xe (the A770) the mirror is
+# pinned mirror (--mmap-experts + CORTEX_VERIFY_NO_HOST=0 - docs/INTEL.md, "Arc A750"). On xe (the A770) the mirror is
 # built in chunks past that limit and the A-series uses the ordinary streamed path; see to_sycl().
 ALCHEMIST_IDS = frozenset({"56a0", "56a1", "56a2", "56a5", "56a6", "5690"})
 
@@ -91,14 +91,14 @@ def sycl_engine():
     """The SYCL build: (binary, why-not)."""
     if S.WIN:
         return None, "the SYCL port runs on Linux only"
-    exe = next((b for b in (ROOT / "build-sycl-aot" / "strata", ROOT / "build-sycl" / "strata") if b.exists()), None)
+    exe = next((b for b in (ROOT / "build-sycl-aot" / "cortex", ROOT / "build-sycl" / "cortex") if b.exists()), None)
     if exe is None:
         return None, "it is not built (docs/INTEL.md, \"How to build it\": Docker, then sycl/tools/build.sh in the image)"
     return exe, None
 
 
 def sycl_path(path) -> str:
-    """A host path as the engine's container sees it: the folder above the Strata checkout (or STRATA_SYCL_ROOT) is
+    """A host path as the engine's container sees it: the folder above the Cortex checkout (or CORTEX_SYCL_ROOT) is
     mounted at /work."""
     p, root = Path(path).resolve(), MOUNT.resolve()
     try:
@@ -128,7 +128,7 @@ def drop(args, name, value=False):
 # pictures stay opt-in here (--vision yes); flip this to True to make them the default like on the other makes of card.
 PICTURES_ON_BY_DEFAULT = False
 
-READER_DIR = ROOT / "engine-sycl"    # the folder setup treats as the engine's: BUILD.json and, for pictures, the CPU reader strata-vision
+READER_DIR = ROOT / "engine-sycl"    # the folder setup treats as the engine's: BUILD.json and, for pictures, the CPU reader cortex-vision
 
 
 def intel_vision(asked, vram_gb: float = 0.0) -> str:
@@ -147,7 +147,7 @@ def small_card(vram_gb: float, driver: str) -> bool:
     return 0 < vram_gb < SMALL_CARD_GB or driver == "i915"
 
 
-# #1980: on a layer split the host mirror covers the first stage only, so with STRATA_VERIFY_NO_HOST=1 (strata-sycl.sh's
+# #1980: on a layer split the host mirror covers the first stage only, so with CORTEX_VERIFY_NO_HOST=1 (cortex-sycl.sh's
 # default) a later stage that cannot hold all of its layers' experts is REFUSED at the start.  Measured on 2x Arc Pro B60
 # 24 GB with the trim and a 1024 MiB reserve: IQ3_XXS (42.9 GB of experts, 89% of the 48 GB) stage 1 2230-3731 experts
 # short and refused; NO_HOST=0 runs it at 39-50 tok/s with 0 faults.  IQ2_XS (35.5 GB, 74%) loads 100% resident.
@@ -188,7 +188,7 @@ def to_sycl(cfg: dict, exe: Path, ram: float, keep: dict, vram_gb: float = 0.0, 
 
     An Alchemist card (the A-series, i915 or xe) has no FP64 hardware, so its config carries the driver's FP64
     emulation (a kernel on the sampled path declares double). On i915 (the A750) the experts load into a RAM arena
-    and the CPU computes the ones the card does not hold (--ple-io ram, STRATA_VERIFY_NO_HOST=0 - docs/INTEL.md,
+    and the CPU computes the ones the card does not hold (--ple-io ram, CORTEX_VERIFY_NO_HOST=0 - docs/INTEL.md,
     "Arc A750"). On xe (the A770) the experts are streamed into VRAM like any other Arc; the mirror is built in
     chunks so DG2's >3 GiB single pinned-host allocation limit is not hit, and the build passes
     -ze-opt-greater-than-4GB-buffer-required so the prompt path is correct past the cache's 4 GiB (docs/INTEL.md,
@@ -244,16 +244,16 @@ def to_sycl(cfg: dict, exe: Path, ram: float, keep: dict, vram_gb: float = 0.0, 
     if alchemist:
         if driver == "i915":
             # on i915 the CPU computes the misses and the GPU waits for them at every layer (NO_HOST=0). On xe the
-            # experts are streamed and the mirror is used, so strata-sycl.sh's NO_HOST=1 default stands.
-            env["STRATA_VERIFY_NO_HOST"] = "0"
+            # experts are streamed and the mirror is used, so cortex-sycl.sh's NO_HOST=1 default stands.
+            env["CORTEX_VERIFY_NO_HOST"] = "0"
         # an Alchemist has no FP64 hardware: a kernel that declares double (one is on the sampled path) is refused at its
         # first launch - "'double' is not supported in ... device", the engine dies on the first request with a
         # temperature - unless the driver emulates it (docs/INTEL.md)
         env.update({"IGC_EnableDPEmulation": "1", "OverrideDefaultFP64Settings": "1", "NEOReadDebugKeys": "1"})
-    if exe != ROOT / "build-sycl-aot" / "strata":
-        env["STRATA_SYCL_BIN"] = exe.relative_to(ROOT).as_posix()
+    if exe != ROOT / "build-sycl-aot" / "cortex":
+        env["CORTEX_SYCL_BIN"] = exe.relative_to(ROOT).as_posix()
     if MOUNT.resolve() != ROOT.parent.resolve():
-        env["STRATA_SYCL_ROOT"] = str(MOUNT)
+        env["CORTEX_SYCL_ROOT"] = str(MOUNT)
     if env:
         out["env"] = env
     out.update(keep)
@@ -266,7 +266,7 @@ def install(argv) -> None:
         S.fail("no Intel Arc found (an xe or i915 card in /sys/class/drm)", "on an NVIDIA or AMD card, run ./setup.sh")
     exe, why = sycl_engine()
     if exe is None:
-        S.fail(f"Strata's SYCL engine cannot be used: {why}", "docs/INTEL.md: build it, then run this again")
+        S.fail(f"Cortex's SYCL engine cannot be used: {why}", "docs/INTEL.md: build it, then run this again")
     for name in ("gpus", "amd_gpus", "amd_problem", "hip_vision", "build_engine_hip", "hipblaslt_table", "ram_gb",
                  "write_run_script", "start", "say", "main"):
         if not callable(getattr(S, name, None)):
@@ -274,7 +274,7 @@ def install(argv) -> None:
 
     real_ram = S.ram_gb()
     keep = {}                                           # hand-set keys setup does not write: kept across a rerun
-    for p in ROOT.glob("strata-*.json"):
+    for p in ROOT.glob("cortex-*.json"):
         try:
             c = json.loads(p.read_text(encoding="utf-8-sig"))
             keep[p.name] = {k: c[k] for k in ("model_switcher", "sampling") if k in c}
@@ -354,16 +354,16 @@ def install(argv) -> None:
             cfg.setdefault("env", {}).setdefault("ONEAPI_DEVICE_SELECTOR", selector)
         if split:
             # #1980: without it every card keeps a full copy of the dense weights (1.4 GiB each on Flash-Next IQ2_XS) and the
-            # load stops at 96-97% resident; the later stage's missing experts have no host mirror (STRATA_VERIFY_NO_HOST)
-            cfg.setdefault("env", {}).setdefault("STRATA_STAGE_TRIM", "1")
+            # load stops at 96-97% resident; the later stage's missing experts have no host mirror (CORTEX_VERIFY_NO_HOST)
+            cfg.setdefault("env", {}).setdefault("CORTEX_STAGE_TRIM", "1")
             # #1980: a later stage short of VRAM is refused under NO_HOST=1; with the host path on it runs (the host
             # computes those experts).  Only when the experts will likely not fit; a value the user set is kept.
             cards = [intel[i]["vram_gb"] for i in gsel if isinstance(i, int) and 0 <= i < len(intel)]
             arena = S.MODELS.get(model, {}).get("arena_gb", 0)
-            if split_likely_short(arena, cards) and "STRATA_VERIFY_NO_HOST" not in cfg["env"]:
-                cfg["env"]["STRATA_VERIFY_NO_HOST"] = "0"
+            if split_likely_short(arena, cards) and "CORTEX_VERIFY_NO_HOST" not in cfg["env"]:
+                cfg["env"]["CORTEX_VERIFY_NO_HOST"] = "0"
                 S.say(f"  {model}'s {arena:.0f} GB of experts will likely not all fit the {len(cards)} cards' "
-                      f"{sum(cards):.0f} GB of VRAM: the config sets STRATA_VERIFY_NO_HOST=0, so the CPU computes the "
+                      f"{sum(cards):.0f} GB of VRAM: the config sets CORTEX_VERIFY_NO_HOST=0, so the CPU computes the "
                       "experts the later card does not hold instead of the start being refused (#1980). Set it to 1 "
                       "in the config's env if your cards hold everything; a smaller model fits fully (docs/INTEL_ARC.md)")
         need = S.MODELS.get(model, {}).get("ram_gb", 0)
@@ -389,7 +389,7 @@ def install(argv) -> None:
         cfg = json.loads(Path(cfg_path).read_text(encoding="utf-8-sig"))
         if cfg.get("backend") != "sycl":
             return start(cfg_path, *a, **k)
-        script = ROOT / f"run-{Path(cfg_path).stem[len('strata-'):]}.sh"
+        script = ROOT / f"run-{Path(cfg_path).stem[len('cortex-'):]}.sh"
         S.say(f"\nstarting {script.name} ...")
         os.execv("/bin/sh", ["/bin/sh", str(script)])
     S.start = start_sycl

@@ -9,8 +9,8 @@ import { createAgentBridge } from '../server/agent/agent-bridge.mjs';
 import { resolveHarness } from '../server/agent/harness-runtime.mjs';
 import { buildProfile, compactionHeadroom, localOutputBudget } from '../server/agent/profile.mjs';
 
-const HARNESS = process.env.STRATA_HARNESS_DIR;
-const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'STRATA_HARNESS_DIR is not set to a built Harness' : false;
+const HARNESS = process.env.CORTEX_HARNESS_DIR;
+const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'CORTEX_HARNESS_DIR is not set to a built Harness' : false;
 
 test('the reply keeps 30 percent of the window (at most 32K) and compaction gets a headroom that fits, for every window size', () => {
   assert.equal(localOutputBudget(32768), 9830); assert.equal(localOutputBudget(262144), 32768); assert.equal(localOutputBudget(8192), 4096); assert.equal(localOutputBudget(undefined), 9830);
@@ -22,12 +22,12 @@ test('the reply keeps 30 percent of the window (at most 32K) and compaction gets
     assert.ok(Math.floor((w - out) * 0.16) < threshold, `window ${w}: the verbatim tail is smaller than the start point`);
   }
   const profile = buildProfile({ local: [{ id: 'a', modelId: 'm', baseUrl: 'http://x', context: 32768 }], connections: [] });
-  assert.match(profile.patch, /"modelPolicies": \[\s*\{\s*"provider": "strata-local",\s*"model": "m",\s*"headroomTokens": 2867/);
+  assert.match(profile.patch, /"modelPolicies": \[\s*\{\s*"provider": "cortex-local",\s*"model": "m",\s*"headroomTokens": 2867/);
 });
 
 test('a long chat on a small window compacts before it overflows, and the conversation goes on', { skip }, async (t) => {
   const worker = await startScriptedWorker({});
-  const dir = mkdtempSync(join(tmpdir(), 'strata-compact-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-compact-'));
   const ws = join(dir, 'ws'); mkdirSync(ws, { recursive: true });
   const bridge = createAgentBridge({ dataDir: dir, localInstances: () => [{ id: 'i', label: 'S', baseUrl: worker.url, modelId: 'scripted-model', context: 16384, slots: 2 }], connections: () => [], env: process.env, startTimeoutMs: 90_000 });
   t.after(async () => { await bridge.close(); await worker.close(); try { rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch { /* best effort */ } });

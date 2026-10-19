@@ -1,4 +1,4 @@
-// src/prefill/mmq_kq_lib.cu - strata_kq, the shared library with llama.cpp's MMQ prompt kernels for the K-quants
+// src/prefill/mmq_kq_lib.cu - cortex_kq, the shared library with llama.cpp's MMQ prompt kernels for the K-quants
 // (Q4_K, Q5_K, Q5_1, Q6_K: the experts of Unsloth's UD-Q4/Q5/Q6_K_XL files).  MODEL-UPDATE Phase 1: the engine loads
 // every kernel of its own binary when it starts (CUDA_MODULE_LOADING=EAGER, src/program/generate.cpp), so kernels in
 // the engine cost every model VRAM; these four instances were ~3.8 MB of sm_60 code (3 expert slots of IQ3_XXS on a
@@ -8,14 +8,14 @@
 #include "common.cuh"
 #include "mmq.cuh"
 
-#include "strata/prefill/mmq_kq_abi.hpp"
+#include "cortex/prefill/mmq_kq_abi.hpp"
 
 #include <mutex>
 
 #if defined(_WIN32)
-#define STRATA_KQ_EXPORT extern "C" __declspec(dllexport)
+#define CORTEX_KQ_EXPORT extern "C" __declspec(dllexport)
 #else
-#define STRATA_KQ_EXPORT extern "C" __attribute__((visibility("default")))
+#define CORTEX_KQ_EXPORT extern "C" __attribute__((visibility("default")))
 #endif
 
 namespace {
@@ -30,12 +30,12 @@ ggml_backend_cuda_context* ctx_for(int dev) {
 }  // namespace
 
 // the interface version and the argument block's size: both sides are compiled from the same mmq.cuh
-STRATA_KQ_EXPORT int strata_kq_abi() { return STRATA_KQ_ABI_VERSION * 100000 + (int) sizeof(mmq_args); }
+CORTEX_KQ_EXPORT int cortex_kq_abi() { return CORTEX_KQ_ABI_VERSION * 100000 + (int) sizeof(mmq_args); }
 
 // Starts this library's CUDA runtime in the engine's context on `device`: with CUDA_MODULE_LOADING=EAGER (the engine
 // sets it before its first CUDA call) that loads every kernel here now, while the VRAM for it is still free.
 // 0 = ready, else the cudaError_t.
-STRATA_KQ_EXPORT int strata_kq_init(int device) {
+CORTEX_KQ_EXPORT int cortex_kq_init(int device) {
     cudaError_t e = cudaSetDevice(device);
     if (e == cudaSuccess) e = cudaFree(nullptr);
     return (int) e;
@@ -43,7 +43,7 @@ STRATA_KQ_EXPORT int strata_kq_init(int device) {
 
 // One MMQ product (moe_mmq.cu's Context::run for these types) on `device`, on the engine's `stream`.  0 = launched, -1 =
 // a type this library does not have, else the cudaError_t of the launch.
-STRATA_KQ_EXPORT int strata_kq_run(int device, int type, const void* args, void* stream) {
+CORTEX_KQ_EXPORT int cortex_kq_run(int device, int type, const void* args, void* stream) {
     if (device < 0 || device >= GGML_CUDA_MAX_DEVICES) return -1;
     if (cudaSetDevice(device) != cudaSuccess) return (int) cudaGetLastError();
     ggml_backend_cuda_context& ctx = *ctx_for(device);

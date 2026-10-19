@@ -18,10 +18,10 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from strata_cli.cli import main
-from strata_cli import bench
-from strata_cli.client import Endpoint
-from strata_control import calibration, journal, management, owner_transport, profiles, recipes, runtime
+from cortex_cli.cli import main
+from cortex_cli import bench
+from cortex_cli.client import Endpoint
+from cortex_control import calibration, journal, management, owner_transport, profiles, recipes, runtime
 
 
 WINDOWS = os.name == "nt"
@@ -30,16 +30,16 @@ WINDOWS = os.name == "nt"
 @unittest.skipUnless(os.name in ("posix", "nt"), "no qualified owner transport on this platform")
 class RuntimeTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="strata-runtime-test-")
+        self.temp = tempfile.TemporaryDirectory(prefix="cortex-runtime-test-")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        env = mock.patch.dict(os.environ, {"STRATA_PROFILE_DIR": str(self.root / "profiles"),
-                                       "STRATA_RUNTIME_DIR": str(self.root / "runtime")})
+        env = mock.patch.dict(os.environ, {"CORTEX_PROFILE_DIR": str(self.root / "profiles"),
+                                       "CORTEX_RUNTIME_DIR": str(self.root / "runtime")})
         env.start()
         self.addCleanup(env.stop)
-        previous_key = os.environ.pop("STRATA_API_KEY", None)
-        self.addCleanup(lambda: os.environ.__setitem__("STRATA_API_KEY", previous_key)
-                        if previous_key is not None else os.environ.pop("STRATA_API_KEY", None))
+        previous_key = os.environ.pop("CORTEX_API_KEY", None)
+        self.addCleanup(lambda: os.environ.__setitem__("CORTEX_API_KEY", previous_key)
+                        if previous_key is not None else os.environ.pop("CORTEX_API_KEY", None))
         engine = self.root / "engine.py"
         engine.write_text("#!" + sys.executable + "\nimport sys\nfrom pathlib import Path\n"
                           "if '--batch' in sys.argv: print('INFO batch_slots=2', flush=True)\n"
@@ -64,7 +64,7 @@ class RuntimeTests(unittest.TestCase):
             wrapper = self.root / "engine.cmd"
             wrapper.write_bytes(f'@echo off\r\n"{sys.executable}" "{engine}" %*\r\n'.encode())
             engine = wrapper
-        from tools.strata_tokenizer import BYTE_TO_UNICODE
+        from tools.cortex_tokenizer import BYTE_TO_UNICODE
         tokenizer = self.root / "tokenizer"
         tokenizer.mkdir()
         tokens = [BYTE_TO_UNICODE[i] for i in range(256)] + [
@@ -93,7 +93,7 @@ class RuntimeTests(unittest.TestCase):
         return code, json.loads(output.getvalue())
 
     def test_component_inspection_bridge_is_read_only_and_reports_missing_files(self):
-        command = [sys.executable, "-m", "strata_control.management"]
+        command = [sys.executable, "-m", "cortex_control.management"]
         root = Path(__file__).resolve().parents[2]
 
         def send(live):
@@ -125,7 +125,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(journal.list_runs("local"), [])
 
     def test_profile_change_bridge_reviews_revision_source_and_typed_overrides(self):
-        command = [sys.executable, "-m", "strata_control.management"]
+        command = [sys.executable, "-m", "cortex_control.management"]
         root = Path(__file__).resolve().parents[2]
 
         def send(action, params):
@@ -134,9 +134,9 @@ class RuntimeTests(unittest.TestCase):
                                        capture_output=True, cwd=root, env=os.environ.copy(), timeout=15)
             return completed.returncode, json.loads(completed.stdout)
 
-        other = self.root / "strata-other.json"
+        other = self.root / "cortex-other.json"
         other.write_text(self.config.read_text().replace('"fake"', '"other"'), encoding="utf-8")
-        with mock.patch.dict(os.environ, {"STRATA_INSTALL_DIR": str(self.root)}):
+        with mock.patch.dict(os.environ, {"CORTEX_INSTALL_DIR": str(self.root)}):
             code, listed = send("models.installed", {})
             inspect_code, inspected = send("models.inspect", {"model_id": "other"})
         self.assertEqual(code, 0)
@@ -218,7 +218,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertNotEqual(restart_plan["candidate_profile_revision"], running_revision)
 
     def test_local_management_bridge_and_cli_share_owner_and_journal(self):
-        command = [sys.executable, "-m", "strata_control.management"]
+        command = [sys.executable, "-m", "cortex_control.management"]
         root = Path(__file__).resolve().parents[2]
 
         def send(action, params):
@@ -375,7 +375,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(runtime.status("local")["state"], "stopped")
 
     def test_local_management_bridge_rejects_ambiguous_requests(self):
-        command = [sys.executable, "-m", "strata_control.management"]
+        command = [sys.executable, "-m", "cortex_control.management"]
         root = Path(__file__).resolve().parents[2]
         invalid = (
             '{"schema_version":1,"action":"runtime.status","action":"runtime.start",'
@@ -398,7 +398,7 @@ class RuntimeTests(unittest.TestCase):
     def test_owner_host_refuses_source_changed_after_start_review(self):
         preview = management.runtime_action("start", "local", plan=True)["plan"]
         self.config.write_bytes(self.config.read_bytes() + b" ")
-        host = subprocess.Popen([sys.executable, "-m", "strata_control.runtime", "--host", "local",
+        host = subprocess.Popen([sys.executable, "-m", "cortex_control.runtime", "--host", "local",
                                  "--shutdown-timeout", "2", "--startup-wait", "10",
                                  "--expected-profile-revision", preview["launch"]["profile_revision"],
                                  "--expected-source-sha256", preview["source_sha256"]],
@@ -435,7 +435,7 @@ class RuntimeTests(unittest.TestCase):
                 stderr_path = self.root / f"serve-{expected_reason}-{'quiet' if quiet else 'normal'}.stderr"
                 with stderr_path.open("w+", encoding="utf-8") as diagnostics:
                     process = subprocess.Popen(
-                        [sys.executable, "strata.py", "serve", "--profile", "local", "--port", "0",
+                        [sys.executable, "cortex.py", "serve", "--profile", "local", "--port", "0",
                          "--shutdown-timeout", "2", "--output", "jsonl", *(["--quiet"] if quiet else [])],
                         cwd=Path(__file__).resolve().parents[2], env=os.environ.copy(),
                         stdout=subprocess.PIPE, stderr=diagnostics, text=True, bufsize=1)
@@ -686,7 +686,7 @@ class RuntimeTests(unittest.TestCase):
         snapshot = Path(result["rollback_source_config"])
         self.assertEqual(snapshot.parent, self.root / "runtime")
         if WINDOWS:
-            from strata_control import private_files
+            from cortex_control import private_files
             self.assertTrue(private_files.is_unshared(snapshot))      # NTFS has no mode bits: the ACL is the promise
         else:
             self.assertEqual(snapshot.stat().st_mode & 0o077, 0)
@@ -840,7 +840,7 @@ class RuntimeTests(unittest.TestCase):
         cfg = json.loads(self.config.read_text())
         cfg.update(host="0.0.0.0", api_key=["first", "second"])
         self.config.write_text(json.dumps(cfg))
-        from strata_cli.cli import _launch_plan
+        from cortex_cli.cli import _launch_plan
         plan, _ = _launch_plan("local")
         self.assertEqual(plan["effective"]["host"], "0.0.0.0")
         self.assertNotIn("first", json.dumps(plan))
@@ -1078,7 +1078,7 @@ class RuntimeTests(unittest.TestCase):
         if WINDOWS:
             self.assertRegex(state["socket"], r"^tcp:127\.0\.0\.1:[1-9][0-9]*$")
         root = Path(__file__).resolve().parents[2]
-        done = subprocess.run([sys.executable, "strata.py", "runtime", "status", "--profile", "local",
+        done = subprocess.run([sys.executable, "cortex.py", "runtime", "status", "--profile", "local",
                                "--output", "json"], cwd=root, env=os.environ.copy(), capture_output=True,
                               text=True, timeout=30)
         self.assertEqual(done.returncode, 0, done.stderr)
@@ -1144,7 +1144,7 @@ class RuntimeTests(unittest.TestCase):
 
     @unittest.skipUnless(WINDOWS, "ACLs stand in for mode 0700 on Windows")
     def test_runtime_directory_is_owner_only_and_a_shared_one_is_refused(self):
-        from strata_control import private_files
+        from cortex_control import private_files
         directory = runtime.runtime_dir()
         self.assertTrue(private_files.is_private(directory))
         shared = Path(self.temp.name) / "shared-runtime"
@@ -1152,7 +1152,7 @@ class RuntimeTests(unittest.TestCase):
         done = subprocess.run(["icacls", str(shared), "/grant", "*S-1-1-0:(OI)(CI)R"], capture_output=True)
         if done.returncode != 0:
             self.skipTest("icacls could not widen the test directory")
-        with mock.patch.dict(os.environ, {"STRATA_RUNTIME_DIR": str(shared)}):
+        with mock.patch.dict(os.environ, {"CORTEX_RUNTIME_DIR": str(shared)}):
             with self.assertRaisesRegex(profiles.ProfileError, "owner-only"):
                 runtime.runtime_dir()
 

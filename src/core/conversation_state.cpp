@@ -1,4 +1,4 @@
-#include "strata/core/conversation_snapshot.hpp"
+#include "cortex/core/conversation_snapshot.hpp"
 #include "conversation_checked.hpp"
 #include "conversation_copy.hpp"
 
@@ -6,7 +6,7 @@
 #include <array>
 #include <limits>
 
-namespace strata::core {
+namespace cortex::core {
 namespace {
 using conversation_detail::add;
 using conversation_detail::product;
@@ -60,7 +60,7 @@ bool checkpoint_targets(const SessionState& ss, const ModelGeometry& g, size_t t
         (owned_qsa(ss) && !ss.qsa_states)) return fail(error, "invalid session running-state targets");
     for (size_t j = 0; j < owned_qsa(ss); ++j) {
         const auto& st = owned(ss, j);
-        const auto block = strata::kernels::qsa_real_shapes().idx_block;
+        const auto block = cortex::kernels::qsa_real_shapes().idx_block;
         size_t pooled_bytes = 0;
         if (!st.idx_tail || !st.idx_dead || !st.idx_block_pos || !st.idx_pooled ||
             st.max_cells < 0 || tokens > (uint64_t) st.max_cells ||
@@ -114,8 +114,8 @@ bool conversation_state_sizes(const ModelGeometry& g, ConversationStateSizes& z,
         !product(convolution, {(uint64_t) g.ssm_conv_channels, (uint64_t) (g.ssm_d_conv - 1)}) ||
         !add(recurrence, convolution) ||
         !product(z.gdn, {(uint64_t) g.n_gdn_layers(), recurrence, sizeof(float)}) ||
-        !product(z.ple, {strata::kernels::NG_HIST, strata::kernels::NG_HC_DIM, sizeof(float)}) ||
-        !product(z.tail, {(uint64_t) (strata::kernels::qsa_real_shapes().idx_block - 1),
+        !product(z.ple, {cortex::kernels::NG_HIST, cortex::kernels::NG_HC_DIM, sizeof(float)}) ||
+        !product(z.tail, {(uint64_t) (cortex::kernels::qsa_real_shapes().idx_block - 1),
                           (uint64_t) g.idx_key_dim, sizeof(float)}) ||
         !product(z.dead, {(uint64_t) g.idx_key_dim, sizeof(float)}))
         return fail(error, "running-state byte count overflow");
@@ -152,21 +152,21 @@ bool conversation_checkpoint_validate(const ConversationCheckpoint& c, const Ses
     return true;
 }
 
-#if defined(STRATA_GPU_METAL)
-}  // namespace strata::core
-namespace strata::metal_engine {
+#if defined(CORTEX_GPU_METAL)
+}  // namespace cortex::core
+namespace cortex::metal_engine {
 // the running state lives in the Metal decode window (metal/src/engine/window.cpp), not in the session's buffers
-bool window_checkpoint_save(strata::core::ConversationCheckpoint& c, std::string& error);
-bool window_checkpoint_restore(const strata::core::ConversationCheckpoint& c, std::string& error);
-}  // namespace strata::metal_engine
-namespace strata::core {
+bool window_checkpoint_save(cortex::core::ConversationCheckpoint& c, std::string& error);
+bool window_checkpoint_restore(const cortex::core::ConversationCheckpoint& c, std::string& error);
+}  // namespace cortex::metal_engine
+namespace cortex::core {
 #endif
 
 bool conversation_checkpoint_save(ConversationCheckpoint& c, const SessionState& ss,
                                   const ModelGeometry& g, std::string& error) {
-#if defined(STRATA_GPU_METAL)
+#if defined(CORTEX_GPU_METAL)
     (void) ss; (void) g;
-    return strata::metal_engine::window_checkpoint_save(c, error);
+    return cortex::metal_engine::window_checkpoint_save(c, error);
 #endif
     ConversationStateSizes z;
     if (!checkpoint_targets(ss, g, c.ids.size(), z, error)) return false;
@@ -186,9 +186,9 @@ bool conversation_checkpoint_save(ConversationCheckpoint& c, const SessionState&
 
 bool conversation_checkpoint_restore(const ConversationCheckpoint& c, SessionState& ss,
                                      const ModelGeometry& g, std::string& error) {
-#if defined(STRATA_GPU_METAL)
+#if defined(CORTEX_GPU_METAL)
     (void) g;
-    if (!strata::metal_engine::window_checkpoint_restore(c, error)) return false;
+    if (!cortex::metal_engine::window_checkpoint_restore(c, error)) return false;
     ss.ple_prev[0] = c.ids.size() >= 2 ? c.ids[c.ids.size() - 2] : -1;
     ss.ple_prev[1] = c.ids.size() >= 1 ? c.ids[c.ids.size() - 1] : -1;
     return true;
@@ -205,7 +205,7 @@ bool conversation_checkpoint_restore(const ConversationCheckpoint& c, SessionSta
             !copy(st.idx_dead, c.dead.data() + j * z.dead, z.dead, error) ||
             !copy(st.idx_block_pos, c.block_pos.data() + j * z.block_pos, z.block_pos, error)) return false;
         if (!c.ids.empty()) {
-            const size_t row = c.ids.size() / strata::kernels::qsa_real_shapes().idx_block;
+            const size_t row = c.ids.size() / cortex::kernels::qsa_real_shapes().idx_block;
             if (!copy(st.idx_pooled + row * g.idx_key_dim, c.dead.data() + j * z.dead, z.dead, error)) return false;
         }
     }
@@ -236,7 +236,7 @@ bool conversation_checkpoint_copy(const SessionState& from, SessionState& to, co
         if (!acopy(b.idx_tail, a.idx_tail, zf.tail) || !acopy(b.idx_dead, a.idx_dead, zf.dead) ||
             !acopy(b.idx_block_pos, a.idx_block_pos, zf.block_pos)) return false;
         if (!ids.empty()) {   // restore writes the saved `dead` row into the pooled row the next token fills
-            const size_t row = ids.size() / strata::kernels::qsa_real_shapes().idx_block;
+            const size_t row = ids.size() / cortex::kernels::qsa_real_shapes().idx_block;
             if (!acopy(b.idx_pooled + row * g.idx_key_dim, a.idx_dead, zf.dead)) return false;
         }
     }
@@ -462,4 +462,4 @@ ConversationRestore conversation_snapshot_restore_prefix(const SavedConversation
         return ConversationRestore::transfer_failed;
     return ConversationRestore::restored;
 }
-} // namespace strata::core
+} // namespace cortex::core

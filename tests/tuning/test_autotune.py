@@ -5,8 +5,8 @@ from __future__ import annotations
 import threading
 import unittest
 
-from strata_control import autotune, tune_knobs
-from strata_control.tune_session import StartFailed
+from cortex_control import autotune, tune_knobs
+from cortex_control.tune_session import StartFailed
 
 from tests.tuning.stub_session import FakeClock, StubSession, flag
 
@@ -27,7 +27,7 @@ def speed_with(gains: dict[str, float], base=60.0):
     def model(args, env, tune=None):
         v = base
         for (f, val), g in gains.items():
-            if f.startswith("STRATA_"):
+            if f.startswith("CORTEX_"):
                 if env.get(f) == val:
                     v *= g
             elif flag(args, f) == val:
@@ -60,8 +60,8 @@ class RulesTest(unittest.TestCase):
         ctx = make_ctx(arch="gfx1201")
         bad = [({"--expert-cache": 0}, {}), ({"--kv-resident": 20480}, {}), ({"--pcie-frac": 0.75}, {}),
                ({"--spec": 6}, {}), ({"--spec": 2}, {}), ({"--lookup-chain": 4}, {}), ({"--adapt-every": 100000}, {}),
-               ({"--prefill": 512}, {}), ({"--ple-io": "ram"}, {}), ({}, {"STRATA_SH_STREAM": "1"}),
-               ({}, {"STRATA_RDNA2_SGEMM": "all"}), ({}, {"STRATA_HIP_WMMA": "1"}), ({"--pool-workers": 8}, {})]
+               ({"--prefill": 512}, {}), ({"--ple-io": "ram"}, {}), ({}, {"CORTEX_SH_STREAM": "1"}),
+               ({}, {"CORTEX_RDNA2_SGEMM": "all"}), ({}, {"CORTEX_HIP_WMMA": "1"}), ({"--pool-workers": 8}, {})]
         for args, env in bad:
             self.assertTrue(tune_knobs.check_setting(args, env, ctx), (args, env))
         ok = [({"--spec": 3}, {}), ({"--kv-resident": 65536}, {}), ({"--pool-workers": 4}, {}), ({"--prefill": "auto:32768"}, {}),
@@ -134,7 +134,7 @@ class RulesTest(unittest.TestCase):
         sy = make_ctx()
         sy.backend = "sycl"
         self.assertTrue(tune_knobs.default_unsteady(sy))
-        from strata_control import presets
+        from cortex_control import presets
         steady = {"answers": {"class": "exact", "default_repeatable": True}}
         unsteady = {"answers": {"class": "exact", "default_repeatable": False}}
         self.assertIn("identical", presets.notice(steady))

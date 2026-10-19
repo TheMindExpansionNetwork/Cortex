@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Make a local, unpublished engine package for the component folder (strata_control/engine_component.py).
+"""Make a local, unpublished engine package for the component folder (cortex_control/engine_component.py).
 
-    python packaging/package_engine.py --src <folder with strata[.exe] and its libraries> --backend cuda \
+    python packaging/package_engine.py --src <folder with cortex[.exe] and its libraries> --backend cuda \
         --version 0.1.45 --out <components>/engine --arch sm_86 --arch compute_89 \
         --min-driver nvidia=580.65 [--build-id <id>] [--platform linux-x86_64] [--tree] [--include GLOB ...]
 
@@ -14,9 +14,9 @@ checks and starts; it is not signed, not published, and nothing here uploads it.
 (`engine_component.register_signature_verifier`); `--sign-with` is deliberately absent until then.
 
 Files taken from --src, by default: the entrypoint, every `*.dll` / `*.so` / `*.so.*` / `*.dylib` / `*.metallib`
-beside it, `BUILD.json`, `LICENSE*`, and the picture reader `strata-vision[.exe]` when the build has one (without it the
+beside it, `BUILD.json`, `LICENSE*`, and the picture reader `cortex-vision[.exe]` when the build has one (without it the
 engine answers text only: setup.py Control mode keeps the person's picture choice only when it is there). `--include GLOB` (repeatable, relative to --src, `**` allowed) adds more, for
-example `strata-vision.exe`, `strata-device.exe` or `rocm/**`. `--tree` takes every regular file under --src (the HIP
+example `cortex-vision.exe`, `cortex-device.exe` or `rocm/**`. `--tree` takes every regular file under --src (the HIP
 package ships a `rocm/` tree of kernels). Symlinks are never followed or copied.
 """
 
@@ -38,8 +38,8 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import binary_deps  # noqa: E402
-from strata_control import engine_component as ec  # noqa: E402
-from strata_control.components import BACKEND_MATRIX, host_platform  # noqa: E402
+from cortex_control import engine_component as ec  # noqa: E402
+from cortex_control.components import BACKEND_MATRIX, host_platform  # noqa: E402
 
 
 def sha256(path: Path) -> str:
@@ -53,7 +53,7 @@ def sha256(path: Path) -> str:
 def wanted(path: Path) -> bool:
     name = path.name.lower()
     return (name.endswith((".dll", ".so", ".dylib", ".metallib")) or ".so." in name or name == "build.json"
-            or name.startswith("license") or name in ("strata-vision", "strata-vision.exe", "strata-vision-hip", "strata-vision-hip.exe"))   # the picture readers (CPU, AMD GPU) beside the engine
+            or name.startswith("license") or name in ("cortex-vision", "cortex-vision.exe", "cortex-vision-hip", "cortex-vision-hip.exe"))   # the picture readers (CPU, AMD GPU) beside the engine
 
 
 def git_build_id(repo: Path = ROOT) -> str:
@@ -92,7 +92,7 @@ def build(src: Path, backend: str, version: str, target: str, out: Path, *, entr
         raise SystemExit(f"unknown backend {backend!r}")
     if backend != "cpu" and not archs:
         raise SystemExit(f"a {backend} package needs at least one --arch (sm_86, gfx1201, ...)")
-    entrypoint = entry or ("strata.exe" if target.startswith("windows") else "strata")
+    entrypoint = entry or ("cortex.exe" if target.startswith("windows") else "cortex")
     if not (src / entrypoint).is_file():
         raise SystemExit(f"{src / entrypoint} does not exist")
     folder = out / (f"{version}-{target}-{backend}" + (f"-{variant}" if variant else ""))

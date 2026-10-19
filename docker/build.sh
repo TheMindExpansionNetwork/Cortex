@@ -1,23 +1,23 @@
 #!/bin/sh
-# Build a Strata image from an engine component package. Run it on a Linux x86_64 machine with Docker (it needs the internet
+# Build a Cortex image from an engine component package. Run it on a Linux x86_64 machine with Docker (it needs the internet
 # for the base image and for the Terminal's pinned Python and locked wheels; the engine package is local).
 #
-#   docker/build.sh --flavor cuda --engine ~/pkgs/0.2.0-linux-x86_64-cuda-cuda13 --tag strata:0.2.0-cuda13
-#   docker/build.sh --flavor hip  --engine ~/pkgs/0.2.0-linux-x86_64-hip-gfx120X  --tag strata:0.2.0-rocm-gfx120x
-#   docker/build.sh --flavor sycl --engine ~/pkgs/0.2.0-linux-x86_64-sycl         --tag strata:0.2.0-sycl
+#   docker/build.sh --flavor cuda --engine ~/pkgs/0.2.0-linux-x86_64-cuda-cuda13 --tag cortex:0.2.0-cuda13
+#   docker/build.sh --flavor hip  --engine ~/pkgs/0.2.0-linux-x86_64-hip-gfx120X  --tag cortex:0.2.0-rocm-gfx120x
+#   docker/build.sh --flavor sycl --engine ~/pkgs/0.2.0-linux-x86_64-sycl         --tag cortex:0.2.0-sycl
 #
 # --engine is the package FOLDER that packaging/package_engine.py wrote (engine-component.json inside). It can be given more than
 # once to put several packages in one image (the Terminal picks the one that fits the card).
 #
 #   --flavor cuda|hip|sycl   which system libraries the runtime adds (see docker/Dockerfile)
-#   --tag NAME               image name (default strata:<version>-<flavor>)
+#   --tag NAME               image name (default cortex:<version>-<flavor>)
 #   --base IMAGE             base image (default ubuntu:24.04; sycl: ubuntu:26.04)
-#   --repo DIR               the Strata source tree (default: the one this script is in)
+#   --repo DIR               the Cortex source tree (default: the one this script is in)
 #   --version V              label (default: read from CMakeLists.txt)
 #   --ctx DIR                keep the build context here (default: a temporary folder, removed after the build)
 #   --no-cache               docker build --no-cache
 #   --ctx-only               assemble the context and stop
-# Environment: STRATA_DOCKER_BUILD_OPTS adds options to `docker build` (for example --network host).
+# Environment: CORTEX_DOCKER_BUILD_OPTS adds options to `docker build` (for example --network host).
 # Nothing is pushed anywhere; the image stays in the local Docker.
 set -eu
 
@@ -51,14 +51,14 @@ if [ -z "$version" ]; then
 fi
 
 own_ctx=""
-if [ -z "$ctx" ]; then ctx=$(mktemp -d "${TMPDIR:-/tmp}/strata-docker-ctx.XXXXXX"); own_ctx=1; fi
+if [ -z "$ctx" ]; then ctx=$(mktemp -d "${TMPDIR:-/tmp}/cortex-docker-ctx.XXXXXX"); own_ctx=1; fi
 mkdir -p "$ctx/terminal-src" "$ctx/engine" "$ctx/docker"
 cleanup() { [ -n "$own_ctx" ] && [ -z "$ctxonly" ] && rm -rf "$ctx"; }
 trap cleanup EXIT
 
 # 1. the Terminal's sources: exactly what packaging/package_terminal.py copies (the working tree, so local edits are in the image)
 cd "$repo"
-paths="packaging bin strata.py strata_control strata_cli serve requirements.txt requirements-monitor.txt docs/MANAGEMENT_PROTOCOL.md data setup.py ref/load.py CMakeLists.txt"
+paths="packaging bin cortex.py cortex_control cortex_cli serve requirements.txt requirements-monitor.txt docs/MANAGEMENT_PROTOCOL.md data setup.py ref/load.py CMakeLists.txt"
 if git rev-parse --git-dir >/dev/null 2>&1; then
   # shellcheck disable=SC2086
   { git ls-files -z -- $paths ':(glob)tools/*.py'; } | tar --null -T - -cf - | tar -xf - -C "$ctx/terminal-src"
@@ -84,21 +84,21 @@ done
 
 # 3. the Dockerfile and the container scripts
 cp "$here/Dockerfile" "$ctx/Dockerfile"
-cp "$here/entrypoint.sh" "$here/strata-wrapper.sh" "$here/healthcheck.sh" "$ctx/docker/"
+cp "$here/entrypoint.sh" "$here/cortex-wrapper.sh" "$here/healthcheck.sh" "$ctx/docker/"
 tr -d '\r' < "$here/entrypoint.sh" > "$ctx/docker/entrypoint.sh"          # a checkout with CRLF line ends must not break the scripts
-tr -d '\r' < "$here/strata-wrapper.sh" > "$ctx/docker/strata-wrapper.sh"
+tr -d '\r' < "$here/cortex-wrapper.sh" > "$ctx/docker/cortex-wrapper.sh"
 tr -d '\r' < "$here/healthcheck.sh" > "$ctx/docker/healthcheck.sh"
 
 engine_label=$(for e in $engines; do basename "$e"; done | tr '\n' ' ' | sed 's/ $//')
-[ -n "$tag" ] || tag="strata:$version-$flavor"
+[ -n "$tag" ] || tag="cortex:$version-$flavor"
 echo "context: $ctx"
 echo "flavor $flavor, base $base, engine(s): $engine_label, tag $tag"
 [ -n "$ctxonly" ] && { echo "context kept (--ctx-only)"; exit 0; }
 
 # shellcheck disable=SC2086
-docker build $nocache ${STRATA_DOCKER_BUILD_OPTS:-} \
+docker build $nocache ${CORTEX_DOCKER_BUILD_OPTS:-} \
   --build-arg "BASE_IMAGE=$base" --build-arg "FLAVOR=$flavor" \
-  --build-arg "STRATA_VERSION=$version" --build-arg "ENGINE_LABEL=$engine_label" \
+  --build-arg "CORTEX_VERSION=$version" --build-arg "ENGINE_LABEL=$engine_label" \
   -t "$tag" "$ctx"
 docker image inspect "$tag" --format 'built {{.RepoTags}} {{.Size}} bytes'
 echo "Not pushed anywhere. Size on disk: $(docker image inspect "$tag" --format '{{.Size}}') bytes."

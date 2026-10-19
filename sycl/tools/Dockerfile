@@ -1,4 +1,4 @@
-# Strata SYCL port - development image for the Intel Arc path.
+# Cortex SYCL port - development image for the Intel Arc path.
 # Base: the llama.cpp SYCL image already on the box (oneAPI 2026.1 compiler, MKL, Level Zero for Xe2).
 # Adds SYCLomatic (dpct, "Intel DPC++ Compatibility Tool") for the CUDA -> SYCL migration, and the build tools.
 FROM ghcr.io/snailium/llama.cpp-sycl-intel-b70/llama-sycl-b70:stable

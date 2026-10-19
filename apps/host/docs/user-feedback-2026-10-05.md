@@ -1,6 +1,6 @@
 # Browser feedback implementation — 5 October 2026
 
-Implemented the 14 annotated corrections supplied by the user. The DeepSeek screenshots informed hierarchy and density; Strata’s existing fonts, icons, colours and surfaces remain in use.
+Implemented the 14 annotated corrections supplied by the user. The DeepSeek screenshots informed hierarchy and density; Cortex’s existing fonts, icons, colours and surfaces remain in use.
 
 ## Disposition of each comment
 
@@ -33,7 +33,7 @@ The 68 GB PC screenshot uses a synthetic fixture (32 GB system RAM; GPUs with 24
 
 ## Skill editing behavior
 
-Edits persist in Strata’s host configuration and overlay the discovered skill by ID. Original bundled/workspace `SKILL.md` files remain intact. Validation rejects missing/oversized required content, malformed trigger phrases and unknown skill IDs. Toggles and workspace scope keep their existing behavior. The editor explains where changes are saved.
+Edits persist in Cortex’s host configuration and overlay the discovered skill by ID. Original bundled/workspace `SKILL.md` files remain intact. Validation rejects missing/oversized required content, malformed trigger phrases and unknown skill IDs. Toggles and workspace scope keep their existing behavior. The editor explains where changes are saved.
 
 ## Verification completed
 

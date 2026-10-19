@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
  * Picture reading in the APP, end to end on a test box, through the installed app layout (packaged host + bundled Control + a real engine component
- * that carries strata-vision):
+ * that carries cortex-vision):
  *   Download and prepare with "Read pictures" ON (the picture-reader file is fetched, the vision settings are written), load the model with the picture
  *   reader, send a real picture through the host's own /v1 endpoint and check that the answer names what is in it, unload, shut down.
  *
- *   node vision-e2e.mjs --install <folder with node/ host/ control/> --components <folder holding engine/<package with strata-vision>> \
+ *   node vision-e2e.mjs --install <folder with node/ host/ control/> --components <folder holding engine/<package with cortex-vision>> \
  *        --work <scratch> --family qwen --model IQ3_XXS --data <data folder that has (or will get) the model files> --image shapes.png [--device cpu|gpu]
  *
- * The picture has a red circle, a blue square, a green triangle and the text "STRATA 42". The run exits 1 if any step fails.
+ * The picture has a red circle, a blue square, a green triangle and the text "CORTEX 42". The run exits 1 if any step fails.
  */
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -26,14 +26,14 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
 let failed = false;
 const record = (name, ok, detail = '') => { if (!ok) failed = true; console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${detail ? '  ' + String(detail).slice(0, 600) : ''}`); };
 const freePort = async () => { const s = createServer(); await new Promise(r => s.listen(0, '127.0.0.1', r)); const p = s.address().port; await new Promise(r => s.close(r)); return p; };
-const env = { ...process.env, STRATA_COMPONENTS_DIR: components, STRATA_PROFILE_DIR: dirs.profiles, STRATA_RUNTIME_DIR: dirs.runtime, STRATA_INSTALL_DIR: dirs.models,
-  STRATA_HOME: dirs.home, STRATA_MODELS_DIR: join(work, 'models-unused'), APPDATA: dirs.appdata, XDG_CONFIG_HOME: dirs.xdg, PYTHONDONTWRITEBYTECODE: '1' };
-delete env.STRATA_API_KEY;
+const env = { ...process.env, CORTEX_COMPONENTS_DIR: components, CORTEX_PROFILE_DIR: dirs.profiles, CORTEX_RUNTIME_DIR: dirs.runtime, CORTEX_INSTALL_DIR: dirs.models,
+  CORTEX_HOME: dirs.home, CORTEX_MODELS_DIR: join(work, 'models-unused'), APPDATA: dirs.appdata, XDG_CONFIG_HOME: dirs.xdg, PYTHONDONTWRITEBYTECODE: '1' };
+delete env.CORTEX_API_KEY;
 const port = await freePort();
 const base = `http://127.0.0.1:${port}`;
 const host = spawn(node, [hostEntry], { cwd: join(install, 'host'), stdio: ['ignore', 'pipe', 'pipe'],
-  env: { ...env, STRATA_PORT: String(port), STRATA_DIST: join(install, 'host', 'dist'), NODE_ENV: 'production', STRATA_PACKAGED: '1', STRATA_REAL_ENGINE: '1', STRATA_NO_ACQUIRE: '1',
-    STRATA_SHARE_PORT: String(await freePort()), STRATA_TUNNEL_PORT: String(await freePort()) } });
+  env: { ...env, CORTEX_PORT: String(port), CORTEX_DIST: join(install, 'host', 'dist'), NODE_ENV: 'production', CORTEX_PACKAGED: '1', CORTEX_REAL_ENGINE: '1', CORTEX_NO_ACQUIRE: '1',
+    CORTEX_SHARE_PORT: String(await freePort()), CORTEX_TUNNEL_PORT: String(await freePort()) } });
 let hostLog = '';
 host.stdout.on('data', c => { hostLog += c; }); host.stderr.on('data', c => { hostLog += c; });
 const call = async (path, method = 'GET', body) => {
@@ -57,8 +57,8 @@ async function main() {
   record('host healthy', up, up ? base : hostLog.slice(-500));
   if (!up) return;
   const packages = existsSync(join(components, 'engine')) ? readdirSync(join(components, 'engine')) : [];
-  const reader = packages.some(p => existsSync(join(components, 'engine', p, 'strata-vision')));
-  record('the engine component carries the picture reader (strata-vision)', reader, packages.join(', '));
+  const reader = packages.some(p => existsSync(join(components, 'engine', p, 'cortex-vision')));
+  record('the engine component carries the picture reader (cortex-vision)', reader, packages.join(', '));
   const status = (await call('/api/control/status')).body;
   record('Control: engine usable', status.engine?.usable === true, `engine=${status.engine?.engine?.version}`);
 
@@ -108,7 +108,7 @@ async function main() {
   record('the answer names the red circle', /red|circle/.test(low));
   record('the answer names the blue square', /blue|square/.test(low));
   record('the answer names the green triangle', /green|triangle/.test(low));
-  record('the answer reads STRATA 42', low.includes('42'));
+  record('the answer reads CORTEX 42', low.includes('42'));
 
   // ---- unload
   const unloaded = await call(`/api/native/instances/${instance?.id}/unload`, 'POST', {});

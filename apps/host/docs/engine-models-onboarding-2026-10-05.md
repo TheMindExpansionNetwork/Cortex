@@ -2,7 +2,7 @@
 
 Implemented on 5 October 2026 in the existing React application. Engine, Models and the five onboarding steps now share model recommendations, performance previews and tuning controls. This report records the implementation and its verification, and supplements the [consolidated design report](design-improvements-2026-10-05.md).
 
-The current host remains a UI test adapter. Speed previews and simulated operations are visibly labelled Demo. Real benchmark execution, production Strata configuration parity and native engine hookup remain deferred, as requested. No real model was downloaded or run for this work.
+The current host remains a UI test adapter. Speed previews and simulated operations are visibly labelled Demo. Real benchmark execution, production Cortex configuration parity and native engine hookup remain deferred, as requested. No real model was downloaded or run for this work.
 
 ## What changed
 
@@ -59,7 +59,7 @@ The same inputs use the same provider across all screens. Browsing defaults may 
 
 ## Design and interaction
 
-Retained supplied Strata identity, GT Walsheim, Anron symbols, green accent and existing token system. Light remains the default. Reading surfaces, numbers and model rows are opaque. Floating controls use the existing restrained material tokens.
+Retained supplied Cortex identity, GT Walsheim, Anron symbols, green accent and existing token system. Light remains the default. Reading surfaces, numbers and model rows are opaque. Floating controls use the existing restrained material tokens.
 
 The implementation uses React, SVG and CSS without new dependencies, WebGL or continuous animation loops. Existing 100/160/240/320/460ms timing tokens remain in use. Narrow layouts stack controls, previews, recommendations and comparisons. Reduced motion disables dial travel; reduced transparency removes translucent materials; increased contrast remains supported.
 
@@ -105,7 +105,7 @@ Screenshots show development verification states; values labelled Demo must not 
 
 ## Remaining integration and verification
 
-1. Connect actual Strata capabilities and supported parameter ranges. The current adapter catalog is not a complete native Strata configuration contract.
+1. Connect actual Cortex capabilities and supported parameter ranges. The current adapter catalog is not a complete native Cortex configuration contract.
 2. Curate approved agent/tool candidates and Balanced ordering with reviewed capability evidence. Collect comparable throughput data; do not turn the demo curves into a production recommendation formula.
 3. Implement native, user-initiated, cancellable benchmarks. Before persisting production evidence, add engine build/driver identity and explicit measurement validity/invalidation rules to the existing evidence identity.
 4. Calibrate memory estimates, including real batch workspace, GPU placement and cache allocation. The current memory strip is an explained approximation, not an out-of-memory guarantee.

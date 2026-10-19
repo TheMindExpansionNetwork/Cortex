@@ -20,7 +20,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
-#include "strata/kernels/native_moe.hpp"
+#include "cortex/kernels/native_moe.hpp"
 #include <cuda_runtime.h>
 #include <atomic>
 #include <cstddef>
@@ -28,10 +28,10 @@
 #include <limits>
 #include <stdexcept>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 std::atomic<bool> enabled{false};
-// GATED (S26 STRATA_LFUSE): `shared` is the shared expert's unscaled output and sg its raw gate logit per token;
+// GATED (S26 CORTEX_LFUSE): `shared` is the shared expert's unscaled output and sg its raw gate logit per token;
 // the row is scaled here as shared_expert_multi did (native_scalar_sigmoid_multi_kernel's expression, then one
 // rounded multiply = scale_rows_kernel's `out *= g`), then added as before
 template<bool ZADD = false, bool GATED = false>

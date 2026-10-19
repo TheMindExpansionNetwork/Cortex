@@ -1,4 +1,4 @@
-// The saved Monitor picture when a model is loaded (the normal case) starts with the Strata logo alone and the models/time line.
+// The saved Monitor picture when a model is loaded (the normal case) starts with the Cortex logo alone and the models/time line.
 // (QA follow-up: it was checked with a loaded model through the real page; the picture is the one of the Monitor screen, which shows the
 // loaded models. NativeMonitor.tsx is not used by any screen, so it needs no header.)
 import test from 'node:test';

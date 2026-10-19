@@ -1,10 +1,10 @@
-#include "strata/program/split_ring.hpp"
+#include "cortex/program/split_ring.hpp"
 
 #include <cstdint>
 #include <cstdio>
 #include <vector>
 
-using namespace strata::program;
+using namespace cortex::program;
 
 #define CHECK(cond)                                                                       \
     do {                                                                                  \
@@ -56,7 +56,7 @@ int main() {
 
     // 3. the order: the RAM copy's lend region and the borrow must be sized with the SAME ring.  The need of a chunk is
     //    its own buffers plus ring_slots * max_blob (Prefill::bytes_needed); the engine used to size the region with the
-    //    default ring (96) and apply the STRATA_SPLIT_RING override afterwards, so a ring of 384 borrowed more slots
+    //    default ring (96) and apply the CORTEX_SPLIT_RING override afterwards, so a ring of 384 borrowed more slots
     //    than the region kept.
     {
         const int64_t slots = 6000;
@@ -67,13 +67,13 @@ int main() {
         auto lend = [&](int ring) { return split_lend_slots(slots, bytes, off.data(), max_blob, need(ring)); };
 
         const int default_ring = 96;
-        const int ring = split_ring_slots("384", 0.9);   // STRATA_SPLIT_RING=384
+        const int ring = split_ring_slots("384", 0.9);   // CORTEX_SPLIT_RING=384
         const int64_t borrowed = lend(ring);             // what the prompt path borrows with the override in force
         const int64_t kept_old_order = lend(default_ring);   // the region sized before the override applied
         const int64_t kept_new_order = lend(split_ring_slots("384", 0.9));   // decided first, then sized
         CHECK(kept_old_order < borrowed);                // the bug: borrowed experts without a RAM copy
         CHECK(kept_new_order == borrowed);               // the fix: the copy keeps every borrowed slot
-        // no override in play (production: STRATA_SPLIT_RING unset, ring 96 either way): nothing changes
+        // no override in play (production: CORTEX_SPLIT_RING unset, ring 96 either way): nothing changes
         CHECK(lend(split_ring_slots(nullptr, 0.5) > 0 ? split_ring_slots(nullptr, 0.5) : default_ring) ==
               kept_old_order);
         // a bigger ring borrows monotonically more

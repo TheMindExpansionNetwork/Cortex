@@ -1,10 +1,10 @@
-#include "strata/core/batch_telemetry.hpp"
+#include "cortex/core/batch_telemetry.hpp"
 
 #include <chrono>
 #include <cstdio>
 
 int main() {
-    using Sampler = strata::core::BatchWindowSampler;
+    using Sampler = cortex::core::BatchWindowSampler;
     const auto t0 = Sampler::Clock::time_point{};
     Sampler disabled(false);
     if (disabled.complete(4, 2, true, t0, t0)) return 1;
@@ -29,7 +29,7 @@ int main() {
                                             t0 + std::chrono::milliseconds(1000));
     if (!overlap || overlap->windows != 2 || overlap->processed_rows != 8 ||
         overlap->active_rows != 3 || overlap->elapsed_ms != 800) return 8;
-    using StageSampler = strata::core::StageInFlightSampler;
+    using StageSampler = cortex::core::StageInFlightSampler;
     StageSampler stages(4, true);
     stages.launch(0, t0);
     stages.launch(1, t0 + std::chrono::milliseconds(200));

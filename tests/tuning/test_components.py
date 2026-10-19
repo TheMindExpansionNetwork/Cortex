@@ -29,13 +29,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from strata_control import components as C  # noqa: E402
+from cortex_control import components as C  # noqa: E402
 
 
 def manifest(**over) -> dict:
     base = {
         "schema_version": 1,
-        "id": "strata-engine",
+        "id": "cortex-engine",
         "version": "0.1.44.1",
         "kind": "engine",
         "backend": "metal",
@@ -72,7 +72,7 @@ def tar_bytes(entries: list[tuple[str, bytes]], *, links: list[tuple[str, str]] 
 
 class StoreCase(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="strata-components-"))
+        self.tmp = Path(tempfile.mkdtemp(prefix="cortex-components-"))
         self.store = C.ComponentStore(self.tmp / "store")
 
     def tearDown(self):
@@ -90,7 +90,7 @@ class StoreCase(unittest.TestCase):
 class TestManifestParsing(StoreCase):
     def test_a_valid_manifest_parses(self):
         c = C.parse_manifest(manifest())
-        self.assertEqual(c.id, "strata-engine")
+        self.assertEqual(c.id, "cortex-engine")
         self.assertEqual(c.backend, "metal")
         self.assertEqual(len(c.artifacts), 1)
 
@@ -196,8 +196,8 @@ class TestSafeExtraction(StoreCase):
         self.assertEqual(present, [], f"a refusal must leave nothing behind, found {present}")
 
     def test_a_normal_archive_extracts(self):
-        out = self.extract(tar_bytes([("bin/strata", b"#!/bin/sh\n"), ("README", b"hi")]))
-        self.assertEqual((out / "bin/strata").read_bytes(), b"#!/bin/sh\n")
+        out = self.extract(tar_bytes([("bin/cortex", b"#!/bin/sh\n"), ("README", b"hi")]))
+        self.assertEqual((out / "bin/cortex").read_bytes(), b"#!/bin/sh\n")
         self.assertEqual((out / "README").read_bytes(), b"hi")
 
     def test_a_parent_segment_is_refused(self):
@@ -259,14 +259,14 @@ class TestSafeExtraction(StoreCase):
 
 class TestInstall(StoreCase):
     def test_a_verified_component_installs_into_the_cache(self):
-        component, payloads = self.payload(tar_bytes([("bin/strata", b"engine")]))
+        component, payloads = self.payload(tar_bytes([("bin/cortex", b"engine")]))
         path = self.store.install(component, payloads=payloads, target="macos-arm64")
         self.assertTrue((path / ".complete").exists())
-        self.assertEqual((path / "bin/strata").read_bytes(), b"engine")
+        self.assertEqual((path / "bin/cortex").read_bytes(), b"engine")
         self.assertEqual(path.name, component.cache_key)
 
     def test_a_digest_mismatch_installs_nothing(self):
-        data = tar_bytes([("bin/strata", b"engine")])
+        data = tar_bytes([("bin/cortex", b"engine")])
         component, _ = self.payload(data)
         wrong = b"different bytes entirely"
         with self.assertRaises(C.ComponentError) as ctx:
@@ -349,9 +349,9 @@ class TestActivation(StoreCase):
         self.store.install(second, payloads=p2, target="macos-arm64")
         self.store.activate(second, target="macos-arm64")
 
-        result = self.store.rollback("strata-engine")
+        result = self.store.rollback("cortex-engine")
         self.assertEqual(result["restored"], "1.0")
-        active = self.store.active_path("strata-engine")
+        active = self.store.active_path("cortex-engine")
         self.assertEqual((active / "marker").read_bytes(), b"one")
 
     def test_rollback_without_a_previous_version_is_refused(self):
@@ -360,9 +360,9 @@ class TestActivation(StoreCase):
         self.store.install(component, payloads=payloads, target="macos-arm64")
         self.store.activate(component, target="macos-arm64")
         with self.assertRaises(C.ComponentError) as ctx:
-            self.store.rollback("strata-engine")
+            self.store.rollback("cortex-engine")
         self.assertEqual(ctx.exception.code, 2)
-        self.assertTrue(self.store.active_path("strata-engine").exists(),
+        self.assertTrue(self.store.active_path("cortex-engine").exists(),
                         "the active version must survive a refused rollback")
 
     def test_activating_something_not_installed_is_refused(self):
@@ -394,7 +394,7 @@ class TestStoreState(StoreCase):
         two, p2 = self.build("2.0")
         self.store.install(two, payloads=p2, target="macos-arm64")
         self.store.activate(one, target="macos-arm64")
-        listed = self.store.installed("strata-engine")
+        listed = self.store.installed("cortex-engine")
         self.assertEqual([c.version for c in listed], ["1.0", "2.0"])
         self.assertEqual([c.version for c in listed if c.active], ["1.0"])
 

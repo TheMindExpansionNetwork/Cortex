@@ -61,7 +61,7 @@ function LegacyModelRunScreen({ importFirst = false, initialVariant }: {
         if (initialVariant)
             return initialVariant;
         try {
-            return sessionStorage.getItem('strata.run-variant.v1') ?? '';
+            return sessionStorage.getItem('cortex.run-variant.v1') ?? '';
         }
         catch {
             return '';
@@ -163,7 +163,7 @@ function LegacyModelRunScreen({ importFirst = false, initialVariant }: {
     useEffect(() => {
         if (selected)
             try {
-                sessionStorage.setItem('strata.run-variant.v1', selected);
+                sessionStorage.setItem('cortex.run-variant.v1', selected);
             }
             catch { /* Selection remains available for this session. */ }
     }, [selected]);

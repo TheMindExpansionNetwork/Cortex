@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 from serve.frontend import ChatTemplate  # noqa: E402
 from serve.server import ByteTokenizer, MockEngine, Service  # noqa: E402
-from strata_tokenizer import PromptEncoder, plain_agree_until  # noqa: E402
+from cortex_tokenizer import PromptEncoder, plain_agree_until  # noqa: E402
 
 
 class ThinkTokenizer(ByteTokenizer):

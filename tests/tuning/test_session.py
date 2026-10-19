@@ -10,8 +10,8 @@ import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
-from strata_control import tune_session
-from strata_control.tune_session import RequestSet, WorkerEngine, WorkerSession, parse_facts, failure_kind, make_prompt
+from cortex_control import tune_session
+from cortex_control.tune_session import RequestSet, WorkerEngine, WorkerSession, parse_facts, failure_kind, make_prompt
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -32,7 +32,7 @@ class Handler(BaseHTTPRequestHandler):
         Handler.seen.append({"auth": self.headers.get("authorization"), **req})
         n = req["max_tokens"]
         prompt_tokens = len(req["messages"][0]["content"]) // 4
-        tune = req.get("strata_tune") or {}
+        tune = req.get("cortex_tune") or {}
         rate = 80.0 * (1.1 if tune.get("spec_min_p") == 0.7 else 1.0)
         body = json.dumps({"choices": [{"message": {"content": "x"}}], "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": n},
                            "timings": {"cache_n": 0, "prompt_n": prompt_tokens, "prompt_ms": prompt_tokens / 2.0,
@@ -61,7 +61,7 @@ class SessionTest(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         s = WorkerSession(base_config={"args": []}, serve_dir=".", workdir=self.tmp.name)
         log = Path(self.tmp.name) / "e.log"
-        log.write_text("strata generate: expert cache 3160 slots, 4.26 GiB of VRAM\nstrata generate: 5 pool workers on logical processors 2,4\n")
+        log.write_text("cortex generate: expert cache 3160 slots, 4.26 GiB of VRAM\ncortex generate: 5 pool workers on logical processors 2,4\n")
         self.eng = WorkerEngine(s, FakeProc(), self.srv.server_address[1], "k", [log], 12.0, None, lambda x: None)
 
     def test_measure_reads_the_engines_own_clock(self):
@@ -79,13 +79,13 @@ class SessionTest(unittest.TestCase):
         self.eng.prompt_once(4096)
         a, b = [h["messages"][0]["content"] for h in Handler.seen[-2:]]
         self.assertNotEqual(a[:40], b[:40])
-        self.assertTrue(all(h.get("strata_checkpoint") is False for h in Handler.seen))
+        self.assertTrue(all(h.get("cortex_checkpoint") is False for h in Handler.seen))
 
     def test_per_request_settings_are_sent_and_change_the_rate(self):
         base = self.eng.decode_once(None, 200)
         fast = self.eng.decode_once({"spec_min_p": 0.7}, 200)
         self.assertAlmostEqual(fast / base, 1.1, places=3)
-        self.assertEqual(Handler.seen[-1]["strata_tune"], {"spec_min_p": 0.7})
+        self.assertEqual(Handler.seen[-1]["cortex_tune"], {"spec_min_p": 0.7})
 
     def test_prompt_length_calibrates_once(self):
         s = self.eng.s
@@ -109,7 +109,7 @@ class ParsingTest(unittest.TestCase):
         self.assertTrue(parse_facts("WARNING: the whole resident RAM mode does not fit (FileExpertSource: resident complement 34.47 GiB")["resident_ram"])
 
     def test_facts(self):
-        f = parse_facts("strata generate: 6 CPU threads\nhybrid experts: 37% on the GPU\n")
+        f = parse_facts("cortex generate: 6 CPU threads\nhybrid experts: 37% on the GPU\n")
         self.assertEqual(f["workers"], 6)
         self.assertTrue(f["hybrid_experts"])
         self.assertTrue(parse_facts("resident RAM mode on")["resident_ram"])

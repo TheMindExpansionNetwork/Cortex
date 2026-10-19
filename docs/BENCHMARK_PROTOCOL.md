@@ -1,14 +1,14 @@
-# Strata standard benchmark protocol
+# Cortex standard benchmark protocol
 
-**Status: draft for implementation and pilot validation.** Protocol ID: `strata-qwen38-thinking-v1-draft.1`.
-Result format: `strata-standard-benchmark`, schema version `1`.
+**Status: draft for implementation and pilot validation.** Protocol ID: `cortex-qwen38-thinking-v1-draft.1`.
+Result format: `cortex-standard-benchmark`, schema version `1`.
 
 This document specifies a repeatable community benchmark and the data a future website can consume. The
 required suite targets **20–30 minutes after model loading**. This duration has not been measured for this
 protocol. Faster machines may finish sooner and slower machines may take longer; everyone runs the same work.
 Downloads, installation, compilation, and model loading are excluded. Report their duration separately if measured.
 
-**Today's `BENCH.bat`, `./bench.sh`, and `tools/strata_bench.py` do not implement this protocol.** Continue using
+**Today's `BENCH.bat`, `./bench.sh`, and `tools/cortex_bench.py` do not implement this protocol.** Continue using
 the [community guide](COMMUNITY_BENCHMARKS.md) for current reports. Do not rename their output or add a protocol
 ID to make it appear standard. Runner implementation, frozen fixtures, validation, and a measured pilot must
 precede activation. The approved manifest described here does not yet exist.
@@ -203,11 +203,11 @@ explaining why, including not-applicable values. Empty arrays mean genuinely no 
 
 | Field | Required content |
 | --- | --- |
-| `format`, `schema_version` | `"strata-standard-benchmark"`, `1`; distinct from the current runner's legacy `schema: 1`. |
+| `format`, `schema_version` | `"cortex-standard-benchmark"`, `1`; distinct from the current runner's legacy `schema: 1`. |
 | `protocol` | `id`, `git_commit`, `profile`, `corpus_sha256`, `model_card_revision`. Git commits are full immutable IDs. |
 | `run` | Unique string `id`, `started_at`, `status`, `required_duration_s`, `optional_duration_s`, boolean `optional_concurrency`, and sanitized command string `command`. Status is `complete`, `partial`, or `nonconforming`; optional duration is null with a reason when not selected. |
 | `hardware` | `gpus` array of `{device_index, name, memory_bytes, memory_kind, power_limit_w}`; string `cpu`, integer `ram_bytes`, `storage` array of `{kind, model, bus}`, and `background_workloads` array of strings. GPU index is an integer, names/storage attributes are strings. Memory kind is `dedicated` or `shared`; do not count shared VRAM again as extra system RAM. |
-| `software` | `os` as `{name, version}`, `drivers` and `runtime` arrays of `{name, version}`, strings `strata_commit`, `engine_version`, `build_kind`, `runner_commit`, and string-array `build_options`. Build kind is `release` or `source`; names/versions are strings. |
+| `software` | `os` as `{name, version}`, `drivers` and `runtime` arrays of `{name, version}`, strings `cortex_commit`, `engine_version`, `build_kind`, `runner_commit`, and string-array `build_options`. Build kind is `release` or `source`; names/versions are strings. |
 | `model` | `id`, `revision`, `source_revision`, `quantization`, `files` array of `{path, sha256}`, `tokenizer_revision`, and `custom_pack` (description/preparation reference, or null when absent). Model file paths identify pack-relative filenames, not private machine paths. |
 | `configuration` | Strings `track`, `track_notes`; integers `context_tokens`, `server_capacity`; objects `kv_cache`, `expert_cache`, `offloading`, `prefill`, `mtp`, `calibration`, `experimental_options`; `template` as `{path, sha256}` pointing to the attached template; `sampling` and `chat_template_kwargs` objects. Configuration objects preserve effective engine option names and JSON values. `sampling` contains temperature, top_p, top_k, min_p, presence_penalty, repetition_penalty, and reasoning_effort. The two thinking flags belong in `chat_template_kwargs`; seeds/caps are per request. |
 | `request_counts` | Objects for `warmup`, `performance`, `sanity`, `concurrency`, each with `planned`, `attempted`, `completed`, `truncated`, `failed`, `skipped`. |
@@ -348,7 +348,7 @@ After activation, use **submission → maintainer review → approved manifest e
 contributor. A maintainer adds an entry only after reviewing the exact artifacts. A merged report alone does not
 mean it is in the approved list. Do not create a populated manifest for this draft.
 
-The proposed manifest has `format: "strata-approved-benchmarks"`, `schema_version: 1`, and an `entries` array.
+The proposed manifest has `format: "cortex-approved-benchmarks"`, `schema_version: 1`, and an `entries` array.
 Each entry has the following fields; the example has placeholders, no approved result:
 
 ```json

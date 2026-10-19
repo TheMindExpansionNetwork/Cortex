@@ -8,7 +8,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 import setup  # noqa: E402
-import strata_mcp as M  # noqa: E402
+import cortex_mcp as M  # noqa: E402
 
 
 def hardware(ram, vram):
@@ -57,7 +57,7 @@ class GyroCatalog(unittest.TestCase):
         self.assertEqual(setup.FAMILIES["gyro"]["tag"], M.FALLBACK_FAMILIES["gyro"]["tag"])
 
     def test_mcp_recommends_gyro_only_where_nothing_else_fits(self):
-        s = M.Strata(ROOT)
+        s = M.Cortex(ROOT)
         for ram, vram, family in ((64.0, 12.0, "qwen"), (48.0, 12.0, "qwen"), (32.0, 12.0, "swift"), (28.0, 8.0, "coder")):
             self.assertEqual(s.recommend(hardware(ram, vram))["family"], family, (ram, vram))
         got = s.recommend(hardware(20.0, 12.0))                  # 32 GB in total, the Coder's 32 GB of RAM missing
@@ -72,7 +72,7 @@ class GyroCatalog(unittest.TestCase):
         self.assertIsNone(s.recommend(hardware(16.0, 11.0))["family"])   # 27 GB: below Gyro-S's 27.6 + room
 
     def test_mcp_table_verdict_counts_vram(self):
-        s = M.Strata(ROOT)
+        s = M.Cortex(ROOT)
         fam = next(f for f in s.model_table(hardware(16.0, 16.0)) if f["family"] == "gyro")
         by = {x["model"]: x for x in fam["sizes"]}
         self.assertEqual(by["Gyro-S"]["on_this_pc"], "fits")
@@ -81,7 +81,7 @@ class GyroCatalog(unittest.TestCase):
 
     def test_mcp_table_gives_ram_plus_vram_without_the_ngram_table(self):
         """The Models page shows what a version needs of RAM + VRAM together, the n-gram table (on the SSD) not counted."""
-        s = M.Strata(ROOT)
+        s = M.Cortex(ROOT)
         table = s.model_table(hardware(64.0, 12.0))
         gyro = {x["model"]: x for x in next(f for f in table if f["family"] == "gyro")["sizes"]}
         self.assertEqual(gyro["Gyro-S"]["memory_gb"], 27.6)           # stated in total (mem_total), not the 58.5 GB download
@@ -107,7 +107,7 @@ class GyroEngineVersionTest(unittest.TestCase):
             self.assertEqual(setup.MODELS[m]["engine"], M.FALLBACK_MODELS[m]["engine"], m)
 
     def test_the_catalog_tells_the_app_the_minimum(self):
-        table = M.Strata(ROOT).model_table(hardware(64.0, 12.0))
+        table = M.Cortex(ROOT).model_table(hardware(64.0, 12.0))
         gyro = {x["model"]: x for x in next(f for f in table if f["family"] == "gyro")["sizes"]}
         self.assertEqual({k: v["engine_min"] for k, v in gyro.items()}, {"Gyro-S": "0.1.45.1", "Gyro-M": "0.1.45.1"})
         qwen = {x["model"]: x for x in next(f for f in table if f["family"] == "qwen")["sizes"]}

@@ -1,9 +1,9 @@
 {
-  "name": "strata",
+  "name": "cortex",
   "private": true,
   "version": "0.2.0-beta",
   "type": "module",
-  "description": "Strata \u2014 local AI, tuned to one model. Web shell + engine host.",
+  "description": "Cortex \u2014 local AI, tuned to one model. Web shell + engine host.",
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:web": "vite",

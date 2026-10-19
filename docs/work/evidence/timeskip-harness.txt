@@ -1,9 +1,9 @@
 # Real Time-skip driven by a real Harness revision attempt
 # repo: 12432d29f48bd86954d3715f36c785d6614546ad
-# worker: Strata API worker, MockEngine on 127.0.0.1:8095 (no weights fit this Mac)
-# agent:  DeepSeek Harness CLI 0.2.0-rc.2 with the Strata profile
+# worker: Cortex API worker, MockEngine on 127.0.0.1:8095 (no weights fit this Mac)
+# agent:  DeepSeek Harness CLI 0.2.0-rc.2 with the Cortex profile
 # command:
-#   strata timeskip run --workspace /tmp/ts-harness-demo \
+#   cortex timeskip run --workspace /tmp/ts-harness-demo \
 #     --prompt 'Add a status line with the value draft. Keep everything else exactly as it is.' \
 #     --attempts 1 --revise-command '<python> integrations/harness/revise_once.py --deadline 200'
 

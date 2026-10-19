@@ -1,10 +1,10 @@
 """#1012 (the old #792): requests waiting for the engine's control lines when the engine is restarted.
 
-restart() runs StrataEngine.__init__ again; it used to make a new condition variable, lock, wait counter and wait
+restart() runs CortexEngine.__init__ again; it used to make a new condition variable, lock, wait counter and wait
 list while the waiters still held the old ones: they hung for good, or failed with `list.remove(x): x not in
 list`.  The admission state is now kept across a restart.  A waiter either goes on with the new engine or ends
 with a clean 503; never a hang, never a ValueError.  The fake engine of test_parallel runs behind the real
-StrataEngine and Service.
+CortexEngine and Service.
 
     python -m unittest serve.test_restart_waiters -v
 """
@@ -33,7 +33,7 @@ class RestartWaiters(unittest.TestCase):
         import serve.server as server
         real = REAL_POPEN
         self._start(slots, fit=fit)
-        script = Path(self.tmp.name) / "fake_strata.py"
+        script = Path(self.tmp.name) / "fake_cortex.py"
         patch = mock.patch.object(server.subprocess, "Popen",
                                   lambda cmd, **kw: real([sys.executable, str(script), *cmd[1:]], **kw))
         patch.start()

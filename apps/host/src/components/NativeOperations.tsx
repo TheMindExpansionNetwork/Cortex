@@ -39,7 +39,7 @@ export function NativeBenchmark({ open, onClose }: {
         const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }));
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'strata-benchmark.json';
+        a.download = 'cortex-benchmark.json';
         a.click();
         URL.revokeObjectURL(url);
     }

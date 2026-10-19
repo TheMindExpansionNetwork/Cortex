@@ -21,7 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from strata_control import tune_engine as te  # noqa: E402
+from cortex_control import tune_engine as te  # noqa: E402
 
 
 class TestDoneParsing(unittest.TestCase):
@@ -146,7 +146,7 @@ class TestEngineHarnessWithAStub(unittest.TestCase):
     """
 
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="strata-tune-engine-"))
+        self.tmp = Path(tempfile.mkdtemp(prefix="cortex-tune-engine-"))
 
     def tearDown(self):
         import shutil
@@ -248,9 +248,9 @@ class TestEngineHarnessWithAStub(unittest.TestCase):
         self.assertAlmostEqual(speeds["fp16"], 40.0)     # 4 tokens in 100 ms
 
     def test_a_py_engine_runs_through_the_current_interpreter(self):
-        from strata_control import tuning
+        from cortex_control import tuning
         self.assertEqual(tuning.engine_command(Path("x") / "stub.py"), [sys.executable, str(Path("x") / "stub.py")])
-        self.assertEqual(tuning.engine_command(Path("x") / "strata"), [str(Path("x") / "strata")])
+        self.assertEqual(tuning.engine_command(Path("x") / "cortex"), [str(Path("x") / "cortex")])
 
     def test_a_missing_binary_is_an_error_before_any_process_starts(self):
         h = te.EngineHarness(self.tmp / "nope", {})

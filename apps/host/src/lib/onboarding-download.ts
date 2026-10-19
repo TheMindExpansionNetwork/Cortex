@@ -17,5 +17,5 @@ export function onboardingError(message:string){
  return {title:'Something needs your attention.',message,next:undefined,storage:false};
 }
 export function modelFolderLabel(path:string){
- return /[\\/]Documents[\\/]Strata[\\/]Models[\\/]?$/i.test(path)?'Documents / Strata / Models':path;
+ return /[\\/]Documents[\\/]Cortex[\\/]Models[\\/]?$/i.test(path)?'Documents / Cortex / Models':path;
 }

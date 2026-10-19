@@ -1,4 +1,4 @@
-"""The `strata launch` screens, driven with Textual's pilot: every screen, its keys and what it writes into the settings."""
+"""The `cortex launch` screens, driven with Textual's pilot: every screen, its keys and what it writes into the settings."""
 
 from __future__ import annotations
 
@@ -11,10 +11,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from strata_cli.launch import access, settings as S, store
-from strata_cli.launch.app import Ctx, LaunchApp, run_monitor
-from strata_cli.launch.runner import Cancelled, Event, LaunchError, Result
-from strata_cli.launch.widgets import Glyphs
+from cortex_cli.launch import access, settings as S, store
+from cortex_cli.launch.app import Ctx, LaunchApp, run_monitor
+from cortex_cli.launch.runner import Cancelled, Event, LaunchError, Result
+from cortex_cli.launch.widgets import Glyphs
 from tests.terminal.launch_support import HW_12, HW_24, HW_2X16, Home, catalog, text_of
 
 SIZE = (110, 34)
@@ -90,7 +90,7 @@ class Base(unittest.TestCase):
         FakeRunner.instances.clear()
         FakeRunner.behaviour = "ok"
         FakeRunner.download = 0.0
-        p = mock.patch("strata_cli.launch.app.Runner", FakeRunner)
+        p = mock.patch("cortex_cli.launch.app.Runner", FakeRunner)
         p.start()
         self.addCleanup(p.stop)
         p = mock.patch.object(access, "lan_ips", return_value=["192.168.1.5"])
@@ -259,7 +259,7 @@ class ModelStep(Base):
         async def case(app, pilot, ctx):
             await press(pilot, "enter", "o")
             self.assertIn("Type or paste the folder", text_of(app))
-            with mock.patch("strata_control.models.plan_import", return_value=plan) as pi:
+            with mock.patch("cortex_control.models.plan_import", return_value=plan) as pi:
                 await typed(pilot, "/data/models/IQ3_XXS")
                 await press(pilot, "enter")
             self.assertEqual(ctx.settings.model_path, str(Path("/data/models/IQ3_XXS")))
@@ -274,7 +274,7 @@ class ModelStep(Base):
 
         async def case(app, pilot, ctx):
             await press(pilot, "enter", "o")
-            with mock.patch("strata_control.models.plan_import", return_value=plan):
+            with mock.patch("cortex_control.models.plan_import", return_value=plan):
                 await typed(pilot, "/x")
                 await press(pilot, "enter")
             t = flat(app)
@@ -308,10 +308,10 @@ class FolderStep(Base):
             self.assertIn("Free space in that folder's drive", t)
             f = app.screen.query_one("#folderpath")
             f.value = ""
-            await typed(pilot, "D:/Strata-data")
-            self.assertEqual(f.value, "D:/Strata-data")
+            await typed(pilot, "D:/Cortex-data")
+            self.assertEqual(f.value, "D:/Cortex-data")
             await press(pilot, "enter")
-            self.assertEqual(ctx.settings.data_dir, "D:/Strata-data")
+            self.assertEqual(ctx.settings.data_dir, "D:/Cortex-data")
             self.assertIn("How much text should it remember at once?", text_of(app))
         self.run_app(case)
 
@@ -327,7 +327,7 @@ class FolderStep(Base):
                 f.value = ""
                 await typed(pilot, str(self.home.base / "new-data"))
                 t = " ".join(text_of(app).replace("\n", " ").split())
-            self.assertIn("Model files Strata already keeps in", t)
+            self.assertIn("Model files Cortex already keeps in", t)
             self.assertIn("are moved into this folder when you start", t)
         self.run_app(case)
 
@@ -451,7 +451,7 @@ class PicturesParallelTuning(Base):
             self.assertEqual(ctx.settings.vision, "off")
         # every catalog model reads pictures now: a row that does not stands in for a future one
         import dataclasses
-        from strata_cli.launch.catalog import Catalog
+        from cortex_cli.launch.catalog import Catalog
         real_rows = Catalog.rows
 
         def rows(self, *args, **kwargs):
@@ -519,10 +519,10 @@ class AdvancedStep(Base):
     def ctx_with_engine(self):
         ctx = make_ctx()
         ctx.settings.family, ctx.settings.model = "qwen", "IQ3_XXS"
-        base = {"exe": "component:strata-engine", "args": ["--max-context", "32768", "--kv", "int8", "--prefill", "auto"]}
+        base = {"exe": "component:cortex-engine", "args": ["--max-context", "32768", "--kv", "int8", "--prefill", "auto"]}
         p1 = mock.patch.object(Ctx, "base_config", lambda self: base)
-        p2 = mock.patch.object(Ctx, "engine_exe", lambda self: "/engine/strata")
-        p3 = mock.patch("strata_cli.launch.params.engine_help_text", return_value=self.HELP)
+        p2 = mock.patch.object(Ctx, "engine_exe", lambda self: "/engine/cortex")
+        p3 = mock.patch("cortex_cli.launch.params.engine_help_text", return_value=self.HELP)
         for p in (p1, p2, p3):
             p.start()
             self.addCleanup(p.stop)
@@ -542,7 +542,7 @@ class AdvancedStep(Base):
             self.assertIn("[experimental]", t)
             self.assertIn("+ Add a setting by name", t)
             self.assertIn("Command that will run", t)
-            self.assertIn("Same as: strata launch --model iq3_s", t)
+            self.assertIn("Same as: cortex launch --model iq3_s", t)
         self.run_app(case, ctx=ctx)
 
     def test_edit_a_value_then_reset_it(self):
@@ -586,9 +586,9 @@ class AdvancedStep(Base):
 
         async def case(app, pilot, ctx):
             await press(pilot, *self.reach(), "a")
-            await typed(pilot, "STRATA_PIN_BY_NEED=1")
+            await typed(pilot, "CORTEX_PIN_BY_NEED=1")
             await press(pilot, "enter")
-            self.assertEqual(ctx.settings.extra, {"STRATA_PIN_BY_NEED": "1"})
+            self.assertEqual(ctx.settings.extra, {"CORTEX_PIN_BY_NEED": "1"})
         self.run_app(case, ctx=ctx)
 
     def test_experimental_filter_and_text_filter(self):
@@ -655,7 +655,7 @@ class AccessStep(Base):
         async def case(app, pilot, ctx):
             await press(pilot, *self.reach(), "down")
             t = text_of(app)
-            self.assertTrue(ctx.settings.api_key.startswith("sk-strata-"))
+            self.assertTrue(ctx.settings.api_key.startswith("sk-cortex-"))
             self.assertIn("API key   [ on ]", t)
             self.assertIn("An API key was made for you", t)
             await press(pilot, "enter")
@@ -703,7 +703,7 @@ class AccessStep(Base):
                 await press(pilot, *self.reach())
                 self.assertNotIn("Windows may ask", flat(app))
                 await press(pilot, "down")
-                self.assertIn("Windows may ask whether to allow Strata", flat(app))
+                self.assertIn("Windows may ask whether to allow Cortex", flat(app))
                 self.assertIn("choose Allow for private networks", flat(app))
         self.run_app(case)
 
@@ -840,7 +840,7 @@ class CardsStep(Base):
             self.assertIn("fits: needs", flat)                       # plain numbers
             cur = app.screen.menu().current
             self.assertEqual(len(cur.key), 1)                        # the recommended choice is the single largest card
-            await press(pilot, "enter")                              # keeping it stores "let Strata choose": the same rule runs in setup
+            await press(pilot, "enter")                              # keeping it stores "let Cortex choose": the same rule runs in setup
             self.assertIsNone(ctx.settings.gpus)
             self.assertIn("Where should the model files be stored?", text_of(app))
         self.run_app(case, ctx=make_ctx(HW_2X16))

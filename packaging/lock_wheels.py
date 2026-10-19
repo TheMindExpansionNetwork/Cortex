@@ -89,7 +89,7 @@ def _dropped_for_target(target: str) -> set[str]:
 
 def build_lock(target: str) -> str:
     spec = TARGETS[target]
-    with tempfile.TemporaryDirectory(prefix="strata-lock-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="cortex-lock-") as tmp:
         cmd = [sys.executable, "-m", "pip", "download", "--quiet", "--only-binary=:all:",
                "--python-version", PYTHON, "--implementation", "cp", "--abi", ABI, "-d", tmp]
         for p in spec["platforms"]:

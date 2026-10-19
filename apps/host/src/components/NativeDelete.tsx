@@ -39,7 +39,7 @@ export function NativeDeleteDialog({ id, onClose }: { id: string | null; onClose
     }
     return <Dialog open={!!id} compact title={tr("Delete this version?")} onClose={close} actions={<><Btn disabled={pending} onClick={close}>{tr("Keep version")}</Btn><Btn variant="danger" disabled={pending || busy || !entry} onClick={() => void remove()}>{tr(pending ? 'Working…' : 'Delete version')}</Btn></>}>
       <p>{tr(label)}{tr(size ? ` · ${sizeGb(size)}` : '')}</p>
-      {tr(!entry ? <p className="small muted">{tr("This version is no longer downloaded.")}</p> : <p className="small muted storage-delete-note">{keepsFiles ? tr('These files are in your own folder, so they stay there. Only the entry in Strata is removed.') : tr('Remove {0} GB of downloaded files. You can download this version again.', [gb ? gb.toFixed(1) : '0'])}{tr(running ? ' ' : '')}{tr(running ? (keepsFiles ? 'The running model will be unloaded.' : 'The running model will be unloaded and its files deleted.') : '')}</p>)}
+      {tr(!entry ? <p className="small muted">{tr("This version is no longer downloaded.")}</p> : <p className="small muted storage-delete-note">{keepsFiles ? tr('These files are in your own folder, so they stay there. Only the entry in Cortex is removed.') : tr('Remove {0} GB of downloaded files. You can download this version again.', [gb ? gb.toFixed(1) : '0'])}{tr(running ? ' ' : '')}{tr(running ? (keepsFiles ? 'The running model will be unloaded.' : 'The running model will be unloaded and its files deleted.') : '')}</p>)}
       {tr(error ? <ErrorNotice message={error}/> : null)}
     </Dialog>;
 }

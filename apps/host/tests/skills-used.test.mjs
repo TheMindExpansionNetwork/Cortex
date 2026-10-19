@@ -12,7 +12,7 @@ import { resolveHarness } from '../server/agent/harness-runtime.mjs';
 import { materializeSkills } from '../server/skill-files.mjs';
 import { SkillsUsed, skillInfoFrom, skillLabel } from '../server/agent/skills-used.mjs';
 
-const skip = !process.env.STRATA_HARNESS_DIR || !resolveHarness({ env: process.env }).ok ? 'STRATA_HARNESS_DIR is not set to a built Harness' : false;
+const skip = !process.env.CORTEX_HARNESS_DIR || !resolveHarness({ env: process.env }).ok ? 'CORTEX_HARNESS_DIR is not set to a built Harness' : false;
 const cleanup = dir => { try { rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch { /* best effort */ } };
 
 test('a skill is reported once, when it has worked, with the whole list so far', () => {
@@ -30,7 +30,7 @@ test('a skill is reported once, when it has worked, with the whole list so far',
 });
 
 test('the name and description come from the skill file the app wrote; a folder name is made readable', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'strata-su-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-su-'));
   try {
     materializeSkills(dir, [{ id: 'my-weekly-report', name: 'Weekly report', description: 'Turns notes into a short status update', body: 'Be short.', enabled: true }]);
     const info = skillInfoFrom(dir);
@@ -50,7 +50,7 @@ test('the page keeps the list on the reply (readSkills) and tolerates a bad fram
 
 test('real Harness: loading two saved skills in a turn sends one skills-used frame per skill, then both are listed', { skip }, async (t) => {
   const worker = await startScriptedWorker({});
-  const dir = mkdtempSync(join(tmpdir(), 'strata-su-run-')); const ws = join(dir, 'ws'); mkdirSync(ws, { recursive: true });
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-su-run-')); const ws = join(dir, 'ws'); mkdirSync(ws, { recursive: true });
   const live = join(dir, 'skills-live');
   materializeSkills(live, [
     { id: 'my-weekly-report', name: 'Weekly report', description: 'Turns notes into a short status update', body: 'Be short.', enabled: true },
@@ -68,7 +68,7 @@ test('real Harness: loading two saved skills in a turn sends one skills-used fra
 
 test('real Harness: two skills in one answer are listed together, in the order they were loaded', { skip }, async (t) => {
   const worker = await startScriptedWorker({});
-  const dir = mkdtempSync(join(tmpdir(), 'strata-su-two-')); const ws = join(dir, 'ws'); mkdirSync(ws, { recursive: true });
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-su-two-')); const ws = join(dir, 'ws'); mkdirSync(ws, { recursive: true });
   const live = join(dir, 'skills-live');
   materializeSkills(live, [
     { id: 'my-weekly-report', name: 'Weekly report', description: 'Turns notes into a short status update', body: 'Be short.', enabled: true },

@@ -1,16 +1,16 @@
 // src/core/session.cpp - one token through all 48 layers.  See the header for why the graphs are per-layer.
-#include "strata/core/session.hpp"
-#include "strata/core/pin_budget.hpp"
-#include "strata/kernels/mrope.hpp"
-#include "strata/core/progress.hpp"
+#include "cortex/core/session.hpp"
+#include "cortex/core/pin_budget.hpp"
+#include "cortex/kernels/mrope.hpp"
+#include "cortex/core/progress.hpp"
 
-#include "strata/kernels/qsa.hpp"
-#include "strata/kernels/elementwise.hpp"
-#include "strata/kernels/quantize_act.hpp"
-#include "strata/kernels/s2_expert_grouped.hpp"
-#include "strata/kernels/cpu/pool.hpp"
-#include "strata/platform/aux_cpus.hpp"
-#include "strata/kernels/ngram.hpp"
+#include "cortex/kernels/qsa.hpp"
+#include "cortex/kernels/elementwise.hpp"
+#include "cortex/kernels/quantize_act.hpp"
+#include "cortex/kernels/s2_expert_grouped.hpp"
+#include "cortex/kernels/cpu/pool.hpp"
+#include "cortex/platform/aux_cpus.hpp"
+#include "cortex/kernels/ngram.hpp"
 
 #include <cuda_runtime.h>
 
@@ -25,12 +25,12 @@
 // spin is just less polite to the pipeline.
 #if defined(_MSC_VER) || defined(__x86_64__) || defined(__i386__)
 #include <immintrin.h>
-#define STRATA_SPIN_PAUSE() _mm_pause()
+#define CORTEX_SPIN_PAUSE() _mm_pause()
 #else
-#define STRATA_SPIN_PAUSE() ((void) 0)
+#define CORTEX_SPIN_PAUSE() ((void) 0)
 #endif
 
-namespace strata::core {
+namespace cortex::core {
 namespace {
 
 constexpr uint64_t SESSION_STATE_ALIGN = 256;
@@ -50,7 +50,7 @@ uint64_t gdn_state_floats(const ModelGeometry& g) {
 /// `NG_HIST` rows of `hc_dim` floats: the PLE conv's history, which is the ONLY PLE state that lives in the
 /// session arena.  The table and the weights are model-level and the caller owns them.
 static uint64_t ple_hist_bytes() {
-    return (uint64_t) strata::kernels::NG_HIST * strata::kernels::NG_HC_DIM * sizeof(float);
+    return (uint64_t) cortex::kernels::NG_HIST * cortex::kernels::NG_HC_DIM * sizeof(float);
 }
 
 uint64_t session_bytes(const ModelGeometry& g, int64_t max_cells, int64_t k, int64_t layer_lo, int64_t layer_hi) {
@@ -133,24 +133,24 @@ uint64_t session_init(const ModelGeometry& g, int64_t max_cells, int64_t k, void
 void session_release(SessionState& s) {
     for (int64_t j = 0; s.qsa_states != nullptr && j < s.qsa_alloc; ++j)
         if (s.qsa_states[j].owns_rope) {
-            strata::kernels::rope_table_release(s.qsa_states[j].cos_tab);
+            cortex::kernels::rope_table_release(s.qsa_states[j].cos_tab);
             s.qsa_states[j].owns_rope = false;
         }
 }
 
-#if defined(STRATA_GPU_METAL)
-}  // namespace strata::core
-namespace strata::metal_engine {
+#if defined(CORTEX_GPU_METAL)
+}  // namespace cortex::core
+namespace cortex::metal_engine {
 void window_reset();   // metal/src/engine/window.cpp: the decode window's running state back to a new sequence's
-}  // namespace strata::metal_engine
-namespace strata::core {
+}  // namespace cortex::metal_engine
+namespace cortex::core {
 #endif
 
 void session_zero(SessionState& s, const ModelGeometry& g, const float* R_init, void* stream) {
-#if defined(STRATA_GPU_METAL)
+#if defined(CORTEX_GPU_METAL)
     // the running state lives in the Metal decode window; the session's own device buffers are not read there
     (void) g; (void) R_init; (void) stream;
-    strata::metal_engine::window_reset();
+    cortex::metal_engine::window_reset();
     s.ple_prev[0] = -1;
     s.ple_prev[1] = -1;
     s.ple_token = -1;
@@ -194,7 +194,7 @@ void gdn_point_at(const ModelGeometry& g, int64_t layer, SessionState& s) {
 /// The per-token staging every QSA layer's captured H2D reads FROM.  Must run before each replay: the graphs
 /// captured the SOURCE POINTER, not the value, and that is exactly why the buffers are pinned and fixed.
 void stage_token(const ModelGeometry& g, int64_t pos, int32_t pos_base, SessionState& s) {
-    const strata::kernels::QsaShapes sh = qsa_shapes(g);
+    const cortex::kernels::QsaShapes sh = qsa_shapes(g);
     for (int64_t j = 0; j < s.qsa_alloc; ++j) {
         QsaState& q = s.qsa_states[s.qsa_ord0 + j];
         qsa_step_fill(q.host_step, pos, sh);
@@ -542,7 +542,7 @@ bool SessionLoopScratch::init(size_t parts_bytes_in, std::string& err) {
     }
     parts_bytes = parts_bytes_in;
     // MAPPED as well as pinned: the token graph's handoff kernel reads it through its device pointer.
-    if (strata::core::host_alloc_guarded((void**) &y_miss, parts_bytes, cudaHostAllocMapped | cudaHostAllocPortable) != cudaSuccess) {
+    if (cortex::core::host_alloc_guarded((void**) &y_miss, parts_bytes, cudaHostAllocMapped | cudaHostAllocPortable) != cudaSuccess) {
         err = "SessionLoopScratch: cudaHostAlloc for the pool's staging failed";
         return false;
     }
@@ -560,18 +560,18 @@ bool SessionLoopScratch::init(size_t parts_bytes_in, std::string& err) {
     // for a property that wants to hold for the whole session.
     // The host's core is the pool's reserved one: the first physical core, or the last with --host-core last (F12),
     // or the first core's SMT sibling with --host-core sibling.
-    const int host_core = strata::kernels::cpu::planned_host_core();
+    const int host_core = cortex::kernels::cpu::planned_host_core();
     if (host_core >= 0) {
-        pinned_core = strata::kernels::cpu::pin_current_thread(host_core);
+        pinned_core = cortex::kernels::cpu::pin_current_thread(host_core);
         pinned = pinned_core.valid;
     } else {
-        const std::vector<int> cores = strata::kernels::cpu::physical_cores(false);
+        const std::vector<int> cores = cortex::kernels::cpu::physical_cores(false);
         if (!cores.empty()) {
-            pinned_core = strata::kernels::cpu::pin_current_thread(cores[0]);
+            pinned_core = cortex::kernels::cpu::pin_current_thread(cores[0]);
             pinned = pinned_core.valid;
         }
     }
-    strata::aux_cpus::note_owned_thread();   // the host: --aux-cpus leaves it where it is
+    cortex::aux_cpus::note_owned_thread();   // the host: --aux-cpus leaves it where it is
     return true;
 }
 
@@ -579,7 +579,7 @@ void SessionLoopScratch::free() {
     // Restores the caller's affinity on every path, including teardown: a library that silently leaves its
     // caller's thread nailed to one core is worse than one that never pinned at all.
     if (pinned) {
-        strata::kernels::cpu::restore_thread_affinity(pinned_core);
+        cortex::kernels::cpu::restore_thread_affinity(pinned_core);
         pinned = false;
         pinned_core = {};
     }
@@ -713,7 +713,7 @@ bool session_loop(const ModelGeometry& g, int64_t pos, int32_t pos_base, Session
                 return false;
             }
             if (rang) break;                             // rung, and the graph is still running: the overlap
-            STRATA_SPIN_PAUSE();
+            CORTEX_SPIN_PAUSE();
         }
         if (mid_graph) ++gr.rings_mid_graph;
         // the window, from just before the launch to the instant the ring was seen
@@ -845,9 +845,9 @@ bool session_token(const WeightTable& tables, const ModelGeometry& g, int64_t po
     return true;
 }
 
-}  // namespace strata::core
+}  // namespace cortex::core
 
-namespace strata::core {
+namespace cortex::core {
 
 bool session_capture_token(const WeightTable& tables, const ModelGeometry& g, SessionState& s, float* parts_dev,
                            const float* y_miss_host, size_t parts_bytes, TokenGraph& tg, std::string& err,
@@ -886,18 +886,18 @@ bool session_capture_token(const WeightTable& tables, const ModelGeometry& g, Se
         if (!ok) { err = "session_capture_token: pre layer " + std::to_string(l) + ": " + err; break; }
         if (hits != nullptr) {
             // After the ring (and the shared expert): the GPU's experts run while the CPU computes the misses.
-            strata::kernels::moe_hit_select(s.moe.ids, hits->d_res + l * hits->n_expert, (int) s.k,
+            cortex::kernels::moe_hit_select(s.moe.ids, hits->d_res + l * hits->n_expert, (int) s.k,
                                             (int) hits->n_expert, hits->d_slot, hits->d_dst, hits->d_count, (void*) cs);
-            strata::kernels::quantize_q8_0_scaled(s.block.mixed, hits->x_q8, hits->x_scale, g.n_embd, (void*) cs);
-            strata::kernels::moe_hit_grouped_s2_dev(hits->cache_base, hits->d_slot, hits->d_dst, hits->d_count, s.k,
+            cortex::kernels::quantize_q8_0_scaled(s.block.mixed, hits->x_q8, hits->x_scale, g.n_embd, (void*) cs);
+            cortex::kernels::moe_hit_grouped_s2_dev(hits->cache_base, hits->d_slot, hits->d_dst, hits->d_count, s.k,
                                                     hits->blob, hits->x_q8, hits->scratch, hits->hit_out, (void*) cs,
                                                     hits->x_scale);
         }
-        strata::kernels::doorbell_wait(s.db->d_flag, s.db->d_seq, (void*) cs);
+        cortex::kernels::doorbell_wait(s.db->d_flag, s.db->d_seq, (void*) cs);
         // A kernel, not a memcpy node: a copy-engine node splits the WDDM submission (measured 67 flushes/token).
-        strata::kernels::copy_from_mapped(parts_dev, y_dev, (int64_t) (parts_bytes / sizeof(float)), (void*) cs);
+        cortex::kernels::copy_from_mapped(parts_dev, y_dev, (int64_t) (parts_bytes / sizeof(float)), (void*) cs);
         if (hits != nullptr)
-            strata::kernels::moe_hit_add(parts_dev, hits->hit_out, hits->d_dst, hits->d_count, s.k, g.n_embd, (void*) cs);
+            cortex::kernels::moe_hit_add(parts_dev, hits->hit_out, hits->d_dst, hits->d_count, s.k, g.n_embd, (void*) cs);
         ok = block_layer_post(tables, g, l, s.k, s.moe, s.block, parts_dev, (void*) cs, err);
         if (!ok) { err = "session_capture_token: post layer " + std::to_string(l) + ": " + err; break; }
         if (qsa) ++qsa_index;
@@ -935,7 +935,7 @@ bool session_run_token(const ModelGeometry& g, int64_t pos, int32_t pos_base, Se
     if (le != cudaSuccess) { err = std::string("session_run_token: launch: ") + cudaGetErrorString(le); return false; }
     (void) cudaStreamQuery(cs);                     // one flush, so WDDM submits the graph now
     static const int flush_us = [] {
-        const char* e = std::getenv("STRATA_TG_FLUSH_US");
+        const char* e = std::getenv("CORTEX_TG_FLUSH_US");
         return e ? std::atoi(e) : 2000;   // 24 Sep: 0 flushes run as fast as 5 us ones; this only notices faults
     }();
     volatile uint32_t* const seq = s.db->h_seq;
@@ -948,7 +948,7 @@ bool session_run_token(const ModelGeometry& g, int64_t pos, int32_t pos_base, Se
         uint32_t spins = 0;
         progress_at("token: waiting for the GPU to reach layer", l);
         while (*seq < want) {
-            STRATA_SPIN_PAUSE();
+            CORTEX_SPIN_PAUSE();
             if ((++spins & 1023u) != 0) continue;
             const auto now = Clock::now();
             if (now - last_flush > std::chrono::microseconds(flush_us)) {
@@ -990,4 +990,4 @@ void token_graph_free(TokenGraph& tg) {
     tg = TokenGraph{};
 }
 
-}  // namespace strata::core
+}  // namespace cortex::core

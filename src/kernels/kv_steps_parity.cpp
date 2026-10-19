@@ -4,9 +4,9 @@
 // Cells land at scattered positions through a non-identity page table; the K/V rows are random with small, large and
 // all-zero groups. Three layouts: INT8 K and V, Q4_0 K and V, and the K8V4 hybrid's folded call (the K pool passed as
 // both halves, one plane). GPU, synthetic, no model.
-#include "strata/kernels/kv_q4.hpp"
-#include "strata/kernels/kv_q8.hpp"
-#include "strata/kernels/qsa.hpp"
+#include "cortex/kernels/kv_q4.hpp"
+#include "cortex/kernels/kv_q8.hpp"
+#include "cortex/kernels/qsa.hpp"
 
 #include <cuda_runtime.h>
 
@@ -17,7 +17,7 @@
 #include <random>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 int g_fail = 0;

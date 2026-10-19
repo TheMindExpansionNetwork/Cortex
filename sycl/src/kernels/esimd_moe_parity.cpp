@@ -7,11 +7,11 @@
 //   esimd_moe_parity [mean_rows=80] [experts=16] [reps=10] [seed=1] [gate_up_type down_type]
 //   types: gate/up 21 IQ3_S, 18 IQ3_XXS, 22 IQ2_S; down 20 IQ4_NL, 42 Q2_0.
 // Exit status 1 when (c) is off by more than 2e-5 of the largest value or (b) exceeds the int8 activation error budget.
-#include "strata/kernels/iq_kernels.hpp"
-#include "strata/kernels/iq_dequant_expert.hpp"
-#include "strata/prefill/esimd_moe.hpp"
-#include "strata/prefill/kernels.hpp"
-#include "strata/sycl_queue.hpp"
+#include "cortex/kernels/iq_kernels.hpp"
+#include "cortex/kernels/iq_dequant_expert.hpp"
+#include "cortex/prefill/esimd_moe.hpp"
+#include "cortex/prefill/kernels.hpp"
+#include "cortex/sycl_queue.hpp"
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
 #include <dpct/blas_utils.hpp>
@@ -28,7 +28,7 @@
 #define GGML_TABLE_END() };
 #include "../prefill/iq_tables.inc"
 
-namespace i8 = strata::prefill::i8;
+namespace i8 = cortex::prefill::i8;
 static uint16_t f2h(float f) { return sycl::bit_cast<uint16_t>(sycl::half(f)); }
 static float h2f(uint16_t h) { return (float) sycl::bit_cast<sycl::half>(h); }
 
@@ -141,12 +141,12 @@ static Result run_case(sycl::queue* q, dpct::blas::descriptor_ptr hd, int gt, in
     auto ref = [&]() {
         int64_t o = 0;
         for (int i = 0; i < n; ++i) {
-            strata::kernels::iq_dequant_expert_f16(gt, dt, db[i], db[i] + gate_b, db[i] + 2 * gate_b, NFF, K, dwgu, dwd, q);
+            cortex::kernels::iq_dequant_expert_f16(gt, dt, db[i], db[i] + gate_b, db[i] + 2 * gate_b, NFF, K, dwgu, dwd, q);
             const float a = 1.f, b = 0.f;
             dpct::blas::gemm(hd, oneapi::mkl::transpose::trans, oneapi::mkl::transpose::nontrans, 2 * NFF, cnt[i], K, &a, dwgu,
                              dpct::library_data_t::real_half, K, dxh + o * K, dpct::library_data_t::real_half, K, &b,
                              GUr + o * 2 * NFF, dpct::library_data_t::real_float, 2 * NFF, dpct::compute_type::f32);
-            strata::prefill::swiglu_interleaved(GUr + o * 2 * NFF, Hh + o * NFF, cnt[i], q);
+            cortex::prefill::swiglu_interleaved(GUr + o * 2 * NFF, Hh + o * NFF, cnt[i], q);
             dpct::blas::gemm(hd, oneapi::mkl::transpose::trans, oneapi::mkl::transpose::nontrans, NE, cnt[i], NFF, &a, dwd,
                              dpct::library_data_t::real_half, NFF, Hh + o * NFF, dpct::library_data_t::real_half, NFF, &b,
                              Dmr + o * NE, dpct::library_data_t::real_float, NE, dpct::compute_type::f32);

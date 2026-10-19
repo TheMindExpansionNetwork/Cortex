@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const HOST_PORT = process.env.STRATA_PORT ?? '8791';
+const HOST_PORT = process.env.CORTEX_PORT ?? '8791';
 
 const palette = { host: '\u001b[38;5;114m', web: '\u001b[38;5;111m', dim: '\u001b[2m', off: '\u001b[0m' };
 
@@ -58,9 +58,9 @@ function shutdown(code = 0) {
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
 
-console.log(`${palette.dim}strata dev · host :${HOST_PORT} · web :5199${palette.off}`);
+console.log(`${palette.dim}cortex dev · host :${HOST_PORT} · web :5199${palette.off}`);
 // --watch restarts the host on server edits without taking the web server down.
-run('host', process.execPath, ['--watch', join(ROOT, 'server', 'index.mjs')], { STRATA_PORT: HOST_PORT });
+run('host', process.execPath, ['--watch', join(ROOT, 'server', 'index.mjs')], { CORTEX_PORT: HOST_PORT });
 run('web', process.execPath, [join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js')], {
-  STRATA_HOST: `http://127.0.0.1:${HOST_PORT}`,
+  CORTEX_HOST: `http://127.0.0.1:${HOST_PORT}`,
 });

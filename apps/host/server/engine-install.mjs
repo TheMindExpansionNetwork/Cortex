@@ -1,8 +1,8 @@
 /**
  * Engine installer.
  *
- * Strata ships no binaries: it fetches the llama.cpp release build that matches
- * this platform into $STRATA_HOME/engine, so "Install inference engine" in the
+ * Cortex ships no binaries: it fetches the llama.cpp release build that matches
+ * this platform into $CORTEX_HOME/engine, so "Install inference engine" in the
  * first-run wizard is a real step rather than a progress bar that lies.
  */
 import { createWriteStream, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';

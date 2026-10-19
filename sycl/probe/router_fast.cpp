@@ -2,8 +2,8 @@
 // tails and the fast kernel's forced serial-sum fallback. Also time decode calls.
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/sycl_queue.hpp"
-#include "strata/kernels/router_top10.hpp"
+#include "cortex/sycl_queue.hpp"
+#include "cortex/kernels/router_top10.hpp"
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -12,7 +12,7 @@
 #include <vector>
 
 static int compare(int experts, int k, int rows) {
-    auto& q = *strata::q_of(nullptr);
+    auto& q = *cortex::q_of(nullptr);
     std::mt19937 rng(17);
     std::normal_distribution<float> normal(0, 2);
     std::vector<float> logits((size_t)rows * experts);
@@ -35,7 +35,7 @@ static int compare(int experts, int k, int rows) {
         di[v] = sycl::malloc_device<int>(n, q);
         q.memset(dw[v], 0x3c, n * sizeof(float));
         q.memset(di[v], 0x11, n * sizeof(int));
-        if (!strata::kernels::router_top10_variant(dl, rows, experts, k, di[v], dw[v], &q, v)) return 2;
+        if (!cortex::kernels::router_top10_variant(dl, rows, experts, k, di[v], dw[v], &q, v)) return 2;
         weights[v].resize(n); ids[v].resize(n);
         q.memcpy(weights[v].data(), dw[v], n * sizeof(float));
         q.memcpy(ids[v].data(), di[v], n * sizeof(int));
@@ -54,7 +54,7 @@ static int compare(int experts, int k, int rows) {
         constexpr int reps = 300;
         auto start = std::chrono::steady_clock::now();
         for (int r = 0; r < reps; ++r)
-            strata::kernels::router_top10_variant(dl + (r % 64)*experts, 1, experts, k, di[v], dw[v], &q, v);
+            cortex::kernels::router_top10_variant(dl + (r % 64)*experts, 1, experts, k, di[v], dw[v], &q, v);
         q.wait_and_throw();
         auto us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now()-start).count()/reps;
         std::printf("variant %d single-token call: %.2f us (host submission + execution)\n", v, us);

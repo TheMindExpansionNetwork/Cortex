@@ -3,7 +3,7 @@
 
     python apps/desktop/scripts/app-close-matrix.py --install <folder the installer wrote> [--scenarios all] [--report out.json]
 
-For each case it starts the REAL installed `strata-desktop.exe` (its window opens), loads a stub engine through the host's API
+For each case it starts the REAL installed `cortex-desktop.exe` (its window opens), loads a stub engine through the host's API
 (profile + `runtime start` under Control's owner runtime, exactly the app's path), records every process of the tree (the app,
 the host, Control, the owner host, the server, the engine), ends the app one way, and asserts:
   * no process of the tree is left, the engine's port is free, the runtime lease can be taken again;
@@ -32,7 +32,7 @@ sys.path.insert(0, str(ROOT))
 
 import psutil  # noqa: E402
 
-from strata_control import procs, runtime  # noqa: E402
+from cortex_control import procs, runtime  # noqa: E402
 from tests.terminal.lifecycle_matrix import install_fake_engine, port_open  # noqa: E402
 
 if os.name != "nt":
@@ -52,7 +52,7 @@ def main_window(pid: int) -> int | None:
         if owner.value == pid and user32.IsWindowVisible(hwnd):
             buf = ctypes.create_unicode_buffer(256)
             user32.GetWindowTextW(hwnd, buf, 256)
-            if buf.value.strip() == "Strata":
+            if buf.value.strip() == "Cortex":
                 found.append(hwnd)
         return True
     user32.EnumWindows(visit, 0)
@@ -68,7 +68,7 @@ class Scratch:
         for d in (self.components, self.models, self.mark, root / "local", root / "home", root / "appdata", root / "webview"):
             d.mkdir(parents=True, exist_ok=True)
         install_fake_engine(self.components)
-        from tools.strata_tokenizer import BYTE_TO_UNICODE
+        from tools.cortex_tokenizer import BYTE_TO_UNICODE
         tok = self.models / "tokenizer"
         tok.mkdir()
         tokens = [BYTE_TO_UNICODE[i] for i in range(256)] + ["ab", "<|im_start|>", "<|im_end|>", "<|endoftext|>"]
@@ -76,25 +76,25 @@ class Scratch:
         (tok / "merges.txt").write_text("a b")
         (tok / "token_type.json").write_text(json.dumps([0] * 257 + [3, 3, 3]))
         for name in ("stub", "stub2"):
-            (self.models / f"strata-{name}.json").write_text(json.dumps({
-                "exe": "component:strata-engine", "backend": "cuda", "tokenizer": str(tok), "args": [], "cwd": str(root),
+            (self.models / f"cortex-{name}.json").write_text(json.dumps({
+                "exe": "component:cortex-engine", "backend": "cuda", "tokenizer": str(tok), "args": [], "cwd": str(root),
                 "model_name": name, "host": "127.0.0.1", "port": 0}))
-        self.env = {**os.environ, "STRATA_COMPONENTS_DIR": str(self.components), "STRATA_PROFILE_DIR": str(root / "profiles"),
-                    "STRATA_RUNTIME_DIR": str(root / "runtime"), "STRATA_INSTALL_DIR": str(self.models),
-                    "STRATA_MODELS_DIR": str(root / "models-unused"), "STRATA_ENGINE_BACKEND": "cuda",
-                    "STRATA_HOME": str(root / "home"), "APPDATA": str(root / "appdata"), "LOCALAPPDATA": str(root / "local"),
+        self.env = {**os.environ, "CORTEX_COMPONENTS_DIR": str(self.components), "CORTEX_PROFILE_DIR": str(root / "profiles"),
+                    "CORTEX_RUNTIME_DIR": str(root / "runtime"), "CORTEX_INSTALL_DIR": str(self.models),
+                    "CORTEX_MODELS_DIR": str(root / "models-unused"), "CORTEX_ENGINE_BACKEND": "cuda",
+                    "CORTEX_HOME": str(root / "home"), "APPDATA": str(root / "appdata"), "LOCALAPPDATA": str(root / "local"),
                     "WEBVIEW2_USER_DATA_FOLDER": str(root / "webview"), "FAKE_ENGINE_MARK": str(self.mark),
                     "FAKE_ENGINE_SLOW_STEPS": "0", "PYTHONDONTWRITEBYTECODE": "1"}
-        self.env.pop("STRATA_API_KEY", None)
-        for key in ("STRATA_COMPONENTS_DIR", "STRATA_PROFILE_DIR", "STRATA_RUNTIME_DIR", "LOCALAPPDATA", "STRATA_ENGINE_BACKEND",
-                    "STRATA_NO_ACQUIRE", "FAKE_ENGINE_MARK"):
+        self.env.pop("CORTEX_API_KEY", None)
+        for key in ("CORTEX_COMPONENTS_DIR", "CORTEX_PROFILE_DIR", "CORTEX_RUNTIME_DIR", "LOCALAPPDATA", "CORTEX_ENGINE_BACKEND",
+                    "CORTEX_NO_ACQUIRE", "FAKE_ENGINE_MARK"):
             os.environ[key] = self.env.get(key, "1")          # this process reads the same runtime and records folders
 
 
 class App:
     def __init__(self, scratch: Scratch):
         self.s = scratch
-        self.proc = subprocess.Popen([str(scratch.install / "strata-desktop.exe")], cwd=scratch.install, env=scratch.env,
+        self.proc = subprocess.Popen([str(scratch.install / "cortex-desktop.exe")], cwd=scratch.install, env=scratch.env,
                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.base = None
 
@@ -193,8 +193,8 @@ def lease_free() -> bool:
 
 def control(scratch: Scratch, *argv: str, timeout: int = 300) -> dict:
     py = scratch.install / "control" / "python" / "python.exe"
-    out = subprocess.run([str(py), str(scratch.install / "control" / "strata.py"), *argv, "--output", "json"],
-                         env={**scratch.env, "PYTHONNOUSERSITE": "1", "STRATA_NO_ACQUIRE": "1"},
+    out = subprocess.run([str(py), str(scratch.install / "control" / "cortex.py"), *argv, "--output", "json"],
+                         env={**scratch.env, "PYTHONNOUSERSITE": "1", "CORTEX_NO_ACQUIRE": "1"},
                          capture_output=True, text=True, timeout=timeout)
     try:
         return json.loads(out.stdout)
@@ -204,8 +204,8 @@ def control(scratch: Scratch, *argv: str, timeout: int = 300) -> dict:
 
 def stop_cli(scratch: Scratch, slot: str) -> dict:
     py = scratch.install / "control" / "python" / "python.exe"
-    out = subprocess.run([str(py), str(scratch.install / "control" / "strata.py"), "runtime", "stop", "--profile", slot, "--wait", "30",
-                          "--output", "json"], env={**scratch.env, "PYTHONNOUSERSITE": "1", "STRATA_NO_ACQUIRE": "1"},
+    out = subprocess.run([str(py), str(scratch.install / "control" / "cortex.py"), "runtime", "stop", "--profile", slot, "--wait", "30",
+                          "--output", "json"], env={**scratch.env, "PYTHONNOUSERSITE": "1", "CORTEX_NO_ACQUIRE": "1"},
                          capture_output=True, text=True, timeout=120)
     try:
         return json.loads(out.stdout)
@@ -214,7 +214,7 @@ def stop_cli(scratch: Scratch, slot: str) -> dict:
 
 
 def case(name: str, install: Path, how: str) -> dict:
-    with tempfile.TemporaryDirectory(prefix="strata-app-matrix-", ignore_cleanup_errors=True) as tmp:
+    with tempfile.TemporaryDirectory(prefix="cortex-app-matrix-", ignore_cleanup_errors=True) as tmp:
         saved = dict(os.environ)
         scratch = Scratch(Path(tmp), install)
         app = App(scratch)
@@ -225,7 +225,7 @@ def case(name: str, install: Path, how: str) -> dict:
             terminal = None
             if how == "window-x-terminal-engine":
                 # an engine the Terminal started (its own profile, no tie to the app) must survive the app's close
-                control(scratch, "profile", "create", "terminal-1", "--from-config", str(scratch.models / "strata-stub2.json"))
+                control(scratch, "profile", "create", "terminal-1", "--from-config", str(scratch.models / "cortex-stub2.json"))
                 terminal = control(scratch, "runtime", "start", "--profile", "terminal-1", "--wait", "60")
                 if terminal.get("state") != "ready":
                     raise RuntimeError(f"the Terminal's service did not start: {terminal}")
@@ -236,7 +236,7 @@ def case(name: str, install: Path, how: str) -> dict:
             engine_ports = [i["port"] for i in state["instances"]]
             idents, _ = tree_of(app, slots)
             kinds = sorted({("engine" if "engine" in " ".join(i.cmd) else "server" if "serve.server" in " ".join(i.cmd) else
-                             "owner" if "strata_control.runtime" in " ".join(i.cmd) else "app" if "strata-desktop" in i.cmd[0].lower()
+                             "owner" if "cortex_control.runtime" in " ".join(i.cmd) else "app" if "cortex-desktop" in i.cmd[0].lower()
                              else "host" if "node" in i.cmd[0].lower() else "other") for i in idents})
             note = f"tree {len(idents)} processes: {', '.join(kinds)}; engine ports {engine_ports}"
             t0 = time.monotonic()
@@ -253,7 +253,7 @@ def case(name: str, install: Path, how: str) -> dict:
                 host = app.host()
                 subprocess.run(["taskkill", "/F", "/PID", str(host.pid)], capture_output=True)
             elif how == "second-launch":
-                second = subprocess.Popen([str(install / "strata-desktop.exe")], cwd=install, env=scratch.env,
+                second = subprocess.Popen([str(install / "cortex-desktop.exe")], cwd=install, env=scratch.env,
                                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 try:
                     code = second.wait(timeout=30)
@@ -264,7 +264,7 @@ def case(name: str, install: Path, how: str) -> dict:
                 time.sleep(2)
                 hosts = [p for p in psutil.process_iter(["name", "pid"]) if p.info["name"].lower() == "node.exe"
                          and (p.parent() and p.parent().pid == app.proc.pid)]
-                apps = [p for p in psutil.process_iter(["name"]) if p.info["name"].lower() == "strata-desktop.exe"]
+                apps = [p for p in psutil.process_iter(["name"]) if p.info["name"].lower() == "cortex-desktop.exe"]
                 if app.proc.poll() is not None:
                     problems.append("the first app went away")
                 if len(apps) != 1:
@@ -280,7 +280,7 @@ def case(name: str, install: Path, how: str) -> dict:
             if how == "host-crash":
                 # the shell and its window stay (nothing here restarts a dead host); the host, Control's owner, the server and
                 # the engine must not
-                idents = [i for i in idents if any(k in " ".join(i.cmd) for k in ("strata_control.runtime", "serve.server", "engine", "node.exe"))]
+                idents = [i for i in idents if any(k in " ".join(i.cmd) for k in ("cortex_control.runtime", "serve.server", "engine", "node.exe"))]
             left = wait_gone(idents, 90)
             if left:
                 problems.append(f"processes left: {left}")

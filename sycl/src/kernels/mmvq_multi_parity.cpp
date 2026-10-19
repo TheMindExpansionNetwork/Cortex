@@ -2,11 +2,11 @@
 //
 //     build/mmvq_multi_parity
 //
-// WHY IT EXISTS.  `include/strata/kernels/native_mmvq.hpp` says of `native_mmvq_set_multi_exact`:
+// WHY IT EXISTS.  `include/cortex/kernels/native_mmvq.hpp` says of `native_mmvq_set_multi_exact`:
 //
 //     "true (default): the ncols == 1 layout, every column bitwise equal to a single-column call"
 //
-// and `include/strata/core/verify.hpp` counts "multi-column MMVQ in exact mode" among the reasons the verify window
+// and `include/cortex/core/verify.hpp` counts "multi-column MMVQ in exact mode" among the reasons the verify window
 // produces what greedy decode would, bit for bit.  Nothing tested that sentence: `iq_parity` calls `native_mmvq`
 // with two columns and compares against a float64 reference at 2e-2, which cannot see a difference between one
 // column and T columns.
@@ -31,8 +31,8 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/kernels/iq_kernels.hpp"
-#include "strata/kernels/native_mmvq.hpp"
+#include "cortex/kernels/iq_kernels.hpp"
+#include "cortex/kernels/native_mmvq.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -92,11 +92,11 @@ bool ck(dpct::err0 e, const char *what) {
 long long compare(const Case &c, int T, dpct::queue_ptr s, long long &nonfinite,
                   long long &diff_finite, bool &ran) try {
     ran = false;
-    if (!strata::kernels::native_mmvq_supported(c.type)) return -1;
+    if (!cortex::kernels::native_mmvq_supported(c.type)) return -1;
 
-    const std::size_t wbytes = strata::kernels::native_mmvq_weight_bytes(c.type, c.n_in, c.n_out);
-    const std::size_t qcol = strata::kernels::native_q8_1_bytes(c.n_in, 1);   // Q8_1 bytes of ONE column
-    const std::size_t qall = strata::kernels::native_q8_1_bytes(c.n_in, T);
+    const std::size_t wbytes = cortex::kernels::native_mmvq_weight_bytes(c.type, c.n_in, c.n_out);
+    const std::size_t qcol = cortex::kernels::native_q8_1_bytes(c.n_in, 1);   // Q8_1 bytes of ONE column
+    const std::size_t qall = cortex::kernels::native_q8_1_bytes(c.n_in, T);
     if (qall != qcol * (std::size_t) T) {
         std::printf("%-12s T=%d: the Q8_1 bytes of T columns (%zu) are not T times those of one (%zu): the test "
                     "assumes contiguous columns and they are not\n", c.name, T, qall, qcol);
@@ -165,13 +165,13 @@ long long compare(const Case &c, int T, dpct::queue_ptr s, long long &nonfinite,
         return -1;
 
     // ONE quantization, shared by both paths: the quantization is not under test
-    strata::kernels::quantize_q8_1_rows(dx, T, c.n_in, xq, s);
+    cortex::kernels::quantize_q8_1_rows(dx, T, c.n_in, xq, s);
     if (!ck(DPCT_CHECK_ERROR(s->wait()), "quantize")) return -1;
 
     try {
-        strata::kernels::native_mmvq(c.type, dw, xq, dmulti, c.n_in, c.n_out, T, s);
+        cortex::kernels::native_mmvq(c.type, dw, xq, dmulti, c.n_in, c.n_out, T, s);
         for (int j = 0; j < T; ++j)
-            strata::kernels::native_mmvq(c.type, dw, (const uint8_t*) xq + (std::size_t) j * qcol,
+            cortex::kernels::native_mmvq(c.type, dw, (const uint8_t*) xq + (std::size_t) j * qcol,
                                          dsingle + (std::size_t) j * c.n_out, c.n_in, c.n_out, 1, s);
     } catch (const std::exception& e) {
         std::printf("%-12s T=%d: %s\n", c.name, T, e.what());
@@ -225,8 +225,8 @@ struct Totals {
 };
 
 int sweep(bool exact, dpct::queue_ptr s, Totals &t) {
-    strata::kernels::native_mmvq_set_multi_exact(exact);
-    if (strata::kernels::native_mmvq_multi_exact() != exact) {
+    cortex::kernels::native_mmvq_set_multi_exact(exact);
+    if (cortex::kernels::native_mmvq_multi_exact() != exact) {
         std::printf("native_mmvq_multi_exact() does not reflect what was set\n");
         return 1;
     }
@@ -268,7 +268,7 @@ int main() try {
     Totals on, off;
     const int bad = sweep(true, s, on);
     const int bad_off = sweep(false, s, off);
-    strata::kernels::native_mmvq_set_multi_exact(true);   // back to the default
+    cortex::kernels::native_mmvq_set_multi_exact(true);   // back to the default
 
     std::printf("\nmulti_exact on:   %lld outputs compared, %lld differ bitwise, %lld non-finite\n",
                 on.checked, on.diff, on.nonfinite);
@@ -289,11 +289,11 @@ int main() try {
     }
     // THE NEGATIVE CONTROL, asserted where it can see something: past T = 4 the generic layout is a different one,
     // so if it still finds no difference the comparison cannot tell the layouts apart and the pass proves nothing.
-#if defined(STRATA_HIP_GFX906)
+#if defined(CORTEX_HIP_GFX906)
     // gfx906: the wave64 layout (one wavefront per row) is the same kernel for every column count, so multi_exact
     // has nothing to switch and the control cannot see a difference.  The control with power is the CUDA layout:
-    // ctest's mmvq_multi_parity_cuda_layout runs this with STRATA_MMVQ_WAVE=0.
-    if (off.powerless_cases != 0 && !(std::getenv("STRATA_MMVQ_WAVE") && std::string(std::getenv("STRATA_MMVQ_WAVE")) == "0")) {
+    // ctest's mmvq_multi_parity_cuda_layout runs this with CORTEX_MMVQ_WAVE=0.
+    if (off.powerless_cases != 0 && !(std::getenv("CORTEX_MMVQ_WAVE") && std::string(std::getenv("CORTEX_MMVQ_WAVE")) == "0")) {
         std::printf("\nmmvq_multi_parity: ok (gfx906 wave64 layout: every column count runs the same exact kernel, "
                     "so the negative control has no other layout to find; mmvq_multi_parity_cuda_layout checks it).\n");
         return 0;

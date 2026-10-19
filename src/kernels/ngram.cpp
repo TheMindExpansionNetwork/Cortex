@@ -1,12 +1,12 @@
 // src/kernels/ngram.cpp - P2.S4: the PLE n-gram hash and the IQ4_NL table read.
 //
-// See include/strata/kernels/ngram.hpp for the semantics, the rival readings, and the note on MADV_RANDOM.
-#include "strata/kernels/ngram.hpp"
-#include "strata/artifact/gguf_reader.hpp"
-#include "strata/artifact/dequant.hpp"
-#include "strata/kernels/f16_bits.hpp"
-#include "strata/ngram/ple_reader.hpp"
-#include "strata/platform/memory.hpp"
+// See include/cortex/kernels/ngram.hpp for the semantics, the rival readings, and the note on MADV_RANDOM.
+#include "cortex/kernels/ngram.hpp"
+#include "cortex/artifact/gguf_reader.hpp"
+#include "cortex/artifact/dequant.hpp"
+#include "cortex/kernels/f16_bits.hpp"
+#include "cortex/ngram/ple_reader.hpp"
+#include "cortex/platform/memory.hpp"
 
 #include <cerrno>
 #include <cmath>
@@ -30,7 +30,7 @@
 #include <windows.h>
 #endif
 
-namespace strata::kernels {
+namespace cortex::kernels {
 
 namespace {
 /// The A/B arm.  Host-token-path only, so it needs no atomics; see the note on `ple_prefetch_enable`.
@@ -181,18 +181,18 @@ void dequant_nvfp4(const uint8_t* row, float scale, float* out160) { nvfp4_row_d
 
 const PleFormatInfo kPleFormats[] = {
     {PleFormat::IQ4_NL, "IQ4_NL", "IQ4_NL", PLE_ROW_BYTES, false, dequant_iq4_nl},
-    {PleFormat::Q5_0, "Q5_0", "Q5_0", (PLE_HEAD_DIM / 32) * 22, false, dequant_blocks<strata::dequantize_q5_0, 22>},
+    {PleFormat::Q5_0, "Q5_0", "Q5_0", (PLE_HEAD_DIM / 32) * 22, false, dequant_blocks<cortex::dequantize_q5_0, 22>},
     {PleFormat::F8_E4M3, "F8_E4M3", "I8", PLE_ROW_BYTES_FP8, true, dequant_fp8},
     // Ordinary GGUFs ship the table in other types: Unsloth's UD-Q6_K_XL and Swift-1.5 Q4_K_L as Q8_0, a Q5_K_M finetune as Q5_1
-    {PleFormat::Q5_1, "Q5_1", "Q5_1", PLE_ROW_BYTES_Q5_1, false, dequant_blocks<strata::dequantize_q5_1, 24>},
-    {PleFormat::Q8_0, "Q8_0", "Q8_0", PLE_ROW_BYTES_Q8_0, false, dequant_blocks<strata::dequantize_q8_0, 34>},
+    {PleFormat::Q5_1, "Q5_1", "Q5_1", PLE_ROW_BYTES_Q5_1, false, dequant_blocks<cortex::dequantize_q5_1, 24>},
+    {PleFormat::Q8_0, "Q8_0", "Q8_0", PLE_ROW_BYTES_Q8_0, false, dequant_blocks<cortex::dequantize_q8_0, 34>},
     // Q4_0 (plain llama-quantize Q4_0 files, #599): 90-byte rows like IQ4_NL (18-byte blocks), a linear 4-bit grid
-    {PleFormat::Q4_0, "Q4_0", "Q4_0", PLE_ROW_BYTES, false, dequant_blocks<strata::dequantize_q4_0, 18>},
+    {PleFormat::Q4_0, "Q4_0", "Q4_0", PLE_ROW_BYTES, false, dequant_blocks<cortex::dequantize_q4_0, 18>},
     // BF16 (#586): the checkpoint's own table at full precision, 320-byte rows; self-describing, so no scale and no
     // metadata to trust (tools/ple_fp8_pack.py writes the FP8 form of the same table)
     {PleFormat::BF16, "BF16", "BF16", PLE_ROW_BYTES_BF16, false, dequant_bf16},
     // NVFP4 x16 (NVIDIA's Qwen3.8-Flash-Next-FP4-Local, tools/nvfp4_local_pack.py ple): 90-byte rows, I8 bytes marked
-    // strata.ple.format = nvfp4x16 with strata.ple.scale. The tensor is [90, rows]: ne0 is the row's byte count.
+    // cortex.ple.format = nvfp4x16 with cortex.ple.scale. The tensor is [90, rows]: ne0 is the row's byte count.
     {PleFormat::NVFP4, "NVFP4", "I8", PLE_ROW_BYTES_NVFP4, true, dequant_nvfp4},
 };
 constexpr int kPleFormatCount = (int) (sizeof kPleFormats / sizeof kPleFormats[0]);
@@ -227,8 +227,8 @@ struct PleTable::Impl {
     // Direct mode (plan v0.3 P2): the mapping above is released after the header parse and every row comes
     // from an unbuffered SSD read into `raw`.
     PleIo mode = PleIo::Mmap;
-    strata::ngram::PleReader reader;
-    strata::ngram::PleReader::Ticket ticket;
+    cortex::ngram::PleReader reader;
+    cortex::ngram::PleReader::Ticket ticket;
     bool pending = false;
     bool locked = false;
     // the table is shared by the prompt path and the decode windows; they can use it at once (one on a worker thread)
@@ -237,7 +237,7 @@ struct PleTable::Impl {
     uint8_t raw[PLE_N_HEADS * PLE_ROW_BYTES_MAX] = {};
     static constexpr size_t kMaxPrefetch = 16;
     size_t n_prefetch = 0;
-    strata::ngram::PleReader::Ticket prefetch_tickets[kMaxPrefetch] = {};
+    cortex::ngram::PleReader::Ticket prefetch_tickets[kMaxPrefetch] = {};
     uint32_t prefetch_keys[kMaxPrefetch][PLE_N_HEADS] = {};
     uint8_t prefetch_raw[kMaxPrefetch][PLE_N_HEADS * PLE_ROW_BYTES_MAX] = {};
     float scale = 1.0f;               // the FP8 table's one scale
@@ -267,8 +267,8 @@ bool PleTable::open(const std::string& gguf_path, std::string& err, const PleIoO
         return false;
     }
     // [160, 320001536]: ne0 = 160 is the FAST axis, so the ROW index is shape[1] and a row is contiguous. The NVFP4 table
-    // is I8 bytes with ne0 = 90 (the row's byte count), marked strata.ple.format = nvfp4x16.
-    const MetaValue* fmt_key = impl_->file->get("strata.ple.format");
+    // is I8 bytes with ne0 = 90 (the row's byte count), marked cortex.ple.format = nvfp4x16.
+    const MetaValue* fmt_key = impl_->file->get("cortex.ple.format");
     const bool nvfp4x16 = std::strcmp(t->type_name(), "I8") == 0 && fmt_key != nullptr && fmt_key->s == "nvfp4x16";
     const uint64_t want_ne0 = nvfp4x16 ? (uint64_t) PLE_ROW_BYTES_NVFP4 : (uint64_t) PLE_HEAD_DIM;
     if (t->shape.size() != 2 || t->shape[0] != want_ne0) {
@@ -277,8 +277,8 @@ bool PleTable::open(const std::string& gguf_path, std::string& err, const PleIoO
         return false;
     }
     // The table's type is looked up in the format list (ple_formats()): IQ4_NL (ISTA-DASLab's shard 2, the original's
-    // own GGUF), Q5_0 (#296: OrcaRouter's GGUF), or the FP8 table as shipped: I8 bytes marked strata.ple.format =
-    // f8_e4m3 with strata.ple.scale (tools/ple_fp8_pack.py)
+    // own GGUF), Q5_0 (#296: OrcaRouter's GGUF), or the FP8 table as shipped: I8 bytes marked cortex.ple.format =
+    // f8_e4m3 with cortex.ple.scale (tools/ple_fp8_pack.py)
     const PleFormatInfo* fmt = nvfp4x16 ? &ple_format_info(PleFormat::NVFP4) : ple_format_for_type(t->type_name());
     if (fmt == nullptr) {
         err = std::string("per_layer_token_embd.weight is ") + t->type_name() + ", not " + ple_format_list();
@@ -286,11 +286,11 @@ bool PleTable::open(const std::string& gguf_path, std::string& err, const PleIoO
         return false;
     }
     if (fmt->needs_scale) {
-        const MetaValue* f = impl_->file->get("strata.ple.format");
-        const MetaValue* s = impl_->file->get("strata.ple.scale");
+        const MetaValue* f = impl_->file->get("cortex.ple.format");
+        const MetaValue* s = impl_->file->get("cortex.ple.scale");
         const char* want = nvfp4x16 ? "nvfp4x16" : "f8_e4m3";
         if (f == nullptr || f->s != want || s == nullptr || !(s->num() > 0.0)) {
-            err = std::string("per_layer_token_embd.weight is I8 without strata.ple.format = ") + want + " and a positive strata.ple.scale";
+            err = std::string("per_layer_token_embd.weight is I8 without cortex.ple.format = ") + want + " and a positive cortex.ple.scale";
             close();
             return false;
         }
@@ -363,16 +363,16 @@ bool PleTable::open(const std::string& gguf_path, std::string& err, const PleIoO
         MEMORYSTATUSEX ms;
         ms.dwLength = sizeof(ms);
         if (GlobalMemoryStatusEx(&ms) && need > ms.ullTotalPhys / 2)
-            std::fprintf(stderr, "strata: warning: --ple-io ram locks %.1f GiB, more than half of this PC's %.1f GiB of RAM\n",
+            std::fprintf(stderr, "cortex: warning: --ple-io ram locks %.1f GiB, more than half of this PC's %.1f GiB of RAM\n",
                          (double) need / (1ull << 30), (double) ms.ullTotalPhys / (1ull << 30));
-        const strata::platform::LockResult lr =
-            strata::platform::lock_resident((void*) impl_->data, need);
+        const cortex::platform::LockResult lr =
+            cortex::platform::lock_resident((void*) impl_->data, need);
         if (lr.ok && lr.locked_bytes >= need) {
             impl_->locked = true;
         } else {
             // a partial lock is not a lock: the unlocked rest would fault on the token path, so give it back
-            if (lr.locked_bytes > 0) strata::platform::unlock_resident((void*) impl_->data, lr.locked_bytes);
-            std::fprintf(stderr, "strata: PLE table lock failed (%s): touching its pages instead\n",
+            if (lr.locked_bytes > 0) cortex::platform::unlock_resident((void*) impl_->data, lr.locked_bytes);
+            std::fprintf(stderr, "cortex: PLE table lock failed (%s): touching its pages instead\n",
                          lr.note.c_str());
             volatile uint8_t sink = 0;
             for (uint64_t off = 0; off < need; off += 4096) sink = sink + impl_->data[off];
@@ -405,7 +405,7 @@ bool PleTable::open(const std::string& gguf_path, std::string& err, const PleIoO
         if (mlock((const void*) a0, a1 - a0) == 0) {
             impl_->locked = true;
         } else {
-            std::fprintf(stderr, "strata: PLE table mlock failed (%s; raise `ulimit -l`): its pages stay faulted in "
+            std::fprintf(stderr, "cortex: PLE table mlock failed (%s; raise `ulimit -l`): its pages stay faulted in "
                                  "but may be reclaimed\n", std::strerror(errno));
         }
 #endif
@@ -621,7 +621,7 @@ void PleTable::set_injected_delay_us(double us) { impl_->reader.set_injected_del
 
 std::string PleTable::io_report() const {
     if (impl_->mode != PleIo::Direct || !impl_->reader.is_open()) return {};
-    const strata::ngram::ReaderStats s = impl_->reader.snapshot();
+    const cortex::ngram::ReaderStats s = impl_->reader.snapshot();
     char buf[400];
     int n = std::snprintf(buf, sizeof buf,
                   "ple io: %llu rows, %.1f%% row-cache hits, %llu SSD reads (%.1f MB), read p50 %.0f us p99 %.0f us, "
@@ -681,4 +681,4 @@ void PleTable::gather(const uint32_t* rows16, float* out2560) const {
     for (int h = 0; h < PLE_N_HEADS; ++h) read_row(rows16[h], out2560 + (size_t) h * PLE_HEAD_DIM);
 }
 
-}  // namespace strata::kernels
+}  // namespace cortex::kernels

@@ -8,7 +8,7 @@ import time
 import unittest
 import json
 import urllib.request
-from serve.server import StrataEngine, Service, ChatTemplate, EngineDied, serve
+from serve.server import CortexEngine, Service, ChatTemplate, EngineDied, serve
 from serve.test_server import ByteTokenizer
 
 FAKE=r'''
@@ -41,7 +41,7 @@ class FatalRecovery(unittest.TestCase):
         else:
             self.script=py;py.write_text('#!'+sys.executable+'\n'+FAKE);py.chmod(0o700)
     def engine(self,mode='fatal'):
-        e=StrataEngine(str(self.script),['--state',str(self.root/'state'),'--mode',mode])
+        e=CortexEngine(str(self.script),['--state',str(self.root/'state'),'--mode',mode])
         self.addCleanup(e.close);return e
     def service(self,e):
         return Service(e,ByteTokenizer(),ChatTemplate(Path(__file__).parent/'chat_template.jinja'))

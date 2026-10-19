@@ -4,8 +4,8 @@ import { pushToast } from '../lib/store';
 import { tr } from '../lib/i18n';
 import { Icon } from './ui';
 
-/** Files dropped on the chat go where the attach button would put them: the composer reads the 'strata:drop-files' event. */
-export const DROP_EVENT = 'strata:drop-files';
+/** Files dropped on the chat go where the attach button would put them: the composer reads the 'cortex:drop-files' event. */
+export const DROP_EVENT = 'cortex:drop-files';
 /** The pictures on the clipboard, named so each one is told apart in the composer (a pasted screenshot arrives as "image.png"). */
 export function pastedFiles(data: DataTransfer | null | undefined): File[] {
   const out: File[] = [];

@@ -1,7 +1,7 @@
-# strata launch preview: step9-save
+# cortex launch preview: step9-save
 # (text of the screen as drawn at the size named in tests/terminal/launch_previews.py)
 
- STRATA  Set up   Step 9 of 9: Save
+ CORTEX  Set up   Step 9 of 9: Save
  ────────────────────────────────────────────────────────────────────────────────────────────────────────────
  Save as preset, then launch
    Name   (type below)
@@ -11,7 +11,7 @@
    Parallel  fit to your card (1)
    Tuning    quick (about 20 min)
    Access    My local network, port 8080, API key on
-   Storage   Strata's data folder
+   Storage   Cortex's data folder
 
  ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────┐
  │  IQ3_XXS 128K                                                                                            │

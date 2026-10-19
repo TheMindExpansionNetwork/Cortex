@@ -1,4 +1,4 @@
-"""`strata launch` on a computer whose only NVIDIA cards are Pascal / Volta (P100, V100): setup.py admits them (the experimental CUDA 12 engine);
+"""`cortex launch` on a computer whose only NVIDIA cards are Pascal / Volta (P100, V100): setup.py admits them (the experimental CUDA 12 engine);
 the screens must not say "no usable graphics card found", and several of them must offer the Cards step."""
 
 from __future__ import annotations
@@ -6,7 +6,7 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from strata_cli.launch.catalog import Catalog
+from cortex_cli.launch.catalog import Catalog
 from tests.terminal.launch_support import HW_12, Home, catalog
 
 
@@ -45,7 +45,7 @@ class OldNvidiaCards(unittest.TestCase):
             cat = catalog()
             cat._hardware_override = None
             hw = {**HW_12, "gpus": [v100(0), v100(1)]}
-            with mock.patch.object(type(cat.strata), "hardware", return_value=hw):
+            with mock.patch.object(type(cat.cortex), "hardware", return_value=hw):
                 comp = cat.computer(fresh=True)
             self.assertEqual(len(comp.usable_gpus), 2)
             self.assertIn("x2", comp.line())

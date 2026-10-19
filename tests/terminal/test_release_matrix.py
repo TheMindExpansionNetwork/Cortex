@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from strata_control import feed as feedmod
+from cortex_control import feed as feedmod
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packaging"))
 import feed_tool  # noqa: E402
@@ -23,7 +23,7 @@ SM_OLD = ("sm_60", "sm_61", "sm_70", "sm_75", "sm_80", "sm_86", "sm_89", "comput
 def pkg(platform, backend, variant, archs, driver=None):
     return {"version": V, "platform": platform, "backend": backend, "variant": variant, "archs": list(archs),
             "min_driver": {"nvidia": driver} if driver else {}, "min_runtime": None,
-            "build_id": f"rel-{platform}-{backend}-{variant}", "format": "tar.gz", "url": f"strata-engine-{platform}-{variant}.tar.gz",
+            "build_id": f"rel-{platform}-{backend}-{variant}", "format": "tar.gz", "url": f"cortex-engine-{platform}-{variant}.tar.gz",
             "size": 1000, "sha256": "a" * 64, "manifest_sha256": "b" * 64, "installed_bytes": 2000, "notes": ""}
 
 
@@ -109,16 +109,16 @@ class ReleaseSelection(unittest.TestCase):
                         seen[arch] = p["variant"]
 
     def test_other_unified_memory_radeons_get_no_engine_and_the_plain_family_line(self):
-        from strata_control import engine_component as ec
+        from cortex_control import engine_component as ec
         for platform in ("windows-x86_64", "linux-x86_64"):
             for gfx in ("gfx1103", "gfx1150", "gfx1152", "gfx1030"):
                 got, why = self.pick(pc(platform, "hip", gfx=[gfx]))
                 self.assertIsNone(got, f"{gfx} on {platform}")
                 self.assertTrue(any(gfx in r for r in why))
         self.assertEqual(ec.arch_notice(("gfx1100", "gfx1151"), ["gfx1201"]),
-                         "This build of Strata is for AMD RX 7000 and Ryzen AI Max cards. This computer has an AMD RX 9000 card (gfx1201). Ask for the RX 9000 build.")
+                         "This build of Cortex is for AMD RX 7000 and Ryzen AI Max cards. This computer has an AMD RX 9000 card (gfx1201). Ask for the RX 9000 build.")
         self.assertEqual(ec.arch_notice(("gfx1151",), ["gfx1201"]),
-                         "This build of Strata is for AMD Ryzen AI Max cards. This computer has an AMD RX 9000 card (gfx1201). Ask for the RX 9000 build.")
+                         "This build of Cortex is for AMD Ryzen AI Max cards. This computer has an AMD RX 9000 card (gfx1201). Ask for the RX 9000 build.")
 
     def test_the_platform_decides_first(self):
         self.assertIsNone(self.pick(pc("macos-arm64", "cuda", "590.10", ["sm_86"]))[0])
@@ -129,19 +129,19 @@ class PackedOnWindows(unittest.TestCase):
     def test_programs_are_recognised_by_their_header_so_a_linux_package_packed_on_windows_keeps_them_executable(self):
         with tempfile.TemporaryDirectory() as t:
             root = Path(t)
-            (root / "strata-vision").write_bytes(b"\x7fELF\x02\x01" + bytes(20))
+            (root / "cortex-vision").write_bytes(b"\x7fELF\x02\x01" + bytes(20))
             (root / "libx.dylib").write_bytes(b"\xcf\xfa\xed\xfe" + bytes(20))
             (root / "run.sh").write_bytes(b"#!/bin/sh\n")
             (root / "BUILD.json").write_text("{}")
             (root / "kernel.hsaco").write_bytes(b"\x00\x01\x02\x03")
-            names = ("strata-vision", "libx.dylib", "run.sh", "BUILD.json", "kernel.hsaco")
+            names = ("cortex-vision", "libx.dylib", "run.sh", "BUILD.json", "kernel.hsaco")
             self.assertEqual([feed_tool._is_native_executable(root / n) for n in names], [True, True, True, False, False])
             if os.name == "nt":                     # the owner's release PC: the archive is what matters
                 archive = root / "a.tar.gz"
-                feed_tool._write_archive([(n, root / n) for n in ("strata-vision", "BUILD.json")], archive, "tar.gz", None)
+                feed_tool._write_archive([(n, root / n) for n in ("cortex-vision", "BUILD.json")], archive, "tar.gz", None)
                 with tarfile.open(archive) as tar:
                     modes = {m.name: m.mode for m in tar.getmembers()}
-                self.assertEqual(modes, {"strata-vision": 0o755, "BUILD.json": 0o644})
+                self.assertEqual(modes, {"cortex-vision": 0o755, "BUILD.json": 0o644})
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
-"""serve/test_admit_order.py - STRATA_ADMIT_SHORT_FIRST: new requests take the control lines short prompts first
-(StrataEngine._take_control / _admit_next; no process, no GPU).
+"""serve/test_admit_order.py - CORTEX_ADMIT_SHORT_FIRST: new requests take the control lines short prompts first
+(CortexEngine._take_control / _admit_next; no process, no GPU).
 
     python -m unittest serve.test_admit_order -v
 """
@@ -14,12 +14,12 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import serve.server as server  # noqa: E402
-from serve.server import StrataEngine  # noqa: E402
+from serve.server import CortexEngine  # noqa: E402
 
 
 def engine_without_process(n=2):
-    """A StrataEngine with the admission state of a started one and no process: alive() is `e.up`."""
-    e = StrataEngine("missing-executable", [], lazy=True)
+    """A CortexEngine with the admission state of a started one and no process: alive() is `e.up`."""
+    e = CortexEngine("missing-executable", [], lazy=True)
     e.batch = n
     e.slot_busy = [False] * n
     e.slot_claims, e.slot_releasing, e._orphan_seen = set(), set(), {}
@@ -89,7 +89,7 @@ class AdmitOrderTest(unittest.TestCase):
             self.assertTrue(self.e.ctl.acquire(timeout=1))
             self.take("agent", 120000, new=True)
             self.until(lambda: self.e.waiting == 1)
-            time.sleep(0.4)                         # past STRATA_ADMIT_MAX_WAIT_S
+            time.sleep(0.4)                         # past CORTEX_ADMIT_MAX_WAIT_S
             self.take("chat", 500, new=True)
             self.until(lambda: self.e.waiting == 2)
             self.e.ctl.release()
@@ -97,7 +97,7 @@ class AdmitOrderTest(unittest.TestCase):
         self.assertEqual(self.order, ["agent", "chat"])
 
     def test_off_by_default(self):
-        self.assertEqual(server.ADMIT_SHORT_FIRST if "STRATA_ADMIT_SHORT_FIRST" not in __import__("os").environ
+        self.assertEqual(server.ADMIT_SHORT_FIRST if "CORTEX_ADMIT_SHORT_FIRST" not in __import__("os").environ
                          else 0, 0)
         with mock.patch.object(server, "ADMIT_SHORT_FIRST", 0):
             order = self.queue(("agent1", 120000), ("chat", 500))

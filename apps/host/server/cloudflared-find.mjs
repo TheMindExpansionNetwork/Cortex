@@ -1,9 +1,9 @@
 /**
  * Finding the Cloudflare connector (cloudflared) that is already on this computer.
  *
- * Strata used to look only in its own folders, so a cloudflared installed by the system (apt, brew, winget, a .deb) was
+ * Cortex used to look only in its own folders, so a cloudflared installed by the system (apt, brew, winget, a .deb) was
  * reported as "not installed" (Linux tester, cloudflared 2026.5.0 in /usr/bin). Now the places are, in this order:
- *   1. Strata's own connector folder
+ *   1. Cortex's own connector folder
  *   2. the optional connector component folder
  *   3. every folder on PATH
  *   4. the usual install places (/usr/bin, /usr/local/bin, ~/.local/bin, Homebrew, Program Files, winget/choco/scoop)
@@ -16,7 +16,7 @@ import { constants } from 'node:fs';
 import { homedir } from 'node:os';
 import { win32, posix } from 'node:path';
 
-/** The quick tunnel flags Strata passes (tunnel --url, --no-autoupdate, --grace-period) and the "Registered tunnel connection" log line it waits for exist from 2022.1.0. */
+/** The quick tunnel flags Cortex passes (tunnel --url, --no-autoupdate, --grace-period) and the "Registered tunnel connection" log line it waits for exist from 2022.1.0. */
 export const MIN_VERSION = '2022.1.0';
 
 export function parseVersion(text) {
@@ -31,27 +31,27 @@ export function versionAtLeast(found, minimum = MIN_VERSION) {
 }
 
 const SOURCE_LABEL = {
-  strata: 'Strata’s own connector folder',
+  cortex: 'Cortex’s own connector folder',
   component: 'the optional connector component',
   path: 'found on your PATH',
   system: 'a usual install location',
-  setting: 'chosen with the STRATA_CLOUDFLARED setting',
+  setting: 'chosen with the CORTEX_CLOUDFLARED setting',
 };
 
 /** Candidate paths in search order, each as { path, source }. Pure: no disk access. */
 export function connectorCandidates({ directory, componentDirectory = null, platform = process.platform, env = process.env, home = homedir(), search = true } = {}) {
-  // STRATA_CLOUDFLARED=<file> uses exactly that connector; STRATA_CLOUDFLARED_SEARCH=own keeps the search to Strata's own folders.
+  // CORTEX_CLOUDFLARED=<file> uses exactly that connector; CORTEX_CLOUDFLARED_SEARCH=own keeps the search to Cortex's own folders.
   const windows = platform === 'win32', p = windows ? win32 : posix;
   const name = windows ? 'cloudflared.exe' : 'cloudflared';
-  if (env.STRATA_CLOUDFLARED) return [{ path: env.STRATA_CLOUDFLARED, source: 'setting' }];
-  if (env.STRATA_CLOUDFLARED_SEARCH === 'own') search = false;
+  if (env.CORTEX_CLOUDFLARED) return [{ path: env.CORTEX_CLOUDFLARED, source: 'setting' }];
+  if (env.CORTEX_CLOUDFLARED_SEARCH === 'own') search = false;
   const out = [], seen = new Set();
   const add = (dir, source) => {
     if (!dir) return;
     const path = p.join(dir, name), key = windows ? path.toLowerCase() : path;
     if (!seen.has(key)) { seen.add(key); out.push({ path, source }); }
   };
-  add(directory, 'strata');
+  add(directory, 'cortex');
   add(componentDirectory, 'component');
   if (!search) return out;
   const pathVariable = windows ? (env.Path ?? env.PATH ?? '') : (env.PATH ?? '');
@@ -118,7 +118,7 @@ export function describeConnector(found) {
 /** A person-readable reason when nothing usable was found but something unusable was. Null when nothing was seen. */
 export function skippedMessage(skipped) {
   const old = skipped.find(s => s.reason === 'too-old');
-  if (old) return `The cloudflared at ${old.path} is version ${old.version}, which is too old. Strata needs ${MIN_VERSION} or newer. Update cloudflared, then retry.`;
+  if (old) return `The cloudflared at ${old.path} is version ${old.version}, which is too old. Cortex needs ${MIN_VERSION} or newer. Update cloudflared, then retry.`;
   const broken = skipped.find(s => s.reason === 'does-not-run' || s.reason === 'not-cloudflared');
   if (broken) return `The file at ${broken.path} did not run as cloudflared. Reinstall cloudflared, then retry.`;
   return null;
@@ -126,7 +126,7 @@ export function skippedMessage(skipped) {
 
 /**
  * Which cloudflared processes run on this computer (a system service, one the person started, another program's tunnel)?
- * `exclude` is the list of pids that belong to Strata itself. Resolves to { running, kind: 'service' | 'process' | null, pids, procs }
+ * `exclude` is the list of pids that belong to Cortex itself. Resolves to { running, kind: 'service' | 'process' | null, pids, procs }
  * where procs is [{ pid, command }] (the command line is for matching only: it can hold a tunnel token and is never shown).
  * Failing to look is "not running": a missing ps must never block the tunnel.
  */
@@ -158,8 +158,8 @@ export async function findRunningConnector({ platform = process.platform, exclud
 }
 
 /**
- * Split the running connectors into Strata's own tunnel (same port: its command line has --url pointing at `originUrl`'s port; same tunnel:
- * its command line holds the same token) and tunnels of something else, which are none of Strata's business.
+ * Split the running connectors into Cortex's own tunnel (same port: its command line has --url pointing at `originUrl`'s port; same tunnel:
+ * its command line holds the same token) and tunnels of something else, which are none of Cortex's business.
  */
 export function classifyRunning(running, { originUrl = '', token = '' } = {}) {
   const port = /:(\d+)\/?$/.exec(String(originUrl))?.[1] ?? null;
@@ -174,15 +174,15 @@ export function classifyRunning(running, { originUrl = '', token = '' } = {}) {
 }
 
 const pidList = pids => pids.join(', ');
-/** Plain sentence about tunnels that are none of Strata's business (information only, never a refusal). */
+/** Plain sentence about tunnels that are none of Cortex's business (information only, never a refusal). */
 export function otherTunnelMessage(pids) {
   if (!pids?.length) return null;
   return pids.length === 1 ? `cloudflared is already running for another tunnel (PID ${pids[0]}).` : `cloudflared is already running for other tunnels (PIDs ${pidList(pids)}).`;
 }
-/** The refusal for Strata's own tunnel already running. */
+/** The refusal for Cortex's own tunnel already running. */
 export function ownTunnelMessage(pids) {
   if (!pids?.length) return null;
-  return `Strata’s tunnel for this address is already running (PID ${pidList(pids)}), so Strata did not start a second one. Stop it first (or use it as it is), then connect again here.`;
+  return `Cortex’s tunnel for this address is already running (PID ${pidList(pids)}), so Cortex did not start a second one. Stop it first (or use it as it is), then connect again here.`;
 }
 
 function defaultProbe(cmd, args) {

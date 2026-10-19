@@ -41,10 +41,10 @@ class BenchTips(unittest.TestCase):
 
     def test_resident_headroom_on_small_ram(self):
         res = [*BASE, "--resident-experts"]
-        self.assertTrue(any("STRATA_RESIDENT_HEADROOM_GIB" in t for t in tips(res, ram=32)))
-        self.assertTrue(any("STRATA_RESIDENT_HEADROOM_GIB" in t for t in tips([*BASE, "--resident-budget-gib", "40"], ram=48)))
+        self.assertTrue(any("CORTEX_RESIDENT_HEADROOM_GIB" in t for t in tips(res, ram=32)))
+        self.assertTrue(any("CORTEX_RESIDENT_HEADROOM_GIB" in t for t in tips([*BASE, "--resident-budget-gib", "40"], ram=48)))
         self.assertEqual([t for t in tips(res, ram=64) if "HEADROOM" in t], [])
-        self.assertEqual([t for t in tips(res, {"STRATA_RESIDENT_HEADROOM_GIB": "8"}, ram=32) if "HEADROOM" in t], [])
+        self.assertEqual([t for t in tips(res, {"CORTEX_RESIDENT_HEADROOM_GIB": "8"}, ram=32) if "HEADROOM" in t], [])
         self.assertEqual([t for t in tips(BASE, ram=32) if "HEADROOM" in t], [])   # not a resident config
 
     def test_conversation_cache_for_agents(self):

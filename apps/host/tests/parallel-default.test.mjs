@@ -89,18 +89,18 @@ test('helper agents: at least as many as the engine slots, and extra ones wait f
 // ---------------------------------------------------------------------------------------- the installed app's load
 
 function fixture({ failStarts = 0, config = {} } = {}) {
-  const root = mkdtempSync(join(tmpdir(), 'strata-par-test-'));
+  const root = mkdtempSync(join(tmpdir(), 'cortex-par-test-'));
   const install = join(root, 'install'), data = join(root, 'data');
   mkdirSync(install, { recursive: true });
-  process.env.STRATA_INSTALL_DIR = install;      // the app's own install folder: the host always names it to Control
-  const path = join(install, 'strata-iq3_s.json');
-  writeFileSync(path, JSON.stringify({ exe: 'component:strata-engine', tokenizer: join(install, 'tok'), args: ['--max-context', '32768', '--mtp', '/m', '--spec', '4'], model_name: 'Qwen iq3_s', port: 8080, ...config }));
+  process.env.CORTEX_INSTALL_DIR = install;      // the app's own install folder: the host always names it to Control
+  const path = join(install, 'cortex-iq3_s.json');
+  writeFileSync(path, JSON.stringify({ exe: 'component:cortex-engine', tokenizer: join(install, 'tok'), args: ['--max-context', '32768', '--mtp', '/m', '--spec', '4'], model_name: 'Qwen iq3_s', port: 8080, ...config }));
   const saved = []; const calls = [];
   let starts = 0;
   const control = {
     control: { dir: join(root, 'control') }, version: '0.1.45',
     async installedModels() { return { install_dir: install, models: [{ id: 'iq3_s', name: 'Qwen iq3_s', source_config: path, component_status: 'present', context_tokens: 32768 }] }; },
-    async engine() { return { usable: true, backend: 'cuda', components_dir: 'E:\\c', engine: { version: '0.1.45', platform: 'windows-x86_64', backend: 'cuda', exe: 'E:\\e\\strata.exe', root: 'E:\\e' } }; },
+    async engine() { return { usable: true, backend: 'cuda', components_dir: 'E:\\c', engine: { version: '0.1.45', platform: 'windows-x86_64', backend: 'cuda', exe: 'E:\\e\\cortex.exe', root: 'E:\\e' } }; },
     async saveProfile(name, file) { saved.push(JSON.parse(readFileSync(file, 'utf8'))); calls.push(['saveProfile', name, basename(file)]); return {}; },
     async start(name) { calls.push(['start', name]); starts++; if (starts <= failStarts) throw new Error('server_exited: out of memory'); return { ok: true, state: 'ready' }; },
     async stop(name) { calls.push(['stop', name]); return { ok: true }; },

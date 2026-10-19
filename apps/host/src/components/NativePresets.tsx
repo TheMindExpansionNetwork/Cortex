@@ -7,7 +7,7 @@ type Preset = {
     name: string;
     values: Record<string, any>;
 };
-const key = 'strata.native-presets.v1';
+const key = 'cortex.native-presets.v1';
 export function NativePresets({ values, onApply }: {
     values: Record<string, any>;
     onApply: (value: Record<string, any>) => void;

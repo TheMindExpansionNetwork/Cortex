@@ -1,7 +1,7 @@
 /**
  * Model library.
  *
- * Downloads are real: weights stream from Hugging Face into the configured model folder (Documents/Strata/Models by default)
+ * Downloads are real: weights stream from Hugging Face into the configured model folder (Documents/Cortex/Models by default)
  * with progress, resume-by-restart and a size check. Loading starts a real
  * engine process through the supervisor — no model files, no process, no load.
  */
@@ -15,12 +15,12 @@ import { CONTEXT_TOKENS, VARIANTS, downloadUrl, footprint, localModels, refreshL
 /**
  * Design-iteration mode.
  *
- * Strata is being iterated on as a product surface, so by default the model
+ * Cortex is being iterated on as a product surface, so by default the model
  * library is simulated: downloads animate, loads stage, nothing is fetched and
- * no process is spawned. Set STRATA_REAL_ENGINE=1 to use the real path
+ * no process is spawned. Set CORTEX_REAL_ENGINE=1 to use the real path
  * (Hugging Face download + supervised llama.cpp engine).
  */
-export const REAL = process.env.STRATA_REAL_ENGINE === '1';
+export const REAL = process.env.CORTEX_REAL_ENGINE === '1';
 import { MODELS_DIR, diskFreeGb, get as getStore, update } from './store.mjs';
 import * as supervisor from './supervisor.mjs';
 import { EventHub, nowIso, round, uid } from './util.mjs';

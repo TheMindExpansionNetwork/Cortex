@@ -106,7 +106,7 @@ test('the recommended four come first; the others are what the "More versions" l
 test('the three NVFP4 versions have clear names and one line that tells them apart', () => {
   lib.setTranslationLanguage('en');
   const names = ['NVFP4', 'NVFP4-NVIDIA', 'NVFP4-QAD'].map(m => lib.nativeVersionLabel(m));
-  assert.deepEqual(names, ['NVFP4 (Strata’s version)', 'NVFP4 (NVIDIA’s version)', 'NVFP4 (NVIDIA, trained for FP4)']);
+  assert.deepEqual(names, ['NVFP4 (Cortex’s version)', 'NVFP4 (NVIDIA’s version)', 'NVFP4 (NVIDIA, trained for FP4)']);
   assert.equal(new Set(names).size, 3);
   const lines = ['NVFP4', 'NVFP4-NVIDIA', 'NVFP4-QAD'].map(m => lib.versionNote(m));
   assert.match(lines[0], /best quality/i);
@@ -134,7 +134,7 @@ test('4d: picture reading is on unless the person turned it off (no saved choice
     await f.control.refresh(true);
     const first = () => f.control.state().installed.models.find(m => m.model === 'iq2_xs');
     assert.equal(first().visionEnabled, undefined, 'a model never loaded and never turned off');
-    const path = join(f.repo, 'strata-iq2_xs.json');
+    const path = join(f.repo, 'cortex-iq2_xs.json');
     const cfg = JSON.parse(readFileSync(path, 'utf8'));
     writeFileSync(path, JSON.stringify({ ...cfg, ui_vision_enabled: false }));
     await f.control.refresh(true);

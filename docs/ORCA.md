@@ -3,8 +3,8 @@
 Validated on Linux with an RTX 5090 (32 GB), Ryzen 9 9950X3D and 128 GB RAM on 2026-09-27.
 
 The target is `orcarouter/Qwen3.8-Flash-Next-Uncensored-GGUF`, **IQ3_XXS** (two shards, 85.20 GB total).
-It has Strata's Qwen4Exp geometry, but ordinary quantization also compresses the hyperconnection,
-small attention and PLE projections which Strata's kernels read as BF16.
+It has Cortex's Qwen4Exp geometry, but ordinary quantization also compresses the hyperconnection,
+small attention and PLE projections which Cortex's kernels read as BF16.
 
 `tools/iq_pack.py --compat-bf16` expands only those projections, rounding to BF16 using nearest-even.
 This adds rounding relative to the GGUF's dequantized weights; it does not recover the original BF16
@@ -18,8 +18,8 @@ finish downloading before packing. Pass the snapshot filename, not its hash-name
 
 ## Preparation
 
-Build Strata normally using the pinned llama.cpp dependency. Python needs numpy, regex and gguf-py
-from that dependency (`STRATA_GGUF_PY` can point to its `gguf-py` directory).
+Build Cortex normally using the pinned llama.cpp dependency. Python needs numpy, regex and gguf-py
+from that dependency (`CORTEX_GGUF_PY` can point to its `gguf-py` directory).
 
 ```sh
 .venv/bin/python tools/iq_pack.py \
@@ -30,7 +30,7 @@ from that dependency (`STRATA_GGUF_PY` can point to its `gguf-py` directory).
 Use this model's own tokenizer exported into the pack. Do not share another model's `dense.bin`,
 and do not rename the Orca files to impersonate one of setup's GSQ-RCO models.
 
-Strata's persistent server also uses the MTP runtime (optional: without `--mtp` it drafts by lookup only), prepared by
+Cortex's persistent server also uses the MTP runtime (optional: without `--mtp` it drafts by lookup only), prepared by
 the existing tools:
 
 ```sh
@@ -45,14 +45,14 @@ proposals; draft acceptance and performance must be measured for this fine-tune.
 
 ## Local server
 
-Save the following as `strata-orca-iq3_xxs.json` at the repository root, replacing both `/path/to/`
+Save the following as `cortex-orca-iq3_xxs.json` at the repository root, replacing both `/path/to/`
 entries with the **same first shard**. Orca's PLE table is in shard 1. Start with a 32K context and
 512-token prefill chunks; the expert cache sizes itself to available VRAM. The expert arena alone
 needs about 49.8 GiB of available system RAM, plus draft/runtime buffers and other applications.
 
 ```json
 {
-  "exe": "build/strata",
+  "exe": "build/cortex",
   "args": [
     "--pack", "packs/orca-iq3_xxs",
     "--native", "/path/to/Qwen3.8-Flash-Next-Uncensored-IQ3_XXS-00001-of-00002.gguf",
@@ -64,7 +64,7 @@ needs about 49.8 GiB of available system RAM, plus draft/runtime buffers and oth
   "cwd": ".",
   "tokenizer": "packs/orca-iq3_xxs/tokenizer",
   "model_name": "orcarouter-qwen3.8-flash-next-uncensored-iq3_xxs",
-  "log": "strata-orca-iq3_xxs.log",
+  "log": "cortex-orca-iq3_xxs.log",
   "host": "127.0.0.1",
   "port": 8080
 }
@@ -73,7 +73,7 @@ needs about 49.8 GiB of available system RAM, plus draft/runtime buffers and oth
 Run from the repository root:
 
 ```sh
-.venv/bin/python -m serve.server --engine strata --config strata-orca-iq3_xxs.json --port 8080
+.venv/bin/python -m serve.server --engine cortex --config cortex-orca-iq3_xxs.json --port 8080
 ```
 
 The web interface is at `http://127.0.0.1:8080`; API clients use `http://127.0.0.1:8080/v1`.

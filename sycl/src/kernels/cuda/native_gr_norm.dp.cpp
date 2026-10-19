@@ -25,8 +25,8 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/sycl_queue.hpp"
-#include "strata/kernels/native_gr_norm.hpp"
+#include "cortex/sycl_queue.hpp"
+#include "cortex/kernels/native_gr_norm.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -34,7 +34,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
 __dpct_inline__ float norm_warp_sum(float value) {
@@ -112,7 +112,7 @@ void native_gr_rms_norm_weighted_multi(const float* input, const float* gamma, f
     check_pointer(input);
     check_pointer(gamma);
     check_pointer(output);
-    const auto cuda_stream = strata::q_of(stream);
+    const auto cuda_stream = cortex::q_of(stream);
     const dpct::dim3 grid{unsigned(n_rows), unsigned(n_tok), 1u};
     if (n_cols < 1024)
     {
@@ -169,4 +169,4 @@ void native_gr_rms_norm_weighted_multi(const float* input, const float* gamma, f
                                  dpct::get_error_string_dummy(error));
 }
 
-} // namespace strata::kernels
+} // namespace cortex::kernels

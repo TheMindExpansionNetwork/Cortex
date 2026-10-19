@@ -93,7 +93,7 @@ class GgufDirShards(unittest.TestCase):
 
 
 class GgufDirUnsupported(unittest.TestCase):
-    """#444: --gguf-dir with GGUFs Strata cannot run (Unsloth's UD-IQ3_XXS, UD-Q2_K_XL) says so, names the files it
+    """#444: --gguf-dir with GGUFs Cortex cannot run (Unsloth's UD-IQ3_XXS, UD-Q2_K_XL) says so, names the files it
     runs (ISTA-DASLab's GSQ-RCO, the Coder's, Unsloth's UD-Q4_K_XL) and the --family/--model of the usable ones."""
     UD = ["Qwen3.8-Flash-Next-UD-IQ3_XXS-%05d-of-00003.gguf" % i for i in range(1, 4)] + \
          ["Qwen3.8-Flash-Next-UD-Q2_K_XL-%05d-of-00003.gguf" % i for i in range(1, 4)]
@@ -119,7 +119,7 @@ class GgufDirUnsupported(unittest.TestCase):
 
     def test_an_unsloth_ud_file_is_not_taken_for_a_gsq_rco_size(self):
         msg, hint = self.problem(self.UD)                   # IQ3_XXS: UD-IQ3_XXS has the size in its name
-        self.assertEqual(msg, "Qwen3.8-Flash-Next-UD-IQ3_XXS-00001-of-00003.gguf is UD-IQ3_XXS, a GGUF Strata "
+        self.assertEqual(msg, "Qwen3.8-Flash-Next-UD-IQ3_XXS-00001-of-00003.gguf is UD-IQ3_XXS, a GGUF Cortex "
                               "cannot run")
         self.assertIn("ISTA-DASLab's GSQ-RCO files", hint)
         self.assertIn("Unsloth's UD-IQ4_XS, UD-Q4_K_XL, UD-Q5_K_XL, UD-Q6_K_XL and Q8_0 only", hint)
@@ -147,7 +147,7 @@ class GgufDirUnsupported(unittest.TestCase):
         self.assertIn("has no IQ3_XXS model file", out)
         self.assertIn("choose one of: UD-IQ4_XS, UD-Q4_K_XL, UD-Q5_K_XL, UD-Q6_K_XL, Q8_0 (or IQ3_XXS: --family qwen --model IQ3_XXS, --family swift --model "
                       "IQ3_XXS)", out)
-        self.assertIn("Strata runs ISTA-DASLab's GSQ-RCO files", out)
+        self.assertIn("Cortex runs ISTA-DASLab's GSQ-RCO files", out)
 
 
 class ReadOnlyGgufDir(unittest.TestCase):
@@ -202,40 +202,40 @@ class VsRange(unittest.TestCase):
 
 
     def test_vcvars_by_hand(self):
-        """#881: STRATA_VCVARS names a vcvars64.bat directly, for an install vswhere cannot use."""
+        """#881: CORTEX_VCVARS names a vcvars64.bat directly, for an install vswhere cannot use."""
         import tempfile
         with tempfile.TemporaryDirectory() as d:
             bat = Path(d) / "vcvars64.bat"
             bat.write_text("rem")
-            with mock.patch.dict(os.environ, {"STRATA_VCVARS": str(bat)}):
+            with mock.patch.dict(os.environ, {"CORTEX_VCVARS": str(bat)}):
                 self.assertEqual(setup.find_vcvars(), bat)
-            with mock.patch.dict(os.environ, {"STRATA_VCVARS": str(Path(d) / "missing.bat")}):
+            with mock.patch.dict(os.environ, {"CORTEX_VCVARS": str(Path(d) / "missing.bat")}):
                 self.assertIsNone(setup.find_vcvars())
 
 class ExperimentalSm60(unittest.TestCase):
-    """#295: Pascal (6.x) and Volta (7.0) only with STRATA_EXPERIMENTAL_SM60=1, built with -DSTRATA_EXPERIMENTAL_SM60=ON
+    """#295: Pascal (6.x) and Volta (7.0) only with CORTEX_EXPERIMENTAL_SM60=1, built with -DCORTEX_EXPERIMENTAL_SM60=ON
     and a CUDA 12.x toolkit; nothing changes without the variable."""
 
     def card(self, arch):
         return {"arch": arch, "vram_gb": 11.0, "index": 0, "name": "card"}
 
     def test_the_gate(self):
-        with mock.patch.dict(os.environ, {"STRATA_EXPERIMENTAL_SM60": ""}):
+        with mock.patch.dict(os.environ, {"CORTEX_EXPERIMENTAL_SM60": ""}):
             for arch in ("60", "61", "70"):
                 p = setup.gpu_problem(self.card(arch))
                 self.assertIn("not supported", p)
                 self.assertIn("choose it with --gpu 0", p)              # the CUDA 12 engine (docs/OLDER_GPUS.md)
             self.assertNotIn("--gpu", setup.gpu_problem(self.card("52")))
             self.assertIsNone(setup.gpu_problem(self.card("75")))
-        with mock.patch.dict(os.environ, {"STRATA_EXPERIMENTAL_SM60": "1"}):
+        with mock.patch.dict(os.environ, {"CORTEX_EXPERIMENTAL_SM60": "1"}):
             for arch in ("60", "61", "70", "75", "120"):
                 self.assertIsNone(setup.gpu_problem(self.card(arch)), arch)
             for arch in ("52", "72"):
                 self.assertIsNotNone(setup.gpu_problem(self.card(arch)), arch)
 
     def test_the_build_flag(self):
-        self.assertEqual(setup.engine_defs([61]), ["-DSTRATA_EXPERIMENTAL_SM60=ON"])
-        self.assertEqual(setup.engine_defs([70, 86]), ["-DSTRATA_EXPERIMENTAL_SM60=ON"])
+        self.assertEqual(setup.engine_defs([61]), ["-DCORTEX_EXPERIMENTAL_SM60=ON"])
+        self.assertEqual(setup.engine_defs([70, 86]), ["-DCORTEX_EXPERIMENTAL_SM60=ON"])
         self.assertEqual(setup.engine_defs([75, 86, 120]), [])
 
     def test_find_nvcc_below(self):
@@ -251,14 +251,14 @@ class ExperimentalSm60(unittest.TestCase):
                     mock.patch.object(setup, "out", lambda cmd: versions.get(cmd[0], "")):  # #414
                 self.assertEqual(setup.find_nvcc(), (str(new), (13, 0)))
                 self.assertEqual(setup.find_nvcc(below=(13, 0)), (str(old), (12, 9)))
-                # #601: STRATA_NVCC is the only one considered; CUDA_HOME is a candidate like CUDA_PATH
-                with mock.patch.dict(os.environ, {"STRATA_NVCC": str(old)}):
+                # #601: CORTEX_NVCC is the only one considered; CUDA_HOME is a candidate like CUDA_PATH
+                with mock.patch.dict(os.environ, {"CORTEX_NVCC": str(old)}):
                     self.assertEqual(setup.find_nvcc(), (str(old), (12, 9)))
-                with mock.patch.dict(os.environ, {"STRATA_NVCC": str(new)}):
+                with mock.patch.dict(os.environ, {"CORTEX_NVCC": str(new)}):
                     got, text = quiet(setup.find_nvcc, below=(13, 0))
                     self.assertEqual(got, (None, None))
                     self.assertIn("needs one older than 13.0", text)
-                with mock.patch.dict(os.environ, {"STRATA_NVCC": str(Path(d) / "missing")}):
+                with mock.patch.dict(os.environ, {"CORTEX_NVCC": str(Path(d) / "missing")}):
                     got, text = quiet(setup.find_nvcc)
                     self.assertEqual(got, (str(new), (13, 0)))
                     self.assertIn("no such file", text)
@@ -297,7 +297,7 @@ class ExperimentalSm60(unittest.TestCase):
         got, seen = self.tools([120], nvcc)
         self.assertEqual(got[0], "nvcc130")
         self.assertEqual(seen, [None, (13, 2)])
-        with mock.patch.dict(os.environ, {"STRATA_NVCC": "x"}):          # the user's own pick is kept
+        with mock.patch.dict(os.environ, {"CORTEX_NVCC": "x"}):          # the user's own pick is kept
             got, seen = self.tools([120], nvcc)
             self.assertEqual((got[0], seen), ("nvcc132", [None]))
         only132 = lambda below: (None, None) if below == (13, 2) else ("nvcc132", (13, 2))
@@ -351,14 +351,14 @@ class HipVision(unittest.TestCase):
 
     def test_the_cpu_encoder_is_built_once(self):
         built, meta, have = self.build({}, "cpu")
-        self.assertEqual([t for t, _ in built], ["strata-vision"])
-        self.assertIn("-DSTRATA_VISION_CUDA=OFF", built[0][1])
-        self.assertIn("-DSTRATA_PORTABLE=OFF", built[0][1])            # built for this PC (#411: portable is the default)
+        self.assertEqual([t for t, _ in built], ["cortex-vision"])
+        self.assertIn("-DCORTEX_VISION_CUDA=OFF", built[0][1])
+        self.assertIn("-DCORTEX_PORTABLE=OFF", built[0][1])            # built for this PC (#411: portable is the default)
         self.assertEqual((meta["vision"], meta["vision_src"], have), ("cpu", "V", True))
         built, meta, _ = self.build({"vision": "cpu", "vision_src": "V"}, "cpu", vexe=True)
         self.assertEqual(built, [])                                    # built and unchanged: nothing to do
         built, meta, _ = self.build({"vision": "cpu", "vision_src": "old"}, "cpu", vexe=True)
-        self.assertEqual([t for t, _ in built], ["strata-vision"])     # its source changed: again
+        self.assertEqual([t for t, _ in built], ["cortex-vision"])     # its source changed: again
 
     def test_without_images_nothing_changes(self):
         built, meta, have = self.build({}, "none")
@@ -465,7 +465,7 @@ class VramReserve(unittest.TestCase):
 
     def test_kept_from_an_earlier_install(self):
         with tempfile.TemporaryDirectory() as d:
-            p = Path(d) / "strata-q2_0.json"
+            p = Path(d) / "cortex-q2_0.json"
             p.write_text(json.dumps({"args": ["--max-context", "8192", "--vram-reserve-mib", "2048"]}))
             self.assertEqual(setup.choices_from_config(p)["vram_reserve_mib"], 2048)
             p.write_text(json.dumps({"args": ["--vision", "--vram-reserve-mib", "700"], "vision": {"gpu": True}}))
@@ -475,9 +475,9 @@ class VramReserve(unittest.TestCase):
 
     def test_given_on_a_start(self):
         with tempfile.TemporaryDirectory() as d:
-            exe = Path(d) / "strata.exe"
+            exe = Path(d) / "cortex.exe"
             exe.write_bytes(b"")
-            p = Path(d) / "strata-q2_0.json"
+            p = Path(d) / "cortex-q2_0.json"
             p.write_text(json.dumps({"exe": str(exe), "args": ["--kv", "int8"], "gpu": 0, "gpus_asked": True}))
             call = mock.Mock(return_value=0)
             with mock.patch.object(setup, "gpus", lambda: self.found), \
@@ -570,9 +570,9 @@ class CudaVision(unittest.TestCase):
                         mock.patch.object(setup, "install_build_tools", lambda gpu, yes: (str(root / "nvcc"), None)), \
                         mock.patch.object(setup, "source_version", lambda: "test"):
                     quiet(setup.build_engine, {"arch": "86"}, vision, True, "llama")
-                self.assertEqual([t for t, _ in built], ["strata-vision"])
-                self.assertIn("-DSTRATA_PORTABLE=OFF", built[0][1])
-                self.assertIn(f"-DSTRATA_VISION_CUDA={'ON' if vision == 'gpu' else 'OFF'}", built[0][1])
+                self.assertEqual([t for t, _ in built], ["cortex-vision"])
+                self.assertIn("-DCORTEX_PORTABLE=OFF", built[0][1])
+                self.assertIn(f"-DCORTEX_VISION_CUDA={'ON' if vision == 'gpu' else 'OFF'}", built[0][1])
 
 
 class SwiftIq3s(unittest.TestCase):
@@ -651,7 +651,7 @@ class CalibrateWithModel(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         cfgs = []
         for tag in installed:
-            p = Path(tmp.name) / f"strata-{tag}.json"
+            p = Path(tmp.name) / f"cortex-{tag}.json"
             p.write_text(json.dumps({"exe": "x", "args": ["--max-context", "8192"], "model_name": tag}))
             cfgs.append(p)
         tuned = []
@@ -670,7 +670,7 @@ class CalibrateWithModel(unittest.TestCase):
 
     def test_model_is_the_target(self):
         code, tuned = self.run_main("--calibrate", "--model", "IQ3_XXS", "--yes", "--no-start")
-        self.assertEqual((code, tuned), (0, ["strata-iq3_xxs.json"]))
+        self.assertEqual((code, tuned), (0, ["cortex-iq3_xxs.json"]))
 
     def test_a_model_not_installed_is_an_error(self):
         code, tuned = self.run_main("--calibrate", "--model", "IQ3_S", "--yes", "--no-start")
@@ -680,7 +680,7 @@ class CalibrateWithModel(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             ps = []
             for tag in ("iq3_xxs", "q2_0"):
-                p = Path(d) / f"strata-{tag}.json"
+                p = Path(d) / f"cortex-{tag}.json"
                 p.write_text(json.dumps({"args": []}))
                 ps.append(p)
             self.assertEqual(setup.calibration_targets(ps, None, None), ps)

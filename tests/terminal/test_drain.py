@@ -10,8 +10,8 @@ from pathlib import Path
 
 from serve.frontend import ChatTemplate
 from serve.server import ByteTokenizer, MockEngine, Service, serve
-from strata_cli.client import Endpoint
-from strata_cli.render import render_view
+from cortex_cli.client import Endpoint
+from cortex_cli.render import render_view
 
 
 class DrainTests(unittest.TestCase):

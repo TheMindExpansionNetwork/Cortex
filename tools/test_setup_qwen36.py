@@ -139,7 +139,7 @@ class InstallOwnPath(unittest.TestCase):
         self.assertNotIn("--vision", self.cfg["args"])
         self.assertNotIn("vision", self.cfg)
         tok = [c for c in self.calls if c[0] == "run"]
-        self.assertTrue(tok and "strata_tokenizer.py" in str(tok[0][1]))
+        self.assertTrue(tok and "cortex_tokenizer.py" in str(tok[0][1]))
         a = self.cfg["args"]
         self.assertEqual(a[a.index("--native") + 1], str(gguf))
         self.assertEqual(a[a.index("--max-context") + 1], "32768")   # 16 GB card
@@ -149,7 +149,7 @@ class InstallOwnPath(unittest.TestCase):
         self.assertEqual(self.cfg["arch"], "qwen35moe")
         self.assertEqual(self.cfg["model_name"], "qwen3.6-35b-a3b-ud-q4_k_xl")
         self.assertEqual(Path(self.cfg["exe"]).parent, self.root / "engine")
-        self.assertIn(("config", "strata-qwen36-ud-q4_k_xl.json"), self.calls)
+        self.assertIn(("config", "cortex-qwen36-ud-q4_k_xl.json"), self.calls)
 
     def test_default_size_follows_the_ram(self):
         rc, out = self.install(ram=64.0)
@@ -227,23 +227,23 @@ class InstallOwnPath(unittest.TestCase):
 
     def test_amd_reads_pictures_on_the_gpu_with_the_cpu_reader_behind_it(self):
         for win, suffix in ((False, ""), (True, ".exe")):
-            with mock.patch.object(setup, "WIN", win), mock.patch.object(setup, "VEXE", "strata-vision" + suffix),                     mock.patch.object(setup, "HVEXE", "strata-vision-hip" + suffix):
+            with mock.patch.object(setup, "WIN", win), mock.patch.object(setup, "VEXE", "cortex-vision" + suffix),                     mock.patch.object(setup, "HVEXE", "cortex-vision-hip" + suffix):
                 rc, out = self.install(model="UD-Q4_K_XL", vram=32.0, hip=True, vision="yes")
                 self.assertEqual(rc, 0, out)
                 v = self.cfg["vision"]
                 self.assertTrue(v["gpu"])
-                self.assertEqual(Path(v["exe"]).name, "strata-vision-hip" + suffix)
-                self.assertEqual(Path(v["cpu_exe"]).name, "strata-vision" + suffix)
+                self.assertEqual(Path(v["exe"]).name, "cortex-vision-hip" + suffix)
+                self.assertEqual(Path(v["cpu_exe"]).name, "cortex-vision" + suffix)
                 self.assertIn("--vision", self.cfg["args"])
                 rc, out = self.install(model="UD-Q4_K_XL", vram=32.0, hip=True, vision="cpu")
                 v = self.cfg["vision"]
                 self.assertFalse(v["gpu"])
-                self.assertEqual(Path(v["exe"]).name, "strata-vision" + suffix)
+                self.assertEqual(Path(v["exe"]).name, "cortex-vision" + suffix)
                 self.assertNotIn("cpu_exe", v)
 
     def test_amd_engine_without_the_gpu_reader_reads_pictures_on_the_cpu(self):
         self.hip_reader = False
-        with mock.patch.object(setup, "WIN", False), mock.patch.object(setup, "VEXE", "strata-vision"):
+        with mock.patch.object(setup, "WIN", False), mock.patch.object(setup, "VEXE", "cortex-vision"):
             rc, out = self.install(model="UD-Q4_K_XL", vram=32.0, hip=True, vision="yes")
         self.assertEqual(rc, 0, out)
         self.assertFalse(self.cfg["vision"]["gpu"])
@@ -251,18 +251,18 @@ class InstallOwnPath(unittest.TestCase):
         self.assertIn("--vision", self.cfg["args"])
 
     def test_amd_pictures_are_on_when_nothing_is_asked(self):
-        with mock.patch.object(setup, "WIN", False), mock.patch.object(setup, "VEXE", "strata-vision"),                 mock.patch.object(setup, "HVEXE", "strata-vision-hip"):
+        with mock.patch.object(setup, "WIN", False), mock.patch.object(setup, "VEXE", "cortex-vision"),                 mock.patch.object(setup, "HVEXE", "cortex-vision-hip"):
             rc, out = self.install(model="UD-Q4_K_XL", vram=32.0, hip=True)
         self.assertEqual(rc, 0, out)
         self.assertTrue(self.cfg["vision"]["gpu"])
 
     def test_amd_under_24gb_reads_pictures_on_the_cpu_by_default(self):
-        with mock.patch.object(setup, "WIN", False), mock.patch.object(setup, "VEXE", "strata-vision"),                 mock.patch.object(setup, "HVEXE", "strata-vision-hip"):
+        with mock.patch.object(setup, "WIN", False), mock.patch.object(setup, "VEXE", "cortex-vision"),                 mock.patch.object(setup, "HVEXE", "cortex-vision-hip"):
             rc, out = self.install(model="UD-Q4_K_XL", vram=16.0, hip=True)
         self.assertEqual(rc, 0, out)
         self.assertIn("--vision", self.cfg["args"])
         self.assertFalse(self.cfg["vision"]["gpu"])
-        self.assertEqual(Path(self.cfg["vision"]["exe"]).name, "strata-vision")
+        self.assertEqual(Path(self.cfg["vision"]["exe"]).name, "cortex-vision")
 
     def test_parallel_is_opt_in_and_recommended_where_the_experts_fit(self):
         fam = setup.OWN_PATH_FAMILIES["qwen36"]
@@ -328,7 +328,7 @@ class InstallOwnPath(unittest.TestCase):
 
     def test_config_read_back(self):
         self.install(model="UD-Q6_K_XL", context=65536)
-        p = self.root / "strata-qwen36-ud-q6_k_xl.json"
+        p = self.root / "cortex-qwen36-ud-q6_k_xl.json"
         p.write_text(json.dumps(self.cfg), encoding="utf-8")
         ch = setup.choices_from_config(p)
         self.assertEqual((ch["family"], ch["model"], ch["context"]), ("qwen36", "UD-Q6_K_XL", 65536))

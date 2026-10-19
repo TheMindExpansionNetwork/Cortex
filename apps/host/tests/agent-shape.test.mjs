@@ -12,8 +12,8 @@ import { startScriptedWorker } from './helpers/scripted-worker.mjs';
 import { createAgentBridge } from '../server/agent/agent-bridge.mjs';
 import { resolveHarness } from '../server/agent/harness-runtime.mjs';
 
-const HARNESS = process.env.STRATA_HARNESS_DIR;
-const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'STRATA_HARNESS_DIR is not set to a built Harness' : false;
+const HARNESS = process.env.CORTEX_HARNESS_DIR;
+const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'CORTEX_HARNESS_DIR is not set to a built Harness' : false;
 
 test('only the Expert settings that differ from their defaults are sent; the thinking budget only while thinking is on', () => {
   assert.equal(samplingFromExpert({}), null);
@@ -46,9 +46,9 @@ test('the profile adds a response-settings copy of each shapeable route (local, 
   });
   const local = profile.routes.find(r => r.kind === 'local');
   assert.deepEqual(Object.keys(local.shaped), ['0', '2048', '8192', '32768']);
-  assert.equal(local.shaped[8192], 'strata-local~s8192');
+  assert.equal(local.shaped[8192], 'cortex-local~s8192');
   assert.deepEqual(Object.keys(profile.shapeTargets).sort(), [...Object.values(local.shaped), ...Object.values(profile.routes.find(r => r.connectionId === 'lan').shaped)].sort());
-  assert.equal(profile.shapeTargets['strata-local~s0'], 'http://127.0.0.1:9001');
+  assert.equal(profile.shapeTargets['cortex-local~s0'], 'http://127.0.0.1:9001');
   assert.equal(profile.routes.find(r => r.connectionId === 'cloud').shaped, undefined);
   const doc = JSON.parse(profile.patch.slice(profile.patch.indexOf('[')));
   const providers = doc.find(e => e.id === 'llm-pi-ai').config.providers;
@@ -58,9 +58,9 @@ test('the profile adds a response-settings copy of each shapeable route (local, 
   const small = buildProfile({ local: [], connections: [{ id: 'own', name: 'Own', baseUrl: 'http://127.0.0.1:18798/v1', protocol: 'openai-chat', apiKey: '', models: [{ id: 'm', contextMax: 32768 }] }] });
   const own = JSON.parse(small.patch.slice(small.patch.indexOf('['))).find(e => e.id === 'llm-pi-ai').config.providers['api-own'];
   assert.equal(own.models[0].maxTokens, 9830, 'a server on this network keeps 30 percent of its window for the reply so long tasks can be compacted (it was 28672 of 32768: no room, no compaction)');
-  assert.match(profile.patch, /"baseURL": "http:\/\/127\.0\.0\.1:8791\/api\/internal\/agent-llm\/strata-local~s8192\/v1"/);
-  assert.match(profile.patch, /"x-strata-budget": "8192"/);
-  assert.match(profile.patch, /"provider": "strata-local~s8192"/, 'compaction keeps its timing on the copy too');
+  assert.match(profile.patch, /"baseURL": "http:\/\/127\.0\.0\.1:8791\/api\/internal\/agent-llm\/cortex-local~s8192\/v1"/);
+  assert.match(profile.patch, /"x-cortex-budget": "8192"/);
+  assert.match(profile.patch, /"provider": "cortex-local~s8192"/, 'compaction keeps its timing on the copy too');
   const plain = buildProfile({ local: [{ id: 'a', modelId: 'm', baseUrl: 'http://127.0.0.1:9001', context: 65536 }], connections: [] });
   assert.equal(plain.routes[0].shaped, undefined); assert.ok(!/~s/.test(plain.patch), 'without a forwarding address nothing changes');
 });
@@ -69,7 +69,7 @@ test('the forwarding endpoint adds the settings, streams the reply back and pass
   const seen = [];
   const upstream = http.createServer((req, res) => {
     let raw = ''; req.on('data', c => { raw += c; }); req.on('end', () => {
-      seen.push({ url: req.url, auth: req.headers.authorization, internal: req.headers['x-strata-budget'], body: raw ? JSON.parse(raw) : null });
+      seen.push({ url: req.url, auth: req.headers.authorization, internal: req.headers['x-cortex-budget'], body: raw ? JSON.parse(raw) : null });
       res.writeHead(200, { 'content-type': 'text/event-stream' }); res.write('data: one\n\n'); setTimeout(() => { res.write('data: two\n\n'); res.end(); }, 30);
     });
   });
@@ -87,14 +87,14 @@ test('the forwarding endpoint adds the settings, streams the reply back and pass
   assert.equal(a.status, 200); assert.match(a.text, /one[\s\S]*two/);
   assert.deepEqual(seen[0].body, { model: 'm', stream: true, messages: [], max_tokens: 100 }, 'defaults: the body is untouched'); assert.equal(seen[0].auth, 'Bearer abc'); assert.equal(seen[0].url, '/v1/chat/completions'); assert.equal(seen[0].internal, undefined, 'our own header is not forwarded');
   expert = { temperature: 0.1 };
-  await call('k1', { 'x-strata-budget': '8192' });
+  await call('k1', { 'x-cortex-budget': '8192' });
   assert.equal(seen[1].body.temperature, 0.1); assert.equal(seen[1].body.reasoning_budget_tokens, 8192);
   assert.equal((await call('nope')).status, 404);
 });
 
 test('a turn uses the response-settings route only when a setting is changed: the model receives the sampling and the budget; defaults go straight to the model', { skip }, async (t) => {
   const worker = await startScriptedWorker({});
-  const dir = mkdtempSync(join(tmpdir(), 'strata-shape-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-shape-'));
   const ws = join(dir, 'ws'); mkdirSync(ws, { recursive: true });
   let expert = null; let front; let bridge;
   const proxy = createLlmProxy({ targetOf: key => bridge.llmTarget(key), samplingNow: () => expert });

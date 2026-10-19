@@ -1,26 +1,26 @@
 # Signing and notarising the Mac builds
 
-`sign-and-notarize.sh` signs the Strata Mac app (a `.dmg` or a `.app`) and the Mac Terminal archive with the Developer ID Application
+`sign-and-notarize.sh` signs the Cortex Mac app (a `.dmg` or a `.app`) and the Mac Terminal archive with the Developer ID Application
 certificate, sends them to Apple's notary service, staples the ticket where that is possible, and checks the result. After it, macOS
 opens the app without the "damaged" / "unidentified developer" warning.
 
 It has to run on the Mac that holds the certificate. It never asks for, reads or stores a password or a key: `codesign` and
 `notarytool` take them from the Keychain. The only names in it are the certificate (`Developer ID Application: Niko Veit (79LR4R7RSC)`)
-and the notarytool profile (`strata-notary`); `SIGN_ID` and `NOTARY_PROFILE` override them.
+and the notarytool profile (`cortex-notary`); `SIGN_ID` and `NOTARY_PROFILE` override them.
 
 ## What to type (once per build)
 
 1. Put these on the Mac in one folder: `sign-and-notarize.sh`, `entitlements-node.plist` (they must stay together), and the file(s) to sign,
-   for example `Strata-tester-mac.dmg` and `Strata-Terminal-Mac.zip`.
+   for example `Cortex-tester-mac.dmg` and `Cortex-Terminal-Mac.zip`.
 2. Open Terminal and go to that folder:  `cd ~/Downloads/sign`
 3. Check the two things the script needs (both should answer without an error):
 
        security find-identity -v -p codesigning        # lists "Developer ID Application: Niko Veit (79LR4R7RSC)"
-       xcrun notarytool history --keychain-profile strata-notary
+       xcrun notarytool history --keychain-profile cortex-notary
 
 4. Run it (the app and the Terminal archive together; either part can be left out):
 
-       bash sign-and-notarize.sh Strata-tester-mac.dmg --terminal Strata-Terminal-Mac.zip
+       bash sign-and-notarize.sh Cortex-tester-mac.dmg --terminal Cortex-Terminal-Mac.zip
 
    macOS may ask once whether `codesign` may use the key in your Keychain: type your Mac login password and choose "Always Allow".
    Then wait: Apple's check takes a few minutes per file (up to about 15 minutes each; the script waits and prints when it is done).
@@ -33,17 +33,17 @@ A trial run that signs ad-hoc and sends nothing to Apple: add `--dry-run` (no ce
 
 ## The in-app update file (release builds only)
 
-The app updates itself on a Mac from `Strata.app.tar.gz`, not from the dmg. The one `tauri build` makes holds the app before this script signs it, so it must
+The app updates itself on a Mac from `Cortex.app.tar.gz`, not from the dmg. The one `tauri build` makes holds the app before this script signs it, so it must
 not be published. For a release build add `--updater-archive`:
 
-       bash sign-and-notarize.sh Strata.dmg --updater-archive
+       bash sign-and-notarize.sh Cortex.dmg --updater-archive
 
-After the app is signed, notarised and stapled, the script packs it into `signed/Strata.app.tar.gz` (the `.app` folder at the root of a gzip tar, like Tauri's own),
+After the app is signed, notarised and stapled, the script packs it into `signed/Cortex.app.tar.gz` (the `.app` folder at the root of a gzip tar, like Tauri's own),
 unpacks it again in a scratch folder and runs `codesign --verify --deep --strict`, `stapler validate` and `spctl` on the unpacked copy. The archive is **not signed with the Tauri
-updater key** here: that key never goes near the Mac, and the Mac needs no node. Copy `Strata.app.tar.gz` to the release PC and, there:
+updater key** here: that key never goes near the Mac, and the Mac needs no node. Copy `Cortex.app.tar.gz` to the release PC and, there:
 
-       npx tauri signer sign -f <path to tauri-updater.key> Strata.app.tar.gz
-       python packaging/feed_tool.py set-app-platform --app-json RELEASE/tauri-latest.json --target darwin-aarch64 --version V --archive Strata.app.tar.gz --sig Strata.app.tar.gz.sig
+       npx tauri signer sign -f <path to tauri-updater.key> Cortex.app.tar.gz
+       python packaging/feed_tool.py set-app-platform --app-json RELEASE/tauri-latest.json --target darwin-aarch64 --version V --archive Cortex.app.tar.gz --sig Cortex.app.tar.gz.sig
 
 `set-app-platform` refuses a signature that does not verify for these exact bytes, then records the url, signature, SHA-256 and size. Full release order: `packaging/UPDATES.md`, "Releasing".
 
@@ -71,7 +71,7 @@ by somebody else, and every library in these bundles is re-signed with the one i
 error for a library that is not in the bundle (for example an addon an MCP server installs and loads with this node), add that key to
 `entitlements-node.plist` and run the script again.
 
-The engine components the app downloads later (`strata update`) are unpacked by Control without the download mark, run as their own
+The engine components the app downloads later (`cortex update`) are unpacked by Control without the download mark, run as their own
 processes, and are not hardened by the app's runtime (a child process is not bound by its parent's hardened runtime), so unsigned
 components keep working. The engine copied out of the app's bundle keeps our signature; it needs no entitlement (Metal compiles the
 kernel sources through the system compiler service, tested under the hardened runtime).

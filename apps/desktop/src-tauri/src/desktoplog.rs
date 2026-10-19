@@ -1,12 +1,12 @@
 //! The desktop shell's own logs (Linux): what the host and the window process printed, a crash log when the window dies, and
 //! `--save-logs`, which collects everything a person can send us without the window (the window is what may be crashing).
 //!
-//! Files, in `<data>/logs` (`$XDG_DATA_HOME/strata/logs`, usually `~/.local/share/strata/logs`; the newest ten of each kind are kept):
+//! Files, in `<data>/logs` (`$XDG_DATA_HOME/cortex/logs`, usually `~/.local/share/cortex/logs`; the newest ten of each kind are kept):
 //!   desktop-<UTC time>.log         one per start: the shell's lines, and every line the host (`[host]`) and the window (`[window]`) printed
 //!   desktop-crash-<UTC time>.log   written when the window process dies without being closed: what happened in plain words, the system,
 //!                                  the graphics session, the last lines of the window and of the host, and a backtrace when the system keeps one
 //!
-//! `strata-desktop --save-logs` puts the newest crash log, the tails of the newest shell logs and the engine server logs into one text file
+//! `cortex-desktop --save-logs` puts the newest crash log, the tails of the newest shell logs and the engine server logs into one text file
 //! in the Downloads folder. The same pieces go into Settings > Engine > Diagnostics > Save logs (the host reads this folder).
 
 use std::collections::VecDeque;
@@ -18,9 +18,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const KEEP: usize = 10;
 const RING_LINES: usize = 300;
 
-/// `<data>/` : where Strata keeps its engine, runtime and logs on this system.
+/// `<data>/` : where Cortex keeps its engine, runtime and logs on this system.
 pub fn data_dir() -> PathBuf {
-    if let Some(dir) = std::env::var_os("STRATA_DESKTOP_DATA_DIR") {
+    if let Some(dir) = std::env::var_os("CORTEX_DESKTOP_DATA_DIR") {
         return PathBuf::from(dir);
     }
     let base = std::env::var_os("XDG_DATA_HOME")
@@ -28,7 +28,7 @@ pub fn data_dir() -> PathBuf {
         .filter(|p| p.is_absolute())
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local").join("share")))
         .unwrap_or_else(std::env::temp_dir);
-    base.join("strata")
+    base.join("cortex")
 }
 
 pub fn logs_dir() -> PathBuf {
@@ -101,7 +101,7 @@ impl Log {
         let path = dir.join(format!("desktop-{}.log", stamp(SystemTime::now())));
         let file = std::fs::OpenOptions::new().create(true).append(true).open(&path).ok();
         let log = Log { file: Arc::new(Mutex::new(file)), path: Some(path) };
-        log.line("shell", &format!("Strata desktop {} starting (pid {})", env!("CARGO_PKG_VERSION"), std::process::id()));
+        log.line("shell", &format!("Cortex desktop {} starting (pid {})", env!("CARGO_PKG_VERSION"), std::process::id()));
         log
     }
     pub fn line(&self, who: &str, text: &str) {
@@ -113,7 +113,7 @@ impl Log {
 
 /// Print what the shell says (terminal and log).
 pub fn say(log: &Log, text: &str) {
-    eprintln!("[strata] {text}");
+    eprintln!("[cortex] {text}");
     log.line("shell", text);
 }
 
@@ -212,11 +212,11 @@ fn system_backtrace(pid: u32) -> Option<String> {
 #[allow(clippy::too_many_arguments)]
 pub fn crash_report(what: &str, pid: u32, window_tail: &[String], host_tail: &[String], backtrace: Option<&str>, app_version: &str, log_path: Option<&Path>) -> String {
     let mut t = String::new();
-    t.push_str("Strata app window crash\n=======================\n\n");
+    t.push_str("Cortex app window crash\n=======================\n\n");
     t.push_str(&format!("When:     {} UTC\n", stamp(SystemTime::now())));
     t.push_str(&format!("What:     the app window process (pid {pid}) stopped without being closed: {what}\n"));
-    t.push_str("Effect:   Strata kept running and opened in the web browser instead (browser mode); nothing was lost.\n");
-    t.push_str(&format!("App:      Strata desktop {app_version}\n"));
+    t.push_str("Effect:   Cortex kept running and opened in the web browser instead (browser mode); nothing was lost.\n");
+    t.push_str(&format!("App:      Cortex desktop {app_version}\n"));
     t.push_str(&format!("System:   {} / {}\n", os_pretty_name(), first_line("/proc/version").unwrap_or_default()));
     if let Some(v) = first_line("/proc/driver/nvidia/version") {
         t.push_str(&format!("NVIDIA:   {v}\n"));
@@ -280,9 +280,9 @@ fn tail_lines(path: &Path, n: usize) -> String {
 /// `--save-logs`: one text file with what we need to look at a crash. Returns its path.
 pub fn save_logs(out_dir: &Path) -> std::io::Result<PathBuf> {
     std::fs::create_dir_all(out_dir)?;
-    let path = out_dir.join(format!("strata-logs-{}.txt", stamp(SystemTime::now())));
+    let path = out_dir.join(format!("cortex-logs-{}.txt", stamp(SystemTime::now())));
     let mut t = String::new();
-    t.push_str(&format!("Strata desktop logs {} UTC\nApp {}\nSystem: {} / {}\n", stamp(SystemTime::now()), env!("CARGO_PKG_VERSION"), os_pretty_name(), first_line("/proc/version").unwrap_or_default()));
+    t.push_str(&format!("Cortex desktop logs {} UTC\nApp {}\nSystem: {} / {}\n", stamp(SystemTime::now()), env!("CARGO_PKG_VERSION"), os_pretty_name(), first_line("/proc/version").unwrap_or_default()));
     if let Some(v) = first_line("/proc/driver/nvidia/version") {
         t.push_str(&format!("NVIDIA: {v}\n"));
     }
@@ -349,9 +349,9 @@ mod tests {
 
     #[test]
     fn logs_are_pruned_and_saved_into_one_file() {
-        let dir = std::env::temp_dir().join(format!("strata-desktoplog-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("cortex-desktoplog-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        std::env::set_var("STRATA_DESKTOP_DATA_DIR", &dir);
+        std::env::set_var("CORTEX_DESKTOP_DATA_DIR", &dir);
         let logs = logs_dir();
         std::fs::create_dir_all(&logs).unwrap();
         for i in 0..14 {
@@ -368,7 +368,7 @@ mod tests {
         let saved = save_logs(&dir.join("out")).unwrap();
         let text = std::fs::read_to_string(saved).unwrap();
         assert!(text.contains("crash 13") && text.contains("run 13") && text.contains("engine line"));
-        std::env::remove_var("STRATA_DESKTOP_DATA_DIR");
+        std::env::remove_var("CORTEX_DESKTOP_DATA_DIR");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -2,7 +2,7 @@
 // against the column-split kernels + the norm kernel (variant 0, the default before it):
 // y, its FP16 bits and the final state must be BITWISE equal, over chunk lengths around the 8-token staging and a
 // long one, from a nonzero state.  Synthetic inputs in the model's ranges (unit q/k rows, log-decay gates < 0).
-#include "strata/prefill/kernels.hpp"
+#include "cortex/prefill/kernels.hpp"
 
 #include <cuda_runtime.h>
 
@@ -33,12 +33,12 @@ template <typename T> std::vector<T> host(const T* d, size_t n) {
 }  // namespace
 
 int main() {
-    // variants 0 and 1 are the references here; STRATA_GDN_CHUNKED=1 would turn them into the opt-in chunked recurrence
+    // variants 0 and 1 are the references here; CORTEX_GDN_CHUNKED=1 would turn them into the opt-in chunked recurrence
     // (tests/hip/gdn_chunked.cpp), whose bits differ
 #ifdef _WIN32
-    _putenv_s("STRATA_GDN_CHUNKED", "");
+    _putenv_s("CORTEX_GDN_CHUNKED", "");
 #else
-    unsetenv("STRATA_GDN_CHUNKED");
+    unsetenv("CORTEX_GDN_CHUNKED");
 #endif
     std::mt19937 rng(11);
     std::normal_distribution<float> nd(0.f, 1.f);
@@ -75,7 +75,7 @@ int main() {
             uint16_t* dy16 = nullptr;
             ck(cudaMalloc(&dy, (size_t) T * HV * S * 4), "malloc");
             ck(cudaMalloc(&dy16, (size_t) T * HV * S * 2), "malloc");
-            strata::prefill::gdn_recurrence_variant(variant, dst, dh, dg, db, dz, dgm, 1e-6f, dy, dy16, T, nullptr);
+            cortex::prefill::gdn_recurrence_variant(variant, dst, dh, dg, db, dz, dgm, 1e-6f, dy, dy16, T, nullptr);
             ck(cudaDeviceSynchronize(), "run");
             auto y = host(dy, (size_t) T * HV * S);
             auto y16 = host(dy16, (size_t) T * HV * S);
@@ -88,7 +88,7 @@ int main() {
                 for (size_t i = 0; i < y16.size(); ++i) d16 += y16[i] != y16_ref[i];
                 for (size_t i = 0; i < st.size(); ++i) dsn += std::memcmp(&st[i], &st_ref[i], 4) != 0;
                 // (y, the FP32 scratch, is not part of the contract: 0.1.39's norm kernel no longer stores the normalized value there,
-                // while the head kernels store it unless STRATA_GDN_NOY; what the out projection reads is y16, and the state)
+                // while the head kernels store it unless CORTEX_GDN_NOY; what the out projection reads is y16, and the state)
                 const bool ok = d16 == 0 && dsn == 0;
                 failures += !ok;
                 std::printf("%s T %lld variant %d vs 0: y %zu, y16 %zu, state %zu values differ\n", ok ? "PASS" : "FAIL",
@@ -106,10 +106,10 @@ int main() {
             for (int variant : {0, 1}) {
                 cudaEvent_t a, b;
                 cudaEventCreate(&a); cudaEventCreate(&b);
-                strata::prefill::gdn_recurrence_variant(variant, dst, dh, dg, db, dz, dgm, 1e-6f, dy, dy16, T, nullptr);
+                cortex::prefill::gdn_recurrence_variant(variant, dst, dh, dg, db, dz, dgm, 1e-6f, dy, dy16, T, nullptr);
                 cudaEventRecord(a);
                 for (int r = 0; r < 3; ++r)
-                    strata::prefill::gdn_recurrence_variant(variant, dst, dh, dg, db, dz, dgm, 1e-6f, dy, dy16, T, nullptr);
+                    cortex::prefill::gdn_recurrence_variant(variant, dst, dh, dg, db, dz, dgm, 1e-6f, dy, dy16, T, nullptr);
                 cudaEventRecord(b);
                 ck(cudaEventSynchronize(b), "time");
                 float ms = 0;

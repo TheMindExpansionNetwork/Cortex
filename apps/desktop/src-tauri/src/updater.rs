@@ -2,7 +2,7 @@
 //!
 //! The UI is served by the App Host, so it cannot call Tauri's updater plugin; and the host is Node, which has no updater.
 //! The shell therefore opens one loopback listener, protected by a random token it hands only to the host it started
-//! (`STRATA_SHELL_BRIDGE`, `STRATA_SHELL_TOKEN`), and the host's `app-updater.mjs` talks to it:
+//! (`CORTEX_SHELL_BRIDGE`, `CORTEX_SHELL_TOKEN`), and the host's `app-updater.mjs` talks to it:
 //!
 //!   GET  /app-update/check    -> { available, version, current, notes }   (signature-verified metadata from the feed)
 //!   POST /app-update/install  -> starts download + install in the background
@@ -10,8 +10,8 @@
 //!
 //! The update itself is Tauri's: it downloads the installer, checks its minisign signature against the public key in
 //! `tauri.conf.json` (`plugins.updater.pubkey`, the owner's separate updater key) and installs. A check or an install happens
-//! only when the user presses "Check for updates" / "Update Strata"; nothing here runs on start, and nothing here touches
-//! engines or models (those are Control's component updater: `strata update`).
+//! only when the user presses "Check for updates" / "Update Cortex"; nothing here runs on start, and nothing here touches
+//! engines or models (those are Control's component updater: `cortex update`).
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -22,7 +22,7 @@ use tauri::AppHandle;
 use tauri_plugin_updater::UpdaterExt;
 
 /// Where an endpoint other than the one in `tauri.conf.json` may come from: a local test feed. Only loopback or https.
-const ENDPOINT_ENV: &str = "STRATA_UPDATE_APP_ENDPOINT";
+const ENDPOINT_ENV: &str = "CORTEX_UPDATE_APP_ENDPOINT";
 
 #[derive(Clone, Default)]
 struct Progress {
@@ -89,7 +89,7 @@ async fn install(app: AppHandle, progress: Arc<Mutex<Progress>>) {
     };
     let update = match updater.check().await {
         Ok(Some(update)) => update,
-        Ok(None) => return fail("There is no newer version of the Strata app.".into()),
+        Ok(None) => return fail("There is no newer version of the Cortex app.".into()),
         Err(e) => return fail(e.to_string()),
     };
     {
@@ -138,7 +138,7 @@ fn launch_installer(version: &str, bytes: &[u8]) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
     const DETACHED_PROCESS: u32 = 0x0000_0008;
-    let dir = std::env::temp_dir().join(format!("strata-app-update-{version}"));
+    let dir = std::env::temp_dir().join(format!("cortex-app-update-{version}"));
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let installer = dir.join("installer.exe");
     std::fs::write(&installer, bytes).map_err(|e| e.to_string())?;
@@ -215,7 +215,7 @@ fn handle(mut stream: TcpStream, app: &AppHandle, token: &str, progress: &Arc<Mu
 }
 
 /// Open the bridge on a free loopback port. Returns None if the listener cannot be bound (the app then simply has no
-/// in-app update; the Terminal's `strata update --app` still works).
+/// in-app update; the Terminal's `cortex update --app` still works).
 pub fn start(app: &AppHandle, token: String) -> Option<Bridge> {
     let listener = TcpListener::bind(("127.0.0.1", 0)).ok()?;
     let port = listener.local_addr().ok()?.port();
@@ -233,9 +233,9 @@ pub fn start(app: &AppHandle, token: String) -> Option<Bridge> {
 /// Environment for the App Host: where the bridge is, which app version this is.
 #[allow(dead_code)]
 pub fn apply_env(cmd: &mut std::process::Command, app: &AppHandle, bridge: Option<&Bridge>) {
-    cmd.env("STRATA_APP_VERSION", app.package_info().version.to_string());
+    cmd.env("CORTEX_APP_VERSION", app.package_info().version.to_string());
     if let Some(bridge) = bridge {
-        cmd.env("STRATA_SHELL_BRIDGE", &bridge.url).env("STRATA_SHELL_TOKEN", &bridge.token);
+        cmd.env("CORTEX_SHELL_BRIDGE", &bridge.url).env("CORTEX_SHELL_TOKEN", &bridge.token);
     }
 }
 

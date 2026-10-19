@@ -67,7 +67,7 @@ struct Dispatch {
 // Metal and raises no error (0.1.44, #2323: gdn_step needs 512 threads, an M2 Max gave 448 for the GDN_NTOK >= 2
 // specializations - the layers silently kept their old outputs and every answer was garbage).  So every dispatch is
 // checked: too few threads is fatal, with a message that names the kernel, the limit and the size needed.
-// STRATA_METAL_MAX_THREADS_CAP=N lowers every pipeline's reported limit to N (a test hook: it proves this check).
+// CORTEX_METAL_MAX_THREADS_CAP=N lowers every pipeline's reported limit to N (a test hook: it proves this check).
 void require_fit(const Pipeline& p, uint32_t threads, const char* where);
 inline void require_fit(const Dispatch& d, const char* where = "dispatch") {
     require_fit(*d.p, d.tg[0] * d.tg[1] * d.tg[2], where);
@@ -87,7 +87,7 @@ public:
     // Compiles a library from MSL source files (paths), prepended by `prelude` (defines) and, if include_ggml,
     // ggml-common.h with GGML_COMMON_DECL_METAL/IMPL_METAL.  Returns a library id (index); aborts with the
     // compiler log on error.
-    // Safe math unless STRATA_METAL_MATH=fast (the argument is ignored; kept for callers).
+    // Safe math unless CORTEX_METAL_MATH=fast (the argument is ignored; kept for callers).
     int compile(const std::vector<std::string>& files, const std::string& prelude = "", bool fast_math = false);
     Pipeline pipeline(int lib, const std::string& fn, const Constants& c = {});
 

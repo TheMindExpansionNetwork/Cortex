@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Build the self-contained Strata Terminal distribution for Windows x64, Linux x86_64 or macOS arm64.
+"""Build the self-contained Cortex Terminal distribution for Windows x64, Linux x86_64 or macOS arm64.
 
 The requirement this exists for (checklist P04, and the owner's rule that starting or serving never fetches Python
 packages from the internet): a user installs the terminal without Desktop, and needs no development checkout, no
 system Python, no pip run, no compiler. So the archive carries its own Python runtime and its own dependencies, and
-the `strata` launchers prefer them.
+the `cortex` launchers prefer them.
 
 What goes in
 ------------
@@ -16,12 +16,12 @@ What goes in
   `pip install --require-hashes --no-deps --only-binary=:all:` at BUILD time only: every package, direct or
   transitive, is named with an exact version and the SHA-256 of the wheel(s) accepted, so nothing else can land in
   the bundle. pip itself is the one the interpreter shipped with (not upgraded);
-* the application: `strata.py`, `strata_control`, `strata_cli`, `serve`, a `VERSION` file and the docs the CLI
+* the application: `cortex.py`, `cortex_control`, `cortex_cli`, `serve`, a `VERSION` file and the docs the CLI
   references;
 * the read-only tooling under `tools/` that the terminal paths import. Everything else under `tools/` is engine
   installation and preparation work and is deliberately excluded: the serving import graph must not pull it in
   (tests/terminal/test_no_acquisition.py checks that);
-* launchers: `bin/strata.cmd` and `bin/strata.ps1` (Windows), `bin/strata` (Linux, macOS).
+* launchers: `bin/cortex.cmd` and `bin/cortex.ps1` (Windows), `bin/cortex` (Linux, macOS).
 
 What does NOT go in
 -------------------
@@ -90,32 +90,32 @@ PYTHON_PIN = {**PYTHON_PINS["darwin-arm64"], "target": "darwin-arm64"}
 
 #: The application, as paths relative to ROOT (copied to the same place in the archive).
 PAYLOAD = (
-    "strata.py",
-    "strata_control",
-    "strata_cli",
+    "cortex.py",
+    "cortex_control",
+    "cortex_cli",
     "serve",
     "requirements.txt",
     "requirements-monitor.txt",
     "docs/MANAGEMENT_PROTOCOL.md",
-    "docs/TERMINAL_LAUNCH.md",         # the README below points at it (`strata launch`); it used to be missing from the archive
-    "data/gguf_fingerprints.json",     # `strata models import --plan` names a known file set from this table
+    "docs/TERMINAL_LAUNCH.md",         # the README below points at it (`cortex launch`); it used to be missing from the archive
+    "data/gguf_fingerprints.json",     # `cortex models import --plan` names a known file set from this table
 )
 
 #: `tools/` modules the terminal paths import. Adding one here is a deliberate act: this list is what keeps
 #: installation/preparation code out of the serving import graph.
 TOOLS_SUBSET = (
-    "strata_tokenizer.py",
+    "cortex_tokenizer.py",
     "gguf_reader.py",
 )
 
-#: What `strata launch` and the desktop app's installer need on top of the read-only terminal: the model catalog and GPU probe
-#: (tools/strata_mcp.py reads setup.py's tables) and the install job, which downloads the model the user chose, prepares it with
-#: the bundled tools and writes a run config naming "component:strata-engine". setup.py runs in its CONTROL mode there
-#: (STRATA_CONTROL_INSTALL=1: no pip, no engine fetch, no compiler). Entry points; their local imports under tools/ come with them.
+#: What `cortex launch` and the desktop app's installer need on top of the read-only terminal: the model catalog and GPU probe
+#: (tools/cortex_mcp.py reads setup.py's tables) and the install job, which downloads the model the user chose, prepares it with
+#: the bundled tools and writes a run config naming "component:cortex-engine". setup.py runs in its CONTROL mode there
+#: (CORTEX_CONTROL_INSTALL=1: no pip, no engine fetch, no compiler). Entry points; their local imports under tools/ come with them.
 #: The same list the app's Control component stages (apps/desktop/scripts/stage-control.py uses these names).
-INSTALLER_FILES = ("setup.py", "ref/load.py")   # ref/load.py: strata_pack.py (the Q2_0 AVX-512 repack) imports it
-INSTALLER_TOOLS = ("strata_mcp", "iq_pack", "strata_pack", "pack_index", "mtp_fetch", "mtp_pack", "mtp_rt", "draft_vocab",
-                   "strata_tokenizer", "gguf_reader")
+INSTALLER_FILES = ("setup.py", "ref/load.py")   # ref/load.py: cortex_pack.py (the Q2_0 AVX-512 repack) imports it
+INSTALLER_TOOLS = ("cortex_mcp", "iq_pack", "cortex_pack", "pack_index", "mtp_fetch", "mtp_pack", "mtp_rt", "draft_vocab",
+                   "cortex_tokenizer", "gguf_reader")
 INSTALLER_DATA = "data"           # draft vocabularies, expert profiles: 2 MB
 
 #: packages the bundle must import after the install (the API server's and the CLI's).
@@ -205,7 +205,7 @@ def install_locked(py: Path, lock: Path, root: Path, wheelhouse: Path | None = N
 
 def drop_build_path_launchers(root: Path, staging: Path, target: str) -> list[str]:
     """pip writes console-script launchers that name the build-time interpreter by absolute path: they break the
-    moment the archive is extracted elsewhere. `python -m <module>` and the `strata` launchers replace them."""
+    moment the archive is extracted elsewhere. `python -m <module>` and the `cortex` launchers replace them."""
     gone = []
     if target.startswith("windows"):
         scripts = root / "python" / "Scripts"
@@ -262,7 +262,7 @@ def add_installer(folder: Path, source: Path = ROOT) -> dict:
         shutil.rmtree(folder / INSTALLER_DATA)
     shutil.copytree(source / INSTALLER_DATA, folder / INSTALLER_DATA, ignore=shutil.ignore_patterns("__pycache__"))
     return {"files": copied, "data": INSTALLER_DATA, "setup_sha256": sha256(folder / "setup.py"),
-            "mode": "STRATA_CONTROL_INSTALL=1: downloads the chosen model, prepares it, installs no package and no engine"}
+            "mode": "CORTEX_CONTROL_INSTALL=1: downloads the chosen model, prepares it, installs no package and no engine"}
 
 
 def write_archive(root: Path, name: str, out_dir: Path, kind: str) -> Path:
@@ -290,8 +290,8 @@ def main() -> int:
                     help="skip the locked install (layout checks only; the result is NOT distributable)")
     ap.add_argument("--keep-staging", action="store_true")
     ap.add_argument("--no-installer", action="store_true",
-                    help="leave out setup.py, tools/strata_mcp.py and data/ (the read-only terminal of earlier releases; "
-                         "`strata launch` then cannot list or install models)")
+                    help="leave out setup.py, tools/cortex_mcp.py and data/ (the read-only terminal of earlier releases; "
+                         "`cortex launch` then cannot list or install models)")
     ap.add_argument("--cache", default=None, help="where the pinned interpreter archive is cached")
     ap.add_argument("--wheelhouse", default=None,
                     help="install the locked wheels from this folder (lock_wheels.py --download) and fetch nothing")
@@ -305,14 +305,14 @@ def main() -> int:
     version = args.version or _source_version()
     out_dir = Path(args.out).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    name = f"strata-terminal-{version}-{target}"
+    name = f"cortex-terminal-{version}-{target}"
 
-    cache = Path(args.cache) if args.cache else Path(tempfile.gettempdir()) / "strata-packaging-cache"
+    cache = Path(args.cache) if args.cache else Path(tempfile.gettempdir()) / "cortex-packaging-cache"
     cache.mkdir(parents=True, exist_ok=True)
     archive = fetch_python(target, cache)
     lock = lock_for(target)
 
-    staging = Path(tempfile.mkdtemp(prefix="strata-terminal-build-"))
+    staging = Path(tempfile.mkdtemp(prefix="cortex-terminal-build-"))
     root = staging / name
     root.mkdir(parents=True)
     try:
@@ -346,10 +346,10 @@ def main() -> int:
 
         bin_dir = root / "bin"
         bin_dir.mkdir(exist_ok=True)
-        launchers = ["strata.cmd", "strata.ps1"] if target.startswith("windows") else ["strata"]
+        launchers = ["cortex.cmd", "cortex.ps1"] if target.startswith("windows") else ["cortex"]
         for launcher in launchers:
             shutil.copy2(ROOT / "bin" / launcher, bin_dir / launcher)
-            if launcher == "strata":
+            if launcher == "cortex":
                 (bin_dir / launcher).chmod(0o755)
 
         installed: dict[str, str] = {}
@@ -411,7 +411,7 @@ def main() -> int:
 def _source_version() -> str:
     """The version the source reports, so the artifact name cannot disagree with the code."""
     text = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8", errors="replace")
-    # `project(strata VERSION 0.1.44.1 LANGUAGES C CXX ...)` - the version is a dotted run of numbers and must be
+    # `project(cortex VERSION 0.1.44.1 LANGUAGES C CXX ...)` - the version is a dotted run of numbers and must be
     # read as one. Taking "everything after VERSION" yields "0.1.44.1.LANGUAGES.CXX".
     m = re.search(r"^\s*project\([^)]*?VERSION\s+([0-9]+(?:\.[0-9]+)+)", text, re.MULTILINE)
     return m.group(1) if m else "0.0.0"
@@ -420,22 +420,22 @@ def _source_version() -> str:
 def _readme(version: str, target: str) -> str:
     win = target.startswith("windows")
     ext = "zip" if win else "tar.gz"
-    stem = f"strata-terminal-{version}-{target}"
+    stem = f"cortex-terminal-{version}-{target}"
     if win:
         install = f"""    Expand-Archive {stem}.zip .
     cd {stem}
-    .\\bin\\strata.cmd --help
+    .\\bin\\cortex.cmd --help
 
-Put `bin\\` on your PATH to get the `strata` command everywhere (cmd.exe and PowerShell):
+Put `bin\\` on your PATH to get the `cortex` command everywhere (cmd.exe and PowerShell):
 
     setx PATH "%PATH%;%CD%\\bin"
 """
     else:
         install = f"""    tar xzf {stem}.tar.gz
     cd {stem}
-    ./bin/strata --help
+    ./bin/cortex --help
 
-Put `bin/` on your PATH to get the `strata` command everywhere:
+Put `bin/` on your PATH to get the `cortex` command everywhere:
 
     echo "export PATH=\\"$PWD/bin:$PATH\\"" >> ~/.profile
 """
@@ -443,14 +443,14 @@ Put `bin/` on your PATH to get the `strata` command everywhere:
            "    [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1MB, 1)   # GB free" if win else
            "    free -g" if not target.startswith("darwin") else
            "    Activity Monitor > Memory, or:  vm_stat   (free + inactive pages x 16 KB)")
-    return f"""Strata Terminal {version} ({target})
+    return f"""Cortex Terminal {version} ({target})
 {'=' * (len(version) + len(target) + 18)}
 
 This is the terminal distribution. It carries its own Python {PYTHON_VERSION} and its own packages, so you do not
-need Python, pip, Node, a compiler or a development checkout. Serving and watching (`strata serve`, `strata runtime`,
-`strata monitor`) never install or download anything; if something is missing, the error names the command that
-installs it. Only two commands fetch files, and only when you run them: `strata launch` (the engine and the model you
-choose, after it tells you the size) and `strata update` (the engine and the Strata components).
+need Python, pip, Node, a compiler or a development checkout. Serving and watching (`cortex serve`, `cortex runtime`,
+`cortex monitor`) never install or download anything; if something is missing, the error names the command that
+installs it. Only two commands fetch files, and only when you run them: `cortex launch` (the engine and the model you
+choose, after it tells you the size) and `cortex update` (the engine and the Cortex components).
 
 Install
 -------
@@ -461,29 +461,29 @@ A model of tens of GB needs free memory. Check how much is free first:
 
 {ram}
 
-Close other programs (browsers use a lot) if it is less than the model needs; `strata launch` shows what each model needs.
+Close other programs (browsers use a lot) if it is less than the model needs; `cortex launch` shows what each model needs.
 
 What it does NOT include
 ------------------------
 The **engine** is a separate, independently versioned component and is not bundled: the right engine package
-depends on your OS, CPU and GPU. `strata launch` (or `strata update`) fetches the one for your card from the signed
-release feed; or point Strata at one with STRATA_ENGINE. Model weights are likewise not included: `strata launch`
+depends on your OS, CPU and GPU. `cortex launch` (or `cortex update`) fetches the one for your card from the signed
+release feed; or point Cortex at one with CORTEX_ENGINE. Model weights are likewise not included: `cortex launch`
 downloads the one you choose (the installer files setup.py and tools/ are in this archive for that).
 
 Useful commands
 ---------------
-    strata launch                     choose a model, tune it, serve it and watch it (guided screens; docs/TERMINAL_LAUNCH.md)
-    strata connect opencode           the setup for a coding app on the running server (also codex, claude-code, omp, pi, hermes, openclaw)
-    strata --version                  the version and the interpreter it runs on
-    strata doctor                     read-only component inventory
-    strata profile list               saved serving profiles
-    strata status                     one read-only telemetry snapshot
-    strata monitor                    the terminal monitor
-    strata serve --profile NAME       start the inference server in the foreground
-    strata serve --engine mock ...    a scripted engine for client tests (no GPU, no model)
-    strata runtime start|status|stop  run a profile as a managed background instance
+    cortex launch                     choose a model, tune it, serve it and watch it (guided screens; docs/TERMINAL_LAUNCH.md)
+    cortex connect opencode           the setup for a coding app on the running server (also codex, claude-code, omp, pi, hermes, openclaw)
+    cortex --version                  the version and the interpreter it runs on
+    cortex doctor                     read-only component inventory
+    cortex profile list               saved serving profiles
+    cortex status                     one read-only telemetry snapshot
+    cortex monitor                    the terminal monitor
+    cortex serve --profile NAME       start the inference server in the foreground
+    cortex serve --engine mock ...    a scripted engine for client tests (no GPU, no model)
+    cortex runtime start|status|stop  run a profile as a managed background instance
 
-Existing installs are found in place: the run configs (strata-<model>.json) and the data folder remembered in
+Existing installs are found in place: the run configs (cortex-<model>.json) and the data folder remembered in
 settings.json are used where they are; nothing is copied or moved.
 
 Verification

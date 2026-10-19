@@ -1,4 +1,4 @@
-//! Strata Desktop — Tauri shell.
+//! Cortex Desktop — Tauri shell.
 //!
 //! The shell is a *carrier*, not an owner. It does exactly three things:
 //!
@@ -11,7 +11,7 @@
 //!
 //! One app instance runs at a time (the single-instance plugin): a second launch focuses the window that is
 //! already open and starts nothing, so two apps never fight over the `app-N` engine slots. One app can still run
-//! several engines (one per GPU, say): the host gives each its own `app-N` profile under Strata Control.
+//! several engines (one per GPU, say): the host gives each its own `app-N` profile under Cortex Control.
 //!
 //! Closing ends the engines this app started, on every path:
 //!   - a normal exit and the window's X: the host is asked to stop them through Control (drained, then ended), with a
@@ -22,7 +22,7 @@
 //! Engines the Terminal started are not in any of this and are left alone.
 //!
 //! Ownership stays where the architecture puts it. The App Host owns the local client API and the
-//! engine lifecycle; Strata Control owns components, models, profiles and jobs; DeepSeek Harness
+//! engine lifecycle; Cortex Control owns components, models, profiles and jobs; DeepSeek Harness
 //! owns the agent loop and durable sessions. There is deliberately no second supervisor, no
 //! conversation store and no agent loop in this file.
 
@@ -180,7 +180,7 @@ fn contain_app() -> bool {
                 return true;
             }
         }
-        eprintln!("[strata] could not put the app in a job object; engines are stopped by the host and their owners instead");
+        eprintln!("[cortex] could not put the app in a job object; engines are stopped by the host and their owners instead");
         false
     }
     #[cfg(not(windows))]
@@ -216,11 +216,11 @@ fn random_token() -> String {
 }
 
 /// The Control component that ships beside the host (`<resources>/control`): the bundled CPython, the locked
-/// wheels, strata_control and the API server. None in a development checkout.
+/// wheels, cortex_control and the API server. None in a development checkout.
 fn control_dir(res: &Path) -> Option<PathBuf> {
     let dir = res.join("control");
     let python = if cfg!(windows) { dir.join("python").join("python.exe") } else { dir.join("python").join("bin").join("python3") };
-    if python.exists() && dir.join("strata.py").exists() {
+    if python.exists() && dir.join("cortex.py").exists() {
         Some(dir)
     } else {
         None
@@ -229,9 +229,9 @@ fn control_dir(res: &Path) -> Option<PathBuf> {
 
 /// What every host start gets, packaged or self-test: acquiring is forbidden, Control is where the bundle put it.
 fn apply_runtime_policy(cmd: &mut Command, res: &Path) {
-    cmd.env("STRATA_NO_ACQUIRE", "1");
+    cmd.env("CORTEX_NO_ACQUIRE", "1");
     if let Some(dir) = control_dir(res) {
-        cmd.env("STRATA_CONTROL_DIR", dir);
+        cmd.env("CORTEX_CONTROL_DIR", dir);
     }
 }
 
@@ -350,7 +350,7 @@ fn wait_for_health(
     while Instant::now() < deadline {
         // A host that already died will never answer: say so now instead of after the timeout.
         if let Some(why) = exited() {
-            return Err(format!("the Strata App Host stopped before it became healthy: {why}"));
+            return Err(format!("the Cortex App Host stopped before it became healthy: {why}"));
         }
         match ureq_get_ok(&url) {
             Ok(true) => return Ok(()),
@@ -359,7 +359,7 @@ fn wait_for_health(
         }
         std::thread::sleep(Duration::from_millis(250));
     }
-    Err(format!("the Strata App Host did not become healthy at {url}: {last}"))
+    Err(format!("the Cortex App Host did not become healthy at {url}: {last}"))
 }
 
 /// A minimal blocking HTTP POST with no body (the shell's one clean-stop request). Returns the status line.
@@ -452,28 +452,28 @@ fn host_command(res: &Path, port: u16, shutdown_token: &str) -> Result<Command, 
     let mut cmd = Command::new(&node);
     cmd.arg(&entry)
         .current_dir(&host_dir)
-        .env("STRATA_PORT", port.to_string())
-        .env("STRATA_DIST", &dist)
+        .env("CORTEX_PORT", port.to_string())
+        .env("CORTEX_DIST", &dist)
         .env("NODE_ENV", "production")
         // U12: a packaged build must have no success path that uses demo responses or demo
-        // metrics. `STRATA_PACKAGED` makes the host refuse to simulate; `STRATA_REAL_ENGINE` is set
+        // metrics. `CORTEX_PACKAGED` makes the host refuse to simulate; `CORTEX_REAL_ENGINE` is set
         // for the same reason, so the monitor reports `none` instead of fabricated numbers.
-        .env("STRATA_PACKAGED", "1")
-        .env("STRATA_REAL_ENGINE", "1")
+        .env("CORTEX_PACKAGED", "1")
+        .env("CORTEX_REAL_ENGINE", "1")
         // the host leaves, after stopping what this app started, when this shell is gone (killed, crashed)
-        .env("STRATA_EXIT_WITH_PARENT", "1")
+        .env("CORTEX_EXIT_WITH_PARENT", "1")
         // the host listens on the loopback address only, whatever the caller's environment says
-        .env("STRATA_BIND", "127.0.0.1")
-        .env("STRATA_SHUTDOWN_TOKEN", shutdown_token)
+        .env("CORTEX_BIND", "127.0.0.1")
+        .env("CORTEX_SHUTDOWN_TOKEN", shutdown_token)
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
     apply_runtime_policy(&mut cmd, res);
     hide_console(&mut cmd);
-    // A user with the Strata API worker on a different port sets this; unset means the worker's
+    // A user with the Cortex API worker on a different port sets this; unset means the worker's
     // documented loopback default.
-    if let Ok(url) = std::env::var("STRATA_SERVER_URL") {
-        cmd.env("STRATA_SERVER_URL", url);
+    if let Ok(url) = std::env::var("CORTEX_SERVER_URL") {
+        cmd.env("CORTEX_SERVER_URL", url);
     }
     Ok(cmd)
 }
@@ -516,7 +516,7 @@ const HOST_STOP_SECONDS: u64 = 60;
 /// Stop the App Host, and with it the engines this app started.
 ///
 /// The host stops them through Control (profiles `app-N`), then exits. Engines another client started (the
-/// Terminal's `strata runtime start`) are not touched. If the host does not finish in time it is ended, and the
+/// Terminal's `cortex runtime start`) are not touched. If the host does not finish in time it is ended, and the
 /// engines are ended by the job object (Windows) or by their owners following the host (`--die-with-pid`).
 #[cfg(not(target_os = "linux"))]
 fn stop_host(app: &tauri::AppHandle) {
@@ -533,7 +533,7 @@ fn stop_host(app: &tauri::AppHandle) {
 /// started (the Terminal) are not touched. If it does not finish in time the process is ended.
 fn stop_host_child(child: &mut Child, port: Option<u16>, token: Option<&str>) {
     if let (Some(port), Some(token)) = (port, token) {
-        let _ = http_post(&format!("http://127.0.0.1:{port}/api/control/shutdown"), &[("x-strata-shutdown", token)]);
+        let _ = http_post(&format!("http://127.0.0.1:{port}/api/control/shutdown"), &[("x-cortex-shutdown", token)]);
         let deadline = Instant::now() + Duration::from_secs(HOST_STOP_SECONDS);
         while Instant::now() < deadline {
             if let Ok(Some(_)) = child.try_wait() {
@@ -555,8 +555,8 @@ fn packaged_resource_dir(exe: &Path) -> Option<PathBuf> {
     let mut candidates = vec![dir.to_path_buf()];
     if let Some(up) = dir.parent() {
         candidates.push(up.join("Resources"));
-        candidates.push(up.join("lib").join("Strata"));
-        candidates.push(up.join("lib").join("strata-desktop"));
+        candidates.push(up.join("lib").join("Cortex"));
+        candidates.push(up.join("lib").join("cortex-desktop"));
     }
     candidates
         .into_iter()
@@ -569,7 +569,7 @@ fn self_test_path(args: &[String]) -> Option<String> {
         if a == "--self-test" {
             return Some(
                 std::env::temp_dir()
-                    .join("strata-desktop-self-test.json")
+                    .join("cortex-desktop-self-test.json")
                     .to_string_lossy()
                     .into_owned(),
             );
@@ -581,13 +581,13 @@ fn self_test_path(args: &[String]) -> Option<String> {
     None
 }
 
-/// Run `strata.py --version` on the bundle's own interpreter with a scrubbed environment.
+/// Run `cortex.py --version` on the bundle's own interpreter with a scrubbed environment.
 fn control_runs(dir: &Path) -> (bool, String) {
     let python = if cfg!(windows) { dir.join("python").join("python.exe") } else { dir.join("python").join("bin").join("python3") };
     let mut cmd = Command::new(&python);
-    cmd.arg(dir.join("strata.py")).arg("--version").current_dir(dir)
+    cmd.arg(dir.join("cortex.py")).arg("--version").current_dir(dir)
         .env_remove("PYTHONHOME").env_remove("PYTHONPATH").env_remove("VIRTUAL_ENV")
-        .env("PYTHONNOUSERSITE", "1").env("PYTHONDONTWRITEBYTECODE", "1").env("STRATA_NO_ACQUIRE", "1");
+        .env("PYTHONNOUSERSITE", "1").env("PYTHONDONTWRITEBYTECODE", "1").env("CORTEX_NO_ACQUIRE", "1");
     hide_console(&mut cmd);
     match cmd.output() {
         Ok(out) => {
@@ -603,13 +603,13 @@ fn control_runs(dir: &Path) -> (bool, String) {
 /// and must not create or fetch anything.
 fn control_engine_notice(dir: &Path) -> (bool, String) {
     let python = if cfg!(windows) { dir.join("python").join("python.exe") } else { dir.join("python").join("bin").join("python3") };
-    let empty = std::env::temp_dir().join(format!("strata-self-test-components-{}", std::process::id()));
+    let empty = std::env::temp_dir().join(format!("cortex-self-test-components-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&empty);
     let mut cmd = Command::new(&python);
-    cmd.arg(dir.join("strata.py")).args(["components", "engine", "--backend", "cuda", "--output", "json"])
+    cmd.arg(dir.join("cortex.py")).args(["components", "engine", "--backend", "cuda", "--output", "json"])
         .arg("--components-dir").arg(&empty).current_dir(dir)
         .env_remove("PYTHONHOME").env_remove("PYTHONPATH")
-        .env("PYTHONNOUSERSITE", "1").env("PYTHONDONTWRITEBYTECODE", "1").env("STRATA_NO_ACQUIRE", "1");
+        .env("PYTHONNOUSERSITE", "1").env("PYTHONDONTWRITEBYTECODE", "1").env("CORTEX_NO_ACQUIRE", "1");
     hide_console(&mut cmd);
     let result = match cmd.output() {
         Ok(out) => {
@@ -693,10 +693,10 @@ fn run_self_test(report_path: &str) -> i32 {
     let mut cmd = Command::new(&node);
     cmd.arg(&entry)
         .current_dir(&host_dir)
-        .env("STRATA_PORT", port.to_string())
-        .env("STRATA_DIST", &dist)
-        .env("STRATA_PACKAGED", "1")
-        .env("STRATA_REAL_ENGINE", "1")
+        .env("CORTEX_PORT", port.to_string())
+        .env("CORTEX_DIST", &dist)
+        .env("CORTEX_PACKAGED", "1")
+        .env("CORTEX_REAL_ENGINE", "1")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -776,7 +776,7 @@ fn write_self_test_report(path: &str, steps: Vec<(String, bool, String)>, error:
         .collect();
     let report = serde_json::json!({
         "schemaVersion": 1,
-        "kind": "strata-desktop-self-test",
+        "kind": "cortex-desktop-self-test",
         "carrier": "tauri",
         "ok": ok,
         "error": error,
@@ -784,7 +784,7 @@ fn write_self_test_report(path: &str, steps: Vec<(String, bool, String)>, error:
     });
     let text = serde_json::to_string_pretty(&report).unwrap_or_else(|_| "{}".into());
     if let Err(e) = std::fs::write(path, &text) {
-        eprintln!("[strata] could not write the self-test report to {path}: {e}");
+        eprintln!("[cortex] could not write the self-test report to {path}: {e}");
     }
     println!("{text}");
     if ok {
@@ -797,7 +797,7 @@ fn write_self_test_report(path: &str, steps: Vec<(String, bool, String)>, error:
 fn main() {
     // ------------------------------------------------------------------ self-test
     //
-    // `Strata.app/Contents/MacOS/strata-desktop --self-test[=path]` starts the App Host from the
+    // `Cortex.app/Contents/MacOS/cortex-desktop --self-test[=path]` starts the App Host from the
     // *packaged resources*, waits for it to answer, checks that it serves the supplied UI, writes a
     // JSON report and exits 0/1. This is what makes the shipped artifact verifiable without a human
     // at the screen — the lesson from the Electron attempt, where a packaged app that never started
@@ -821,7 +821,7 @@ fn main() {
     // window process (`--window-child`) only shows the page. See supervisor.rs.
     #[cfg(target_os = "linux")]
     {
-        let options = supervisor::parse_args(&args, std::env::var("STRATA_UI").ok().as_deref());
+        let options = supervisor::parse_args(&args, std::env::var("CORTEX_UI").ok().as_deref());
         if !options.window_child {
             std::process::exit(supervisor::run(&options));
         }
@@ -852,7 +852,7 @@ fn run_embedded() {
             let handle = app.handle().clone();
             let port = start_host(&handle).map_err(|e| {
                 // A startup failure must be visible, not a blank window.
-                eprintln!("[strata] {e}");
+                eprintln!("[cortex] {e}");
                 Box::<dyn std::error::Error>::from(e)
             })?;
             let shell_token = handle.state::<ShutdownToken>().0.lock().unwrap().clone().unwrap_or_default();
@@ -865,7 +865,7 @@ fn run_embedded() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("error while building the Strata application")
+        .expect("error while building the Cortex application")
         .run(|app, event| {
             if let tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit = event {
                 stop_host(app);
@@ -878,7 +878,7 @@ fn run_embedded() {
 fn open_window(app: &tauri::App, port: u16, shell_token: &str) -> Result<(), Box<dyn std::error::Error>> {
     let origin = format!("http://127.0.0.1:{port}");
     let url = origin.parse().expect("a valid loopback URL");
-    let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url)).title("Strata").inner_size(1440.0, 920.0).min_inner_size(900.0, 600.0);
+    let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url)).title("Cortex").inner_size(1440.0, 920.0).min_inner_size(900.0, 600.0);
     // Dropping pictures on the chat (QA report 1, item 4). Windows: the shell's own file-drop handler is off, because with it on the system hands
     // the dropped file to the shell and the page never sees it; with it off the page gets ordinary drag and drop events (apps/host DropZone), as
     // in a browser. Linux and macOS: the page gets the drag events but WebKit gives it no files, so the handler stays on and the shell passes the
@@ -1029,13 +1029,13 @@ fn pointer_buttons_up(widget: &webkit2gtk::WebView) -> bool {
 /// The script that tells the page a file drag is over the window (`state` is "enter" or "leave"); the page shows its drop box (apps/host DropZone).
 #[cfg_attr(windows, allow(dead_code))]
 fn drag_script(state: &str) -> String {
-    format!("window.dispatchEvent(new CustomEvent('strata:native-drag', {{ detail: '{state}' }}));")
+    format!("window.dispatchEvent(new CustomEvent('cortex:native-drag', {{ detail: '{state}' }}));")
 }
 
 /// The script that tells the page which dropped files the host holds for it (`files_json` is the host's own JSON array of { id, name, type, size }).
 #[cfg_attr(windows, allow(dead_code))]
 fn drop_script(files_json: &str) -> String {
-    format!("window.dispatchEvent(new CustomEvent('strata:native-drop', {{ detail: {files_json} }}));")
+    format!("window.dispatchEvent(new CustomEvent('cortex:native-drop', {{ detail: {files_json} }}));")
 }
 
 /// The files of one drop, by path, to the host (which reads them and keeps each for the page to fetch once); then the page is told.
@@ -1047,13 +1047,13 @@ fn hand_over_drop(window: tauri::WebviewWindow, port: u16, token: String, paths:
         let answer = http_request_body(
             "POST",
             &format!("http://127.0.0.1:{port}/api/app/drop"),
-            &[("x-strata-shutdown", token.as_str()), ("content-type", "application/json")],
+            &[("x-cortex-shutdown", token.as_str()), ("content-type", "application/json")],
             Some(&body),
         );
         let files = match answer {
             Ok((status, text)) if status.contains(" 200") => serde_json::from_str::<serde_json::Value>(&text).ok().and_then(|v| v.get("files").cloned()),
-            Ok((status, _)) => { eprintln!("[strata] the host did not take the dropped files: {status}"); None }
-            Err(e) => { eprintln!("[strata] the dropped files could not be handed to the host: {e}"); None }
+            Ok((status, _)) => { eprintln!("[cortex] the host did not take the dropped files: {status}"); None }
+            Err(e) => { eprintln!("[cortex] the dropped files could not be handed to the host: {e}"); None }
         };
         let json = files.map(|f| f.to_string()).unwrap_or_else(|| "[]".to_string());
         let _ = window.eval(&drop_script(&json));
@@ -1065,11 +1065,11 @@ fn hand_over_drop(window: tauri::WebviewWindow, port: u16, token: String, paths:
 /// process dies; the shell moves to browser mode.
 #[cfg(target_os = "linux")]
 fn run_window_process() -> ! {
-    let port: u16 = std::env::var("STRATA_WINDOW_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(PREFERRED_PORT);
-    let token = std::env::var("STRATA_SHUTDOWN_TOKEN").unwrap_or_default();
+    let port: u16 = std::env::var("CORTEX_WINDOW_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(PREFERRED_PORT);
+    let token = std::env::var("CORTEX_SHUTDOWN_TOKEN").unwrap_or_default();
     // A way to prove the safety net on a computer where the window works (tests only): this process dies the way a WebKit crash does.
-    if std::env::var_os("STRATA_WINDOW_TEST_CRASH").is_some() {
-        eprintln!("[strata] STRATA_WINDOW_TEST_CRASH is set: the window process aborts on purpose.");
+    if std::env::var_os("CORTEX_WINDOW_TEST_CRASH").is_some() {
+        eprintln!("[cortex] CORTEX_WINDOW_TEST_CRASH is set: the window process aborts on purpose.");
         std::process::abort();
     }
     // The shell is this process's parent: when it is gone (killed, crashed, logged off) the window goes too.
@@ -1099,10 +1099,10 @@ fn run_window_process() -> ! {
                 if let Err(e) = http_request_body(
                     "POST",
                     &format!("http://127.0.0.1:{port}/api/control/ui"),
-                    &[("x-strata-shutdown", token.as_str()), ("content-type", "application/json")],
+                    &[("x-cortex-shutdown", token.as_str()), ("content-type", "application/json")],
                     Some(&body),
                 ) {
-                    eprintln!("[strata] the app updater could not be registered with the host: {e}");
+                    eprintln!("[cortex] the app updater could not be registered with the host: {e}");
                 }
             }
             open_window(app, port, &token)
@@ -1113,7 +1113,7 @@ fn run_window_process() -> ! {
             }
         })
         .build(tauri::generate_context!())
-        .expect("error while building the Strata application")
+        .expect("error while building the Cortex application")
         .run(|_app, _event| {});
     std::process::exit(0)
 }
@@ -1133,10 +1133,10 @@ mod tests {
 
     #[test]
     fn the_scripts_the_shell_sends_the_page_for_a_file_drop() {
-        assert_eq!(drag_script("enter"), "window.dispatchEvent(new CustomEvent('strata:native-drag', { detail: 'enter' }));");
+        assert_eq!(drag_script("enter"), "window.dispatchEvent(new CustomEvent('cortex:native-drag', { detail: 'enter' }));");
         let files = r#"[{"id":"a","name":"x.png","type":"image/png","size":3}]"#;
         let script = drop_script(files);
-        assert!(script.starts_with("window.dispatchEvent(new CustomEvent('strata:native-drop', { detail: [{"));
+        assert!(script.starts_with("window.dispatchEvent(new CustomEvent('cortex:native-drop', { detail: [{"));
         assert!(script.contains("x.png") && script.ends_with("}));"));
     }
 
@@ -1146,7 +1146,7 @@ mod tests {
         let first = pick_stable_port().unwrap();
         let second = pick_stable_port().unwrap();
         if first == PREFERRED_PORT {
-            // (when another program already holds the preferred port, as an installed Strata does on a dev PC, every call falls back to a fresh port)
+            // (when another program already holds the preferred port, as an installed Cortex does on a dev PC, every call falls back to a fresh port)
             assert_eq!(first, second);
         }
         // held by another program: a different free port, not a failure
@@ -1159,7 +1159,7 @@ mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("strata-desktop-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("cortex-desktop-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -1184,7 +1184,7 @@ mod tests {
             plain_path(PathBuf::from(r"\\?\UNC\srv\share\x")),
             PathBuf::from(r"\\srv\share\x")
         );
-        assert_eq!(plain_path(PathBuf::from("/usr/lib/Strata")), PathBuf::from("/usr/lib/Strata"));
+        assert_eq!(plain_path(PathBuf::from("/usr/lib/Cortex")), PathBuf::from("/usr/lib/Cortex"));
     }
 
     #[test]
@@ -1195,8 +1195,8 @@ mod tests {
         let py = if cfg!(windows) { dir.join("python").join("python.exe") } else { dir.join("python").join("bin").join("python3") };
         std::fs::create_dir_all(py.parent().unwrap()).unwrap();
         std::fs::write(&py, b"").unwrap();
-        assert!(control_dir(&res).is_none(), "no strata.py yet");
-        std::fs::write(dir.join("strata.py"), b"").unwrap();
+        assert!(control_dir(&res).is_none(), "no cortex.py yet");
+        std::fs::write(dir.join("cortex.py"), b"").unwrap();
         assert_eq!(control_dir(&res), Some(dir));
         let _ = std::fs::remove_dir_all(&res);
     }
@@ -1252,9 +1252,9 @@ mod tests {
     fn packaged_resources_are_found_for_each_platform_layout() {
         let root = scratch("layout");
         for (exe_rel, res_rel) in [
-            ("Contents/MacOS/strata-desktop", "Contents/Resources"),
-            ("install/strata-desktop.exe", "install"),
-            ("usr/bin/strata-desktop", "usr/lib/Strata"),
+            ("Contents/MacOS/cortex-desktop", "Contents/Resources"),
+            ("install/cortex-desktop.exe", "install"),
+            ("usr/bin/cortex-desktop", "usr/lib/Cortex"),
         ] {
             let exe = root.join(exe_rel);
             let res = root.join(res_rel);
@@ -1277,19 +1277,19 @@ mod tests {
         std::fs::create_dir_all(res.join("node")).unwrap();
         std::fs::write(res.join("node").join(NODE_EXE), b"").unwrap();
         // a caller's environment must not widen the bind address: the command sets it itself
-        std::env::set_var("STRATA_BIND", "0.0.0.0");
+        std::env::set_var("CORTEX_BIND", "0.0.0.0");
         let cmd = host_command(&res, 47831, "s3cret").expect("a host command");
-        std::env::remove_var("STRATA_BIND");
+        std::env::remove_var("CORTEX_BIND");
         let env: std::collections::HashMap<String, String> = cmd
             .get_envs()
             .filter_map(|(k, v)| Some((k.to_string_lossy().into_owned(), v?.to_string_lossy().into_owned())))
             .collect();
-        assert_eq!(env.get("STRATA_BIND").map(String::as_str), Some("127.0.0.1"));
-        assert_eq!(env.get("STRATA_PORT").map(String::as_str), Some("47831"));
-        assert_eq!(env.get("STRATA_SHUTDOWN_TOKEN").map(String::as_str), Some("s3cret"));
-        assert_eq!(env.get("STRATA_PACKAGED").map(String::as_str), Some("1"));
-        assert_eq!(env.get("STRATA_NO_ACQUIRE").map(String::as_str), Some("1"));
-        assert!(env.get("STRATA_DIST").unwrap().ends_with("dist"));
+        assert_eq!(env.get("CORTEX_BIND").map(String::as_str), Some("127.0.0.1"));
+        assert_eq!(env.get("CORTEX_PORT").map(String::as_str), Some("47831"));
+        assert_eq!(env.get("CORTEX_SHUTDOWN_TOKEN").map(String::as_str), Some("s3cret"));
+        assert_eq!(env.get("CORTEX_PACKAGED").map(String::as_str), Some("1"));
+        assert_eq!(env.get("CORTEX_NO_ACQUIRE").map(String::as_str), Some("1"));
+        assert!(env.get("CORTEX_DIST").unwrap().ends_with("dist"));
         // a layout without the built UI or the host is refused in plain words
         assert!(host_command(&scratch("empty"), 1, "x").unwrap_err().contains("App Host entry is missing"));
         let _ = std::fs::remove_dir_all(&res);

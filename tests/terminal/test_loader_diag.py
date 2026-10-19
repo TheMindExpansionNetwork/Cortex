@@ -19,12 +19,12 @@ from test_engine_deps import make_pe  # noqa: E402
 class MissingFiles(unittest.TestCase):
     def folder(self, d, *, with_cublas):
         d = Path(d)
-        (d / "strata.exe").write_bytes(make_pe(["cublas64_13.dll", "KERNEL32.dll", "api-ms-win-crt-runtime-l1-1-0.dll"]))
-        (d / "strata_kq.dll").write_bytes(make_pe(["KERNEL32.dll"]))
+        (d / "cortex.exe").write_bytes(make_pe(["cublas64_13.dll", "KERNEL32.dll", "api-ms-win-crt-runtime-l1-1-0.dll"]))
+        (d / "cortex_kq.dll").write_bytes(make_pe(["KERNEL32.dll"]))
         if with_cublas:
             (d / "cublas64_13.dll").write_bytes(make_pe(["cublasLt64_13.dll", "KERNEL32.dll"]))
             (d / "cublasLt64_13.dll").write_bytes(make_pe(["KERNEL32.dll"]))
-        return d / "strata.exe"
+        return d / "cortex.exe"
 
     def test_reader_matches_the_packaging_reader(self):
         with tempfile.TemporaryDirectory() as d:
@@ -51,7 +51,7 @@ class MissingFiles(unittest.TestCase):
             self.assertEqual(loader_diag.missing_files(exe, [Path(sysdir)]), [])
 
     def test_unreadable_file_never_raises(self):
-        self.assertEqual(loader_diag.missing_files(Path("no-such-folder") / "strata.exe"), [])
+        self.assertEqual(loader_diag.missing_files(Path("no-such-folder") / "cortex.exe"), [])
 
     def test_start_note_only_for_the_loader_status(self):
         with tempfile.TemporaryDirectory() as d:

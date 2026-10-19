@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 /**
- * Strata web shell.
+ * Cortex web shell.
  *
  * The engine host (server/) owns hardware detection, the model registry and the
  * local inference API. In dev we proxy /api to it so the browser talks to one
@@ -15,7 +15,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
-        target: process.env.STRATA_HOST ?? 'http://127.0.0.1:8791',
+        target: process.env.CORTEX_HOST ?? 'http://127.0.0.1:8791',
         changeOrigin: true,
         ws: true,
       },

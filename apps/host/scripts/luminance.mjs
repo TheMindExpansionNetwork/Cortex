@@ -26,7 +26,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
-const BASE = process.env.STRATA_URL ?? 'http://localhost:5199';
+const BASE = process.env.CORTEX_URL ?? 'http://localhost:5199';
 /** Anything at or above this projected area is "large". Roughly a 64×64 block. */
 const LARGE_AREA = 4000;
 

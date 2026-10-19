@@ -6,7 +6,7 @@
  *
  * The profile builder reads `profileView()`; the screen reads `view()`. Custom command and instruction tools are served by the app's
  * own small tool server (custom-tools-mcp.mjs) from a JSON file this module writes, so they appear to the assistant as ordinary tools:
- * `mcp__strata-instructions__<name>` (look-only: it just returns the person's instructions) and `mcp__strata-commands__<name>`
+ * `mcp__cortex-instructions__<name>` (look-only: it just returns the person's instructions) and `mcp__cortex-commands__<name>`
  * (runs the person's command; asks first in Manual and is refused in Plan). A person's own tool server (a web address or a program)
  * is added as `mcp__custom-<name>__...` and asks first in Manual like any connected tool.
  */
@@ -19,8 +19,8 @@ const KINDS = ['instructions', 'command', 'server'];
 const NAME = /^[A-Za-z][A-Za-z0-9 _-]{0,39}$/;
 const MAX_CUSTOM = 40;
 
-export const INSTRUCTIONS_SERVER = 'strata-instructions';
-export const COMMANDS_SERVER = 'strata-commands';
+export const INSTRUCTIONS_SERVER = 'cortex-instructions';
+export const COMMANDS_SERVER = 'cortex-commands';
 
 const slug = value => String(value).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'tool';
 const clean = (value, max) => String(value ?? '').replace(/\0/g, '').slice(0, max);

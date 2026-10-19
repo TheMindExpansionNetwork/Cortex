@@ -13,7 +13,7 @@ import { resolveHarness } from '../server/agent/harness-runtime.mjs';
 import { buildProfile } from '../server/agent/profile.mjs';
 import { materializeSkills, parseSkillFile, skillFileText, skillSlug, writeCreatedSkill } from '../server/skill-files.mjs';
 
-const skip = !process.env.STRATA_HARNESS_DIR || !resolveHarness({ env: process.env }).ok ? 'STRATA_HARNESS_DIR is not set to a built Harness' : false;
+const skip = !process.env.CORTEX_HARNESS_DIR || !resolveHarness({ env: process.env }).ok ? 'CORTEX_HARNESS_DIR is not set to a built Harness' : false;
 const cleanup = dir => { try { rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch { /* best effort */ } };
 const INSTRUCTIONS = 'Open the Downloads folder, then open the Documents folder, using the command line. Say which folders you opened.';
 
@@ -29,7 +29,7 @@ test('a skill name becomes the kebab-case name the agent requires, and its file 
 });
 
 test('writing a skill refuses a duplicate and an empty name, and materializing makes the agent folder match the list exactly', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'strata-skill-files-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-skill-files-'));
   try {
     const mine = join(dir, 'mine');
     assert.equal(writeCreatedSkill(mine, { name: 'Directory opener', description: 'Opens folders', body: INSTRUCTIONS }), 'directory-opener');
@@ -58,7 +58,7 @@ test('the agent profile tells the skills plugin to scan the app skill folder', (
 
 test('real Harness: a skill saved in the app is in the catalog, loads by name, and one added later is seen without a restart', { skip }, async (t) => {
   const worker = await startScriptedWorker({});
-  const dir = mkdtempSync(join(tmpdir(), 'strata-skills-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-skills-'));
   const ws = join(dir, 'ws'); mkdirSync(ws, { recursive: true });
   const live = join(dir, 'skills-live');
   const list = [{ id: 'my-directory-opener', name: 'Directory opener', description: 'Opens the Downloads and Documents folders', body: INSTRUCTIONS, enabled: true }];

@@ -65,7 +65,7 @@ export function ChatScreen() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [session?.id, messageCount, streaming]);
     const [draft, setDraft] = useState('');
-    const draftKey = `strata.chat-draft.${session?.id ?? 'new'}`;
+    const draftKey = `cortex.chat-draft.${session?.id ?? 'new'}`;
     useEffect(() => {
         setDraft(sessionStorage.getItem(draftKey) ?? '');
         if (session && session.id !== activeId)
@@ -456,8 +456,8 @@ function useSlashCommands(clear: () => void, setDraft: (value: string) => void):
         { id: 'plan', label: '/plan', hint: 'Have the assistant write a plan first; nothing runs until you approve it', icon: 'check', run: () => setDraft('/plan ') },
         { id: 'research', label: '/research', hint: 'Search the web, read the pages and answer with sources', icon: 'search', run: () => setDraft('/research ') },
         { id: 'loop', label: '/loop', hint: 'Repeat a message every few minutes while this chat is open', icon: 'refresh', run: () => setDraft('/loop 10m ') },
-        { id: 'website', label: '/website', hint: 'Open a website in the preview sidebar', icon: 'link', run: () => { clear(); window.dispatchEvent(new Event('strata:open-website')); } },
-        { id: 'preview', label: '/preview', hint: 'Open a local file in the preview sidebar', icon: 'file', run: () => { clear(); window.dispatchEvent(new Event('strata:open-preview')); } },
+        { id: 'website', label: '/website', hint: 'Open a website in the preview sidebar', icon: 'link', run: () => { clear(); window.dispatchEvent(new Event('cortex:open-website')); } },
+        { id: 'preview', label: '/preview', hint: 'Open a local file in the preview sidebar', icon: 'file', run: () => { clear(); window.dispatchEvent(new Event('cortex:open-preview')); } },
         ...(demo ? [{ id: 'subagents', label: '/subagents', hint: 'Preview subagent statistics', icon: 'experts' as const, run: () => { clear(); createSubagentExample(); } }] : []),
         ...getSlashCommands().map(command => ({ ...command, run: () => { clear(); command.run(); } }))
     ];
@@ -530,7 +530,7 @@ function Composer({ draft, setDraft, loaded, streaming, onSubmit, onKey, session
           <GoalBar chatId={session?.id}/>
           <div className="st-composer" style={{ boxShadow: 'var(--st-sh-bar)' }}>
           {tr(photos.length ? <ChatPhotos photos={photos} onRemove={id => removeChatPhoto(id, session?.id)}/> : null)}
-          <textarea ref={textareaRef} rows={1} value={draft} aria-label={tr("Message Strata")} placeholder={tr(canChat ? 'Message Strata…' : 'Try /time-skip, or load a model to chat…')} onFocus={() => setSlashDismissed(false)} onPaste={(e) => {
+          <textarea ref={textareaRef} rows={1} value={draft} aria-label={tr("Message Cortex")} placeholder={tr(canChat ? 'Message Cortex…' : 'Try /time-skip, or load a model to chat…')} onFocus={() => setSlashDismissed(false)} onPaste={(e) => {
             // A picture on the clipboard (a screenshot, a copied image) is attached like a dropped file; text pastes as usual.
             const files = pastedFiles(e.clipboardData);
             if (!files.length)

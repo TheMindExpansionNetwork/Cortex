@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from strata_control import components, engine_component as ec, signing
+from cortex_control import components, engine_component as ec, signing
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "packaging"))
@@ -21,7 +21,7 @@ import package_engine  # noqa: E402
 
 WINDOWS = os.name == "nt"
 HERE = components.host_platform()
-EXE = "strata.exe" if WINDOWS else "strata"
+EXE = "cortex.exe" if WINDOWS else "cortex"
 LIB = "cudart64_13.dll" if WINDOWS else "libcudart.so.13"
 
 
@@ -55,7 +55,7 @@ class Manifest(unittest.TestCase):
         folder = self.package()
         data = json.loads((folder / ec.MANIFEST).read_text())
         self.assertEqual(data["schema_version"], 2)
-        self.assertEqual((data["id"], data["name"], data["version"]), ("strata-engine", "strata-engine", "0.1.45"))
+        self.assertEqual((data["id"], data["name"], data["version"]), ("cortex-engine", "cortex-engine", "0.1.45"))
         self.assertEqual((data["platform"], data["backend"]), (HERE, "cuda"))
         self.assertEqual(data["archs"], ["sm_86", "compute_89"])
         self.assertEqual(data["min_driver"], {"nvidia": "580.65"})
@@ -195,7 +195,7 @@ class Start(unittest.TestCase):
     def start(self, **kw):
         with mock.patch.object(ec, "cuda_archs_present", return_value=kw.pop("cards", ["sm_86"])), \
                 mock.patch.object(ec, "nvidia_driver_version", return_value=kw.pop("driver", "590.00")):
-            return ec.expand("component:strata-engine", {"backend": "cuda"}, root=self.root, **kw)
+            return ec.expand("component:cortex-engine", {"backend": "cuda"}, root=self.root, **kw)
 
     def test_a_good_package_starts(self):
         self.assertEqual(Path(self.start()).resolve(), (self.folder / EXE).resolve())

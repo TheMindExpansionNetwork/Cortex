@@ -1,9 +1,9 @@
-// Standalone diagnostic harness for strata-prefill's optional MMQ path.
+// Standalone diagnostic harness for cortex-prefill's optional MMQ path.
 // Keep this artifact outside the project source until it is reviewed and wired into a HIP test target.
 // It compares GGML's MMQ result (with its intended q8_1 activation rounding) to a CPU FP32 product using
 // GGML's own dequantizer for the exact same weight blocks. The tolerances screen layout/stride/bounds errors;
 // they do not assert bitwise or FP16 parity.
-#include "strata/prefill/moe_mmq.hpp"
+#include "cortex/prefill/moe_mmq.hpp"
 #include "ggml.h"
 #include <hip/hip_runtime.h>
 
@@ -21,12 +21,12 @@
 #include <vector>
 
 namespace {
-using strata::prefill::mmq::Context;
-using strata::prefill::mmq::Product;
-using strata::prefill::mmq::matrix_bytes;
-using strata::prefill::mmq::q8_bytes;
-using strata::prefill::mmq::quantize;
-using strata::prefill::mmq::supported;
+using cortex::prefill::mmq::Context;
+using cortex::prefill::mmq::Product;
+using cortex::prefill::mmq::matrix_bytes;
+using cortex::prefill::mmq::q8_bytes;
+using cortex::prefill::mmq::quantize;
+using cortex::prefill::mmq::supported;
 
 void hip_check(hipError_t e, const char * what) {
     if (e != hipSuccess) throw std::runtime_error(std::string(what) + ": " + hipGetErrorString(e));
@@ -218,7 +218,7 @@ std::vector<std::vector<uint8_t>> synthetic_q2(int experts, int64_t out_rows, in
 }
 
 // A synthetic matrix of any ggml type with a host quantizer (the K-quants: the dense GGUF tensors the
-// STRATA_DENSE_MMQ path multiplies on HIP).  K stays a 256-value multiple: the dense path only takes
+// CORTEX_DENSE_MMQ path multiplies on HIP).  K stays a 256-value multiple: the dense path only takes
 // such K, and a partial 256-value chunk would read past the synthetic tensor's end.
 std::vector<std::vector<uint8_t>> synthetic_of_type(ggml_type type, int experts, int64_t out_rows, int64_t cols,
                                                      int trial) {
@@ -307,13 +307,13 @@ int main(int argc, char ** argv) {
                             make_activations(rows, 640, trial + 3), src, dst);
                 ++trial;
             }
-            // The K-quant instances a STRATA_MMQ_KQUANTS build adds (the dense GGUF projections of the
+            // The K-quant instances a CORTEX_MMQ_KQUANTS build adds (the dense GGUF projections of the
             // mixed-quant packs through Gemm::native).  Skipped when the build does not have them.
             for (const auto & [name, type] : std::initializer_list<std::pair<const char *, ggml_type>>{
                      {"Q4_K", GGML_TYPE_Q4_K}, {"Q5_K", GGML_TYPE_Q5_K}, {"Q6_K", GGML_TYPE_Q6_K},
                      {"Q5_1", GGML_TYPE_Q5_1}}) {
                 if (!supported((int) type)) {
-                    std::cout << "synthetic-" << name << " skipped: not built (STRATA_MMQ_KQUANTS off?)\n";
+                    std::cout << "synthetic-" << name << " skipped: not built (CORTEX_MMQ_KQUANTS off?)\n";
                     continue;
                 }
                 const int rows = 5;

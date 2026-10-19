@@ -23,7 +23,7 @@ class UpdateEngineGpu(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         paths = []
         for n, cfg in enumerate(configs):
-            p = Path(tmp.name) / f"strata-{n}.json"
+            p = Path(tmp.name) / f"cortex-{n}.json"
             p.write_text(json.dumps(cfg))
             paths.append(p)
         with mock.patch.object(setup, "gpus", return_value=found), \

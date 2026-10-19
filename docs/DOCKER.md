@@ -1,7 +1,7 @@
-# Strata in Docker
+# Cortex in Docker
 
-Run Strata as a container: one command, nothing to install on the computer except Docker and your graphics card's driver.
-The images come with Strata's engine already built for your card, so nothing is compiled on your side. The model is
+Run Cortex as a container: one command, nothing to install on the computer except Docker and your graphics card's driver.
+The images come with Cortex's engine already built for your card, so nothing is compiled on your side. The model is
 downloaded on the first start into a volume (a download that stops continues where it stopped), and every later start goes
 straight to serving.
 
@@ -31,56 +31,56 @@ Not sure which NVIDIA image? Take `cuda13` when `nvidia-smi` shows driver 580 or
 A wrong pick does no harm: the container starts, says in plain words that the engine does not fit this card, and stops.
 
 **Ready-made images are not available yet.** No image has been published, so [build one yourself](#build-it-yourself) (one command
-per card, from the engine package). The examples below name the images `ghcr.io/niko1221/strata:0.2.0-cuda13` and so on, after the
-tags in the table; if you built the image yourself, use the tag you gave it (for example `strata:0.2.0-cuda13`) in their place.
+per card, from the engine package). The examples below name the images `ghcr.io/niko1221/cortex:0.2.0-cuda13` and so on, after the
+tags in the table; if you built the image yourself, use the tag you gave it (for example `cortex:0.2.0-cuda13`) in their place.
 
 ## One command per card
 
-Each command runs Strata in the background, keeps your files in the volume `strata-data`, and listens only on this computer
+Each command runs Cortex in the background, keeps your files in the volume `cortex-data`, and listens only on this computer
 (`127.0.0.1:8080`). Replace `MODEL` and the key. The first start downloads the model (tens of GB): watch it with
-`docker logs -f strata`.
+`docker logs -f cortex`.
 
 **NVIDIA**
 
 ```sh
-docker run -d --name strata --gpus all -p 127.0.0.1:8080:8080 \
+docker run -d --name cortex --gpus all -p 127.0.0.1:8080:8080 \
   --ulimit memlock=-1:-1 --shm-size 2g --stop-timeout 120 \
-  -v strata-data:/data -e MODEL=IQ3_XXS -e API_KEY=$(openssl rand -hex 24) \
-  ghcr.io/niko1221/strata:0.2.0-cuda13
+  -v cortex-data:/data -e MODEL=IQ3_XXS -e API_KEY=$(openssl rand -hex 24) \
+  ghcr.io/niko1221/cortex:0.2.0-cuda13
 ```
 
 **AMD**
 
 ```sh
-docker run -d --name strata --device /dev/kfd --device /dev/dri \
+docker run -d --name cortex --device /dev/kfd --device /dev/dri \
   --group-add video --group-add $(getent group render | cut -d: -f3) -p 127.0.0.1:8080:8080 \
   --ulimit memlock=-1:-1 --shm-size 2g --stop-timeout 120 \
-  -v strata-data:/data -e MODEL=IQ3_XXS -e API_KEY=$(openssl rand -hex 24) \
-  ghcr.io/niko1221/strata:0.2.0-rocm-gfx120x
+  -v cortex-data:/data -e MODEL=IQ3_XXS -e API_KEY=$(openssl rand -hex 24) \
+  ghcr.io/niko1221/cortex:0.2.0-rocm-gfx120x
 ```
 
 **Intel Arc**
 
 ```sh
-docker run -d --name strata --device /dev/dri --group-add $(getent group render | cut -d: -f3) \
+docker run -d --name cortex --device /dev/dri --group-add $(getent group render | cut -d: -f3) \
   -p 127.0.0.1:8080:8080 --ulimit memlock=-1:-1 --shm-size 2g --stop-timeout 120 \
-  -v strata-data:/data -e MODEL=IQ3_S -e MODEL_PATH=/models -v /srv/gguf/IQ3_S:/models:ro \
-  -e API_KEY=$(openssl rand -hex 24) ghcr.io/niko1221/strata:0.2.0-sycl
+  -v cortex-data:/data -e MODEL=IQ3_S -e MODEL_PATH=/models -v /srv/gguf/IQ3_S:/models:ro \
+  -e API_KEY=$(openssl rand -hex 24) ghcr.io/niko1221/cortex:0.2.0-sycl
 ```
 
 What the options are for: `--ulimit memlock=-1:-1` lets the engine pin the RAM it uses for the model, `--shm-size 2g` gives
 it shared memory, and `--stop-timeout 120` gives the model two minutes to unload when you stop the container (Docker's
-default 10 seconds is too short for a big model). Do not put a memory limit on the container: Strata plans from the whole
+default 10 seconds is too short for a big model). Do not put a memory limit on the container: Cortex plans from the whole
 computer's RAM and loads tens of GB.
 
 To print the key you made: `echo` it before you start (it is in your shell history otherwise), or ask the running container:
-`docker exec strata strata launch --show-key --preset docker`.
+`docker exec cortex cortex launch --show-key --preset docker`.
 
 ### Intel Arc
 
-Strata's downloader prepares NVIDIA and AMD cards. For an Arc card the container **uses prepared model files**: the model's
+Cortex's downloader prepares NVIDIA and AMD cards. For an Arc card the container **uses prepared model files**: the model's
 GGUF files in a folder you mount (`-v /srv/gguf/IQ3_S:/models:ro` and `-e MODEL_PATH=/models`), and the prepared pack and MTP
-layer in the data volume (`/data/Strata-data/packs/<model>` and `/data/Strata-data/mtp/rt`, made by the Intel installer on
+layer in the data volume (`/data/Cortex-data/packs/<model>` and `/data/Cortex-data/mtp/rt`, made by the Intel installer on
 this or another computer, see [INTEL.md](INTEL.md)). Without them the container tells you which file is missing and stops.
 Nothing is downloaded or prepared for Arc inside the container. Arc B-series cards (xe driver) stream the experts from the
 GGUF files, so the GGUF folder should be on a fast SSD.
@@ -99,17 +99,17 @@ docker compose -f docker-compose.nvidia.yml logs -f
 
 They set what the commands above set: the GPU (`deploy.resources.reservations.devices` for NVIDIA, `/dev/kfd` and
 `/dev/dri` plus the `video` and `render` groups for AMD, `/dev/dri` for Intel), `ulimits.memlock`, `shm_size`, a two-minute
-`stop_grace_period`, the `strata-data` volume, and the port bound to `127.0.0.1`. To let other computers reach it, set
-`STRATA_BIND=0.0.0.0` in `.env` and keep a real `API_KEY`.
+`stop_grace_period`, the `cortex-data` volume, and the port bound to `127.0.0.1`. To let other computers reach it, set
+`CORTEX_BIND=0.0.0.0` in `.env` and keep a real `API_KEY`.
 
 ## Settings
 
-Everything is an environment variable (`-e NAME=value`, or in compose). They are the same questions `strata launch` asks on its
+Everything is an environment variable (`-e NAME=value`, or in compose). They are the same questions `cortex launch` asks on its
 screens; leave out what you do not care about.
 
 | Variable | What it does | Default |
 | --- | --- | --- |
-| `MODEL` | model size: `IQ2_XS`, `IQ3_XXS`, `IQ3_S`, `Q2_0`, `UD-Q4_K_XL`, ... ([MODELS.md](MODELS.md)) | Strata picks what suits the card, and says so in the log |
+| `MODEL` | model size: `IQ2_XS`, `IQ3_XXS`, `IQ3_S`, `Q2_0`, `UD-Q4_K_XL`, ... ([MODELS.md](MODELS.md)) | Cortex picks what suits the card, and says so in the log |
 | `FAMILY` | `qwen`, `swift`, `coder`, ... when a size exists in several families | the usual one |
 | `MODEL_PATH` | GGUF files you already have: a folder or one `.gguf`, **inside the container** (mount it with `-v`, `:ro` is fine) | download |
 | `CONTEXT` | how much text it remembers at once: `32k`, `64k`, `128k`, `256k` or a number | the largest that fits |
@@ -121,14 +121,14 @@ screens; leave out what you do not care about.
 | `API_KEY` / `API_KEY_FILE` | the key clients must send ([below](#the-api-key)); the file form is for Docker secrets | made for you |
 | `PORT` | the port inside the container | `8080` |
 | `PRESET` | the preset name in `/data` | `docker` |
-| `STRATA_SET` | advanced engine settings, space separated, like `strata launch --set` (`"prefill=65536 STRATA_PIN_BY_NEED=1"`) | none |
+| `CORTEX_SET` | advanced engine settings, space separated, like `cortex launch --set` (`"prefill=65536 CORTEX_PIN_BY_NEED=1"`) | none |
 
 Your choices are saved as a preset in the volume. Start again with no settings and the saved preset is used; start with
 settings and they replace the saved ones (tuning results are kept). To change one thing, recreate the container with the new
-variable; the model and tuning stay in `/data`. Anything else: `docker exec strata strata launch --help`, or
-`docker run --rm IMAGE strata launch --plan --model q2_0` to see what a choice would do without starting anything.
+variable; the model and tuning stay in `/data`. Anything else: `docker exec cortex cortex launch --help`, or
+`docker run --rm IMAGE cortex launch --plan --model q2_0` to see what a choice would do without starting anything.
 
-What is in the volume `/data`: `Strata-data/` (model files, the prepared pack), `state/` (presets, tuning, the key), `install/`
+What is in the volume `/data`: `Cortex-data/` (model files, the prepared pack), `state/` (presets, tuning, the key), `install/`
 (run settings and logs), `home/`. The engine and the Terminal are in the image, so updating the image never touches your files.
 
 ### Files you already have
@@ -138,15 +138,15 @@ Mount the folder with the model's GGUF files read-only and name it: `-v /srv/ggu
 
 ## The API key
 
-The server listens on every address **inside** the container (that is what lets the published port work), and Strata does not
+The server listens on every address **inside** the container (that is what lets the published port work), and Cortex does not
 serve beyond this computer without a key. So a key is always on:
 
 - **You set it** with `API_KEY` (16 characters or more; `openssl rand -hex 24` makes one) or `API_KEY_FILE`.
 - **You do not**: the first start makes one, keeps it in the volume, and the log tells you how to show it:
-  `docker exec strata strata launch --show-key --preset docker`.
+  `docker exec cortex cortex launch --show-key --preset docker`.
 
 Publish the port as `-p 127.0.0.1:8080:8080` to keep it on this computer. Publish it as `-p 8080:8080` (or bind `0.0.0.0`) only
-when other computers should reach it, and then use a key you chose. Strata warns in the log when the key is short. Every
+when other computers should reach it, and then use a key you chose. Cortex warns in the log when the key is short. Every
 request must send `Authorization: Bearer <key>`; `GET /health` answers without one.
 
 ## Connect your coding apps
@@ -156,44 +156,44 @@ From outside the container, the address is the published port and the key is you
 - OpenAI-compatible apps: base URL `http://127.0.0.1:8080/v1`, API key = your key, model name from `GET /v1/models`.
 - Anthropic-compatible apps (Claude Code): base URL `http://127.0.0.1:8080`, same key.
 
-`strata connect` writes the settings file for OpenCode, Codex CLI, Claude Code, oh-my-pi, pi, Hermes Agent and OpenClaw, and
+`cortex connect` writes the settings file for OpenCode, Codex CLI, Claude Code, oh-my-pi, pi, Hermes Agent and OpenClaw, and
 checks that a prompt and a tool call work. **Inside** the container it fills in the key and the model for you:
 
 ```sh
-docker exec strata strata connect opencode          # prints the file and the environment
-docker exec strata strata connect opencode --check  # one prompt and one tool call, the way that app sends them
+docker exec cortex cortex connect opencode          # prints the file and the environment
+docker exec cortex cortex connect opencode --check  # one prompt and one tool call, the way that app sends them
 ```
 
 It prints `http://127.0.0.1:8080`, which is the address *inside* the container; on your computer use the published address
-(`-p 127.0.0.1:9000:8080` makes it `http://127.0.0.1:9000`). If your coding app runs on your computer, install the `strata`
-Terminal there ([TERMINAL_LAUNCH.md](TERMINAL_LAUNCH.md)) and run `strata connect opencode --url http://HOST:8080 --key <your key>`.
+(`-p 127.0.0.1:9000:8080` makes it `http://127.0.0.1:9000`). If your coding app runs on your computer, install the `cortex`
+Terminal there ([TERMINAL_LAUNCH.md](TERMINAL_LAUNCH.md)) and run `cortex connect opencode --url http://HOST:8080 --key <your key>`.
 
 ## Watch it and stop it
 
 ```sh
-docker logs -f strata                       # what it is doing (the first start: the download)
-docker exec -it strata strata monitor       # the live monitor (q leaves it, the server keeps running)
-docker exec strata strata monitor --once    # one snapshot, for scripts
+docker logs -f cortex                       # what it is doing (the first start: the download)
+docker exec -it cortex cortex monitor       # the live monitor (q leaves it, the server keeps running)
+docker exec cortex cortex monitor --once    # one snapshot, for scripts
 docker ps                                   # "healthy" once the model is loaded; "starting" while it downloads or loads
-docker stop strata                          # drains, unloads the model, frees the graphics memory, exits 0
-docker start strata                         # serving again in about a minute: the model and your choices are in the volume
+docker stop cortex                          # drains, unloads the model, frees the graphics memory, exits 0
+docker start cortex                         # serving again in about a minute: the model and your choices are in the volume
 ```
 
 The health check asks `GET /v1/models` with the key. During the first download the container shows `starting`, not `unhealthy`.
-`docker stop` sends SIGTERM; the container runs `strata launch --stop`, so the engine releases its memory properly. Give it time
+`docker stop` sends SIGTERM; the container runs `cortex launch --stop`, so the engine releases its memory properly. Give it time
 (`--stop-timeout 120` or compose's `stop_grace_period: 2m`): with the default 10 seconds a big model can be killed (exit 137).
 
 ## Updating
 
 ```sh
-docker pull ghcr.io/niko1221/strata:0.2.0-cuda13      # the new tag (not available yet; with a self-built image, build it again instead)
-docker stop strata && docker rm strata
+docker pull ghcr.io/niko1221/cortex:0.2.0-cuda13      # the new tag (not available yet; with a self-built image, build it again instead)
+docker stop cortex && docker rm cortex
 # run the same docker run command again with the new tag (compose: docker compose pull && docker compose up -d)
 ```
 
-The models, the prepared pack, your preset and tuning stay in the volume `strata-data`; nothing is downloaded again. A new
+The models, the prepared pack, your preset and tuning stay in the volume `cortex-data`; nothing is downloaded again. A new
 engine can make an old tuning result less useful: start once with `-e TUNE=quick -e RETUNE=1` to tune again.
-`strata update` inside the container is not the way to update: the engine is part of the image.
+`cortex update` inside the container is not the way to update: the engine is part of the image.
 
 ## Troubleshooting
 
@@ -212,7 +212,7 @@ docker run --rm --gpus all ubuntu nvidia-smi       # must list your card
 ```
 
 On Fedora / RHEL with Podman, use CDI: `sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml`, then `--device nvidia.com/gpu=all`.
-If `nvidia-smi` inside the container works but Strata says the driver is too old, you picked `cuda13` with a driver below 580:
+If `nvidia-smi` inside the container works but Cortex says the driver is too old, you picked `cuda13` with a driver below 580:
 use the `cuda12` image or update the driver.
 
 **AMD: `Permission denied` on `/dev/kfd`, or no card found.** The container needs the device files and your user (or the
@@ -225,9 +225,9 @@ SELinux (Fedora, RHEL) that still refuses the device files, add `--security-opt 
 `i915` or `xe` driver on the host (`ls /dev/dri/renderD*` must show a device; `lspci -k | grep -A3 -i arc` shows the driver in use).
 
 **SELinux (Fedora, RHEL, Rocky): `Permission denied` on a folder you mounted.** Add `:z` (shared) or `:Z` (private) to the
-mount: `-v /srv/gguf/IQ3_XXS:/models:ro,z`. A named volume like `strata-data` needs nothing.
+mount: `-v /srv/gguf/IQ3_XXS:/models:ro,z`. A named volume like `cortex-data` needs nothing.
 
-**The container is killed or the computer swaps.** Strata loads tens of GB into RAM: leave the container without a memory
+**The container is killed or the computer swaps.** Cortex loads tens of GB into RAM: leave the container without a memory
 limit, close other big programs, and pick a smaller `MODEL` ([MODELS.md](MODELS.md)). The log prints a warning when it sees a
 memory limit.
 
@@ -236,23 +236,23 @@ memory limit.
 
 **Port already in use.** Publish another host port: `-p 127.0.0.1:9000:8080` (inside the container it stays 8080).
 
-**The first start says it is downloading but nothing moves.** `docker logs -f strata` shows the percentage every few seconds;
+**The first start says it is downloading but nothing moves.** `docker logs -f cortex` shows the percentage every few seconds;
 an interrupted download continues where it stopped when you start the container again. The volume needs the model's size free
 (the log names it).
 
-**"No MODEL was set"** warning: fine, Strata chose a model for your card; set `MODEL` to choose yourself.
+**"No MODEL was set"** warning: fine, Cortex chose a model for your card; set `MODEL` to choose yourself.
 
 ## From the older image
 
 The 0.1.x image compiled the engine inside `docker build` and was set up with `setup.py`. The new ones are built from the engine
-package and start through `strata launch`. Mapping:
+package and start through `cortex launch`. Mapping:
 
 | Older variable | Now |
 | --- | --- |
 | `MODEL`, `FAMILY`, `CONTEXT`, `API_KEY`, `PORT`, `KV`, `GPU`, `GPUS`, `VISION` | the same (`VISION` takes `off\|on\|gpu\|cpu`; `no` / `yes` still work) |
 | `GGUF_DIR` | `MODEL_PATH` (the old name still works) |
 | `HOST` | not needed: the server listens on every address inside the container; choose where it is reachable with `-p` |
-| `LOW_RAM`, `RESIDENT_BUDGET_GIB`, `KV_STREAMING`, `LAYER_SPLIT`, `CONFIG`, `REINSTALL` | ignored with a warning; use `STRATA_SET` for engine settings and `strata launch --help` for the rest |
+| `LOW_RAM`, `RESIDENT_BUDGET_GIB`, `KV_STREAMING`, `LAYER_SPLIT`, `CONFIG`, `REINSTALL` | ignored with a warning; use `CORTEX_SET` for engine settings and `cortex launch --help` for the rest |
 
 The old volume layout (`/data/config`, `/data/models`) is not read; the model files are found again if you point `MODEL_PATH` at
 the old model folder. The container name, the volume and the port can stay as they were.
@@ -260,13 +260,13 @@ the old model folder. The container name, the volume and the port can stay as th
 ## Build it yourself
 
 Until ready-made images are available this is the way to get one, and it stays the way for a computer without
-registry access or after changing Strata. You need an engine package folder (made by `packaging/package_engine.py`, or fetched
-by `strata update` into a components folder) and Docker on Linux:
+registry access or after changing Cortex. You need an engine package folder (made by `packaging/package_engine.py`, or fetched
+by `cortex update` into a components folder) and Docker on Linux:
 
 ```sh
-docker/build.sh --flavor cuda --engine ~/components/engine/0.2.0-linux-x86_64-cuda-cuda13 --tag strata:0.2.0-cuda13
-docker/build.sh --flavor hip  --engine ~/components/engine/0.2.0-linux-x86_64-hip-gfx120X  --tag strata:0.2.0-rocm-gfx120x
-docker/build.sh --flavor sycl --engine ~/components/engine/0.2.0-linux-x86_64-sycl         --tag strata:0.2.0-sycl
+docker/build.sh --flavor cuda --engine ~/components/engine/0.2.0-linux-x86_64-cuda-cuda13 --tag cortex:0.2.0-cuda13
+docker/build.sh --flavor hip  --engine ~/components/engine/0.2.0-linux-x86_64-hip-gfx120X  --tag cortex:0.2.0-rocm-gfx120x
+docker/build.sh --flavor sycl --engine ~/components/engine/0.2.0-linux-x86_64-sycl         --tag cortex:0.2.0-sycl
 ```
 
 `build.sh` assembles the build context (the Terminal's files and the package) and runs `docker build`. The build makes the
@@ -276,7 +276,7 @@ to the system or the graphics driver (`packaging/binary_deps.py`); finally it ch
 library inside the finished image. A package that fails any of these stops the build. Nothing is pushed anywhere.
 `docker/smoke-test.sh` runs the checks we ran on real cards (serves, key, chat, tool call, monitor, clean stop, memory freed, restart); see its first lines for the variables.
 
-**From source.** `docker build -t strata:src .` in the repository compiles the CUDA 13 engine inside Docker, makes the package
+**From source.** `docker build -t cortex:src .` in the repository compiles the CUDA 13 engine inside Docker, makes the package
 and puts it in the same kind of image (`--build-arg CUDA_ARCHITECTURES=89` for one card only, much faster). For AMD and Intel
 builds from source see [AMD_HIP.md](AMD_HIP.md) and [INTEL.md](INTEL.md); then package the result with
 `packaging/package_engine.py` and use `docker/build.sh`.
@@ -285,7 +285,7 @@ builds from source see [AMD_HIP.md](AMD_HIP.md) and [INTEL.md](INTEL.md); then p
 
 2026-10-17, images built from the 0.1.45 engine packages (images from the 0.2.0 packages have not been run on a card), on real cards: NVIDIA RTX 3060 (`cuda13`
 and `cuda12`), Radeon AI PRO R9700 (`rocm-gfx120x`), Intel Arc Pro B70 (`sycl`). On each: the container serves, `GET /v1/models` answers (and
-refuses a request without the key), a one-word chat and a tool call work, `docker exec strata monitor --once` works,
+refuses a request without the key), a one-word chat and a tool call work, `docker exec cortex monitor --once` works,
 `docker stop` ends it with exit code 0 and the graphics memory is free again, and a second start reuses the saved preset.
 Not run on a card: `cuda12` on Pascal / Volta (it ran on the RTX 3060), `rocm-gfx110x` (RX 7000). They are built and checked the same way.
 

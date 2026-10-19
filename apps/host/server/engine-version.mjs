@@ -1,5 +1,5 @@
 /**
- * Does the installed engine read a model's files? The catalog (tools/strata_mcp.py, from setup.py's MODELS) names the first engine
+ * Does the installed engine read a model's files? The catalog (tools/cortex_mcp.py, from setup.py's MODELS) names the first engine
  * that does (`engine_min`, e.g. Gyro: 0.1.45.1, because its expert files are native_experts v5 and the released 0.1.45 stops at v4).
  * An older engine would start the download and then fail on the files, so the app says "needs a newer engine" first.
  */

@@ -13,7 +13,7 @@ const executablePath = [
   join(homedir(), 'Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell'),
 ].find((p) => existsSync(p));
 
-const BASE = process.env.STRATA_URL ?? 'http://localhost:5199';
+const BASE = process.env.CORTEX_URL ?? 'http://localhost:5199';
 const flow = process.argv[2] ?? 'chat';
 const shots = resolve('.shots');
 mkdirSync(shots, { recursive: true });
@@ -1005,7 +1005,7 @@ if (flow === 'privacy') {
       .find((x) => /usage data/i.test(x.getAttribute('aria-label') ?? ''));
     return {
       checked: t?.getAttribute('aria-checked'),
-      stored: JSON.parse(localStorage.getItem('strata.prefs.v2') ?? '{}').shareTelemetry,
+      stored: JSON.parse(localStorage.getItem('cortex.prefs.v2') ?? '{}').shareTelemetry,
     };
   });
   console.log('at rest      :', JSON.stringify(await state()), '<- a real false, not an omitted attribute');
@@ -1100,10 +1100,10 @@ if (flow === 'readmark') {
   await page.keyboard.press('Enter');
   await page.waitForTimeout(9000);
   console.log('proposal names a real file:',
-    await page.evaluate(() => /strata\/README\.md/.test(document.body.innerText)));
+    await page.evaluate(() => /cortex\/README\.md/.test(document.body.innerText)));
   await page.click('button:has-text("Approve")');
   await page.waitForTimeout(2500);
-  console.log('persisted  :', await page.evaluate(() => localStorage.getItem('strata.touched.v1')));
+  console.log('persisted  :', await page.evaluate(() => localStorage.getItem('cortex.touched.v1')));
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1800);
@@ -1122,7 +1122,7 @@ if (flow === 'settingsreset') {
   await page.goto(`${BASE}/#/settings`, { waitUntil: 'domcontentloaded' });
   // seed a deliberately non-default set, then reload so the app applies it
   await page.evaluate(() => {
-    localStorage.setItem('strata.prefs.v2', JSON.stringify({
+    localStorage.setItem('cortex.prefs.v2', JSON.stringify({
       theme: 'dark', rail: true, focus: false, contentFontSize: 22,
       density: 'compact', motion: 'reduced', transparency: 'opaque', uiScale: 1.25,
     }));
@@ -1132,7 +1132,7 @@ if (flow === 'settingsreset') {
   const read = () => page.evaluate(() => ({
     theme: document.documentElement.dataset.theme ?? '(none)',
     scale: getComputedStyle(document.documentElement).getPropertyValue('--st-ui-scale').trim(),
-    rail: JSON.parse(localStorage.getItem('strata.prefs.v2') ?? '{}').rail,
+    rail: JSON.parse(localStorage.getItem('cortex.prefs.v2') ?? '{}').rail,
   }));
   console.log('seeded       :', JSON.stringify(await read()));
 
@@ -1238,13 +1238,13 @@ if (flow === 'unread') {
 
   // make the older conversation look updated since it was last read
   await page.evaluate(() => {
-    const raw = JSON.parse(localStorage.getItem('strata.sessions.v1') ?? '[]');
+    const raw = JSON.parse(localStorage.getItem('cortex.sessions.v1') ?? '[]');
     const older = raw.filter((s) => s.messages.length > 0).at(-1);
     if (older) {
       older.updatedAt = new Date(Date.now() + 120000).toISOString();
       older.lastReadAt = new Date(Date.now() - 120000).toISOString();
     }
-    localStorage.setItem('strata.sessions.v1', JSON.stringify(raw));
+    localStorage.setItem('cortex.sessions.v1', JSON.stringify(raw));
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1800);
@@ -1354,7 +1354,7 @@ if (flow === 'branch') {
   // remember the original so "untouched" means unchanged by the branch, not a
   // hardcoded length
   const before = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem('strata.sessions.v1') ?? '[]')
+    JSON.parse(localStorage.getItem('cortex.sessions.v1') ?? '[]')
       .map((s) => ({ title: s.title, roles: s.messages.map((m) => m.role) })));
   const originalBefore = before.find((s) => !s.title.includes('branch'));
 
@@ -1372,7 +1372,7 @@ if (flow === 'branch') {
   console.log('from user :', JSON.stringify(await view()), '<- branch must show only the user turn, and the url must follow');
 
   const sessions = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem('strata.sessions.v1') ?? '[]')
+    JSON.parse(localStorage.getItem('cortex.sessions.v1') ?? '[]')
       .map((s) => ({ title: s.title, roles: s.messages.map((m) => m.role) })));
   console.log('stored    :', JSON.stringify(sessions));
   const originalAfter = sessions.find((s) => !s.title.includes('branch'));
@@ -1777,8 +1777,8 @@ if (flow === 'light') {
      default now, so the control was correctly absent and the flow failed on a
      button that should not have been there. */
   await page.evaluate(() => {
-    const raw = JSON.parse(localStorage.getItem('strata.prefs.v2') ?? '{}');
-    localStorage.setItem('strata.prefs.v2', JSON.stringify({ ...raw, theme: 'light' }));
+    const raw = JSON.parse(localStorage.getItem('cortex.prefs.v2') ?? '{}');
+    localStorage.setItem('cortex.prefs.v2', JSON.stringify({ ...raw, theme: 'light' }));
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);

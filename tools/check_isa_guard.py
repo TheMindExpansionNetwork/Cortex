@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check that no code reachable on an AVX2-only CPU can contain wider-ISA instructions (#795).
 
-Strata compiles a few translation units for AVX-512 (expert.cpp, iq_avx512.cpp) and some for AVX2 + AVX-VNNI
+Cortex compiles a few translation units for AVX-512 (expert.cpp, iq_avx512.cpp) and some for AVX2 + AVX-VNNI
 (q2_avx2.cpp, iq_avx2.cpp); the engine picks them at run time.  Two things go wrong when that is done carelessly,
 and both end in an illegal instruction on the CPU that lacks the feature:
 
@@ -15,7 +15,7 @@ GFNI / SHA instruction, and fails unless the function is one of the kernels mean
 check: internal linkage (anonymous namespace) or a named public kernel entry point below, defined in a wide-ISA
 object file, and not a weak / COMDAT symbol.  MSVC's own auto-vectorizer guard (`cmp [__isa_available], 6`) is accepted.
 
-  Linux : check_isa_guard.py libstrata_kernels_cpu.a  (needs objdump and nm from binutils)
+  Linux : check_isa_guard.py libcortex_kernels_cpu.a  (needs objdump and nm from binutils)
   Windows: check_isa_guard.py EXE --map EXE.map      (link with /MAP; needs `pip install capstone pefile`)
 
 Exit 0 = clean, 1 = a violation, 77 = cannot run here (tools missing; ctest SKIP_RETURN_CODE).
@@ -30,7 +30,8 @@ import sys
 # Public functions of the wide-ISA files that are wide on purpose: every caller tests the CPU first
 # (cpu_avx512_ok / cpu_avxvnni_ok), or reaches them only after cpu_require_expert_support().
 WIDE_PUBLIC = {
-    "nvfp4_512_gu_rows", "nvfp4_512_rows",   # NVFP4 (native_expert.cpp: both behind cpu_avx512_ok())
+    "nvfp4_512_gu_rows", "nvfp4_512_rows",   # NVFP4 (native_expert.cpp: both behind cpu_avx512_ok())
+
     "act_quant_q8_1", "q2_0_gguf_rows_multi", "s2_expert_vnni", "s2_expert_vnni_q", "s2_expert_gu_rows",
     "s2_expert_down_rows", "s2_expert_gu_rows_multi", "s2_expert_down_rows_multi", "s2_expert_vnni_multi",
     "s2_expert_scalar", "iq512_gu_rows", "iq512_rows", "iq256_gu_rows", "iq256_rows", "iq256_gu_rows_v",
@@ -77,7 +78,7 @@ def judge(name, obj, wide_text, guarded, weak, is_elf):
 
 # ---------------------------------------------------------------- ELF
 def run_elf(path):
-    """An archive (libstrata_kernels_cpu.a), an object or a linked binary.  Give it the archive: a linked binary also
+    """An archive (libcortex_kernels_cpu.a), an object or a linked binary.  Give it the archive: a linked binary also
     holds ggml-cpu, which a Linux source build compiles for the build machine (-march=native) on purpose."""
     for tool in ("objdump", "nm"):
         if shutil.which(tool) is None:

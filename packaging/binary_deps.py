@@ -3,7 +3,7 @@
 with no tools and no third-party packages, and the rule "everything imported is bundled or belongs to the OS or the GPU driver".
 
 Why: on 2026-10-17 a tester's clean Windows 11 PC failed to start the engine with 0xC0000135 (a DLL was not found): the
-package held strata.exe and strata_kq.dll but not cublas64_13.dll / cublasLt64_13.dll, which strata.exe imports. Our own
+package held cortex.exe and cortex_kq.dll but not cublas64_13.dll / cublasLt64_13.dll, which cortex.exe imports. Our own
 clean-profile test passed only because the build PC has the CUDA Toolkit on PATH. The packager now refuses a package whose imports
 are not covered, and `--check-deps` / the test suite run the same rule on any finished package.
 

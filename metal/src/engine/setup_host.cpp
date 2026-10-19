@@ -3,29 +3,29 @@
 // from gr.cu, shared_expert.cu, native_*.cu, ple.cu, qsa_decode_attn.cu, rope.cu, native_rope.cu,
 // s2_expert_grouped.cu; keep in step.  On Metal none of these steers a kernel: the decode window runs mac-kern's
 // chain (metal/src/engine/window.cpp); they keep the host side's allocations and checks as on the PC.
-#include "strata/kernels/gr.hpp"
-#include "strata/kernels/native_gdn.hpp"
-#include "strata/kernels/native_moe.hpp"
-#include "strata/kernels/native_qsa.hpp"
-#include "strata/kernels/native_qsa_indexer.hpp"
-#include "strata/kernels/native_rope.hpp"
-#include "strata/kernels/native_router.hpp"
-#include "strata/kernels/ngram.hpp"
-#include "strata/kernels/ple.hpp"
-#include "strata/kernels/qsa_decode_attn.hpp"
-#include "strata/kernels/rope.hpp"
-#include "strata/kernels/rope_scaling.hpp"
-#include "strata/kernels/s2_expert_grouped.hpp"
-#include "strata/kernels/shared_expert.hpp"
-#include "strata/kernels/fused_gr.hpp"
-#include "strata/prefill/gemm.hpp"
+#include "cortex/kernels/gr.hpp"
+#include "cortex/kernels/native_gdn.hpp"
+#include "cortex/kernels/native_moe.hpp"
+#include "cortex/kernels/native_qsa.hpp"
+#include "cortex/kernels/native_qsa_indexer.hpp"
+#include "cortex/kernels/native_rope.hpp"
+#include "cortex/kernels/native_router.hpp"
+#include "cortex/kernels/ngram.hpp"
+#include "cortex/kernels/ple.hpp"
+#include "cortex/kernels/qsa_decode_attn.hpp"
+#include "cortex/kernels/rope.hpp"
+#include "cortex/kernels/rope_scaling.hpp"
+#include "cortex/kernels/s2_expert_grouped.hpp"
+#include "cortex/kernels/shared_expert.hpp"
+#include "cortex/kernels/fused_gr.hpp"
+#include "cortex/prefill/gemm.hpp"
 
 #include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 
 namespace {
 bool g_fp32_activations = false, g_native_mmvf = false, g_sh_native_bf16 = false, g_ple_native_bf16 = false,
@@ -152,9 +152,9 @@ void rope_table_set(const float*, const float*, int, const RopeScaling&) {}   //
 void rope_table_release(const float*) {}
 void native_q6_k_unpack(const void*) {}   // nothing packed on Metal
 
-}  // namespace strata::kernels
+}  // namespace cortex::kernels
 
-namespace strata::prefill {
+namespace cortex::prefill {
 Gemm::~Gemm() {}   // nothing created on Metal (no prompt GEMMs yet)
 bool prompt_f16() { return false; }   // the CUDA/HIP prompt path's FP16 image mode: not used on Metal
-}  // namespace strata::prefill
+}  // namespace cortex::prefill

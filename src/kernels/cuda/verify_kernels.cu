@@ -1,13 +1,13 @@
-// src/kernels/cuda/verify_kernels.cu - see include/strata/kernels/verify_kernels.hpp.
+// src/kernels/cuda/verify_kernels.cu - see include/cortex/kernels/verify_kernels.hpp.
 //
 // The per-token arithmetic of every kernel here is transcribed from its single-token original (fused_gdn.cu,
 // elementwise.cu) with the same operation order, so a verify window reproduces plain decode bit for bit.
-#include "strata/kernels/verify_kernels.hpp"
-#include "strata/core/geometry.hpp"
-#include "strata/core/emulate.hpp"
-#include "strata/kernels/q8_1_finite.hpp"   // #606: q8_1_ds
-#include "strata/kernels/dp4a.hpp"
-#include "strata/kernels/pdl.hpp"
+#include "cortex/kernels/verify_kernels.hpp"
+#include "cortex/core/geometry.hpp"
+#include "cortex/core/emulate.hpp"
+#include "cortex/kernels/q8_1_finite.hpp"   // #606: q8_1_ds
+#include "cortex/kernels/dp4a.hpp"
+#include "cortex/kernels/pdl.hpp"
 
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
@@ -21,11 +21,11 @@
 #include <utility>
 #include <vector>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
 constexpr int S = 128;          // GDN state size
-static_assert(S == strata::core::kCompiledGeometry.ssm_state_size, "verify_kernels is compiled for core/geometry.hpp");
+static_assert(S == cortex::core::kCompiledGeometry.ssm_state_size, "verify_kernels is compiled for core/geometry.hpp");
 constexpr int RG = 4;
 constexpr int RPG = S / RG;
 
@@ -150,7 +150,7 @@ __global__ void __launch_bounds__(64) gdn_ab_multi_kernel(const float* __restric
     gdn_ab_body<MAX_T, EXACT_T>(blockIdx.x, x, wa, wb, dt, ssm_a, gate, beta, n, h_v, T);
 }
 
-// 143-amdk (STRATA_FUSE_CONVAB): the conv + L2 norm and the a/b projections in ONE launch.  They read different inputs (the qkv
+// 143-amdk (CORTEX_FUSE_CONVAB): the conv + L2 norm and the a/b projections in ONE launch.  They read different inputs (the qkv
 // projection and the layer input) and write different outputs, so they only share a node: blocks [0, conv) run the conv body,
 // the following blocks (token row 0 only) the a/b body, each exactly as its own kernel.
 template <int MAX_T, bool EXACT_T>
@@ -170,7 +170,7 @@ __global__ void __launch_bounds__(S) gdn_conv_ab_kernel(int conv_blocks, float* 
 
 // State-only commit kernel: each head's 128 independent state columns are split across 4 blocks of 32 columns
 // (48 * 4 = 192 blocks of 128 threads across all SMs, vs 48 blocks of 512 threads), with no sq/o/norm/z/y work.
-// DBG (STRATA_DBG_GDN=1, #937): a window count the launch never allowed (n_keep is read from device memory; n_max is the
+// DBG (CORTEX_DBG_GDN=1, #937): a window count the launch never allowed (n_keep is read from device memory; n_max is the
 // rows the window holds) is reported and the commit skipped, where the fault would be a memory-aperture violation
 __device__ __forceinline__ void gdn_step_commit_body(float* __restrict__ state, const float* __restrict__ hbuf, int C,
                                                      const float* __restrict__ gate, const float* __restrict__ beta,
@@ -187,7 +187,7 @@ __global__ void __launch_bounds__(32 * RG) gdn_step_commit_kernel(float* __restr
     if (n <= 0) return;
     if (DBG && n > n_max) {
         if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0 && threadIdx.y == 0)
-            printf("strata DBG: gdn_step_commit: n_keep %d is past the window's %d rows: commit skipped (#937)\n", n, n_max);
+            printf("cortex DBG: gdn_step_commit: n_keep %d is past the window's %d rows: commit skipped (#937)\n", n, n_max);
         return;
     }
     gdn_step_commit_body(state, hbuf, C, gate, beta, h_k, h_v, n);
@@ -264,7 +264,7 @@ __device__ __forceinline__ void gdn_step_commit_body(float* __restrict__ state, 
     for (int r = 0; r < RPG; ++r) base[r * row_stride] = s[r];
 }
 
-// S26 (STRATA_QFUSE=1): the q8_1 image of a 32-column block, written by the warp that holds those columns with
+// S26 (CORTEX_QFUSE=1): the q8_1 image of a 32-column block, written by the warp that holds those columns with
 // native_quantize_q8_1_kernel's quantizer (the same XOR-tree max and sum, d = amax / 127, roundf(x / d), ds = (d, sum)).
 struct GdnQ81 { half2 ds; int8_t qs[32]; };
 __device__ __forceinline__ void gdn_q8_1_store(GdnQ81* __restrict__ xq, size_t idx, float xi) {
@@ -381,7 +381,7 @@ __global__ void __launch_bounds__(S * RG) gdn_step_norm_multi_kernel(float* __re
     }
 }
 
-// S25 (STRATA_GDN_SPLIT=1): the same recurrence with each head's 128 state columns over 4 blocks of 32 columns
+// S25 (CORTEX_GDN_SPLIT=1): the same recurrence with each head's 128 state columns over 4 blocks of 32 columns
 // (128 threads: the same (column, row group) threads, each with the same 32 state rows), so 4x the blocks of
 // gdn_step_norm_multi_kernel - which ran one 512-thread block per head (32 blocks) and read the 2 MB state of a layer
 // at ~60 GB/s. Every column's arithmetic is the original's; the output norm, which needs all 128 columns of a head,
@@ -948,7 +948,7 @@ bool multi_block_head_ops() {
     return false;
 #else
     static const bool on = [] {
-        const char* v = std::getenv("STRATA_MULTI_BLOCK_ARGMAX");
+        const char* v = std::getenv("CORTEX_MULTI_BLOCK_ARGMAX");
         return v == nullptr || std::atoi(v) != 0;
     }();
     return on;
@@ -959,13 +959,13 @@ bool argmax_rows_wanted() {
 #if defined(__HIPCC__)
     return false;
 #else
-    // sm_80 to sm_89, and sm_7x with STRATA_ARGMAX_ROWS_SM70=1: sample_tokens' greedy pick there is the one-block kernel (sm_90+ has the cluster kernel)
+    // sm_80 to sm_89, and sm_7x with CORTEX_ARGMAX_ROWS_SM70=1: sample_tokens' greedy pick there is the one-block kernel (sm_90+ has the cluster kernel)
     static const bool want = [] {
         int dev = 0, major = 0;
         if (cudaGetDevice(&dev) != cudaSuccess || cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, dev) != cudaSuccess)
             return false;
-        if (major == 7) {   // STRATA_ARGMAX_ROWS_SM70=1: opt-in on Volta (measured on sm_70 only)
-            const char* e = std::getenv("STRATA_ARGMAX_ROWS_SM70");
+        if (major == 7) {   // CORTEX_ARGMAX_ROWS_SM70=1: opt-in on Volta (measured on sm_70 only)
+            const char* e = std::getenv("CORTEX_ARGMAX_ROWS_SM70");
             return e != nullptr && std::atoi(e) != 0;
         }
         return major == 8;
@@ -1046,9 +1046,9 @@ bool gdn_commit_layers(float* state, int64_t state_stride, int64_t conv_off, con
                        int conv_channels, int h_k, int h_v, int n_max, int n_layers, const int32_t* n_keep, void* stream) {
     // the per-layer commit's kernel choice (gdn_step_norm_multi below): only its state-only kernel is batched here
     static const bool per_layer = [] {
-        const char* sp = std::getenv("STRATA_GDN_SPLIT");
-        const char* cs = std::getenv("STRATA_GDN_COMMIT_SPLIT");
-        const char* dbg = std::getenv("STRATA_DBG_GDN");
+        const char* sp = std::getenv("CORTEX_GDN_SPLIT");
+        const char* cs = std::getenv("CORTEX_GDN_COMMIT_SPLIT");
+        const char* dbg = std::getenv("CORTEX_DBG_GDN");
         return (sp && sp[0] == '1') || (cs && cs[0] == '0') || (dbg && dbg[0] == '1');
     }();
     if (per_layer || n_layers <= 0 || n_layers > 65535 || n_max < 1 || n_max > kVerifyMaxT || n_keep == nullptr ||
@@ -1111,13 +1111,13 @@ void gdn_step_norm_groups(const GdnGroups& groups, const float* h, int conv_chan
 void gdn_step_norm_multi(float* state, const float* h, int conv_channels, const float* gate, const float* beta,
                          const float* z, const float* gamma, float eps, float* y, int h_k, int h_v, int n_tok,
                          const int32_t* n_keep, void* stream, int t_out_begin, void* xq_out) {
-    GdnQ81* const xq = static_cast<GdnQ81*>(xq_out);   // S26: non-null = also the outputs' q8_1 (STRATA_QFUSE)
+    GdnQ81* const xq = static_cast<GdnQ81*>(xq_out);   // S26: non-null = also the outputs' q8_1 (CORTEX_QFUSE)
     if (!state || !h || !gate || !beta || !z || !gamma || !y || h_k <= 0 || h_v % h_k || n_tok < 1 ||
         n_tok > kVerifyMaxT) {
         std::fprintf(stderr, "gdn_step_norm_multi: invalid arguments\n");
         std::exit(1);
     }
-    static const bool split = [] { const char* v = std::getenv("STRATA_GDN_SPLIT"); return v && v[0] == '1'; }();
+    static const bool split = [] { const char* v = std::getenv("CORTEX_GDN_SPLIT"); return v && v[0] == '1'; }();
     // S26: the split runs where it is faster (gfx1151 harness, h_v 48: the commit 8-19% per call; a window of 2+ rows
     // 3-13%; one row: no gain, the old kernel stays) - bitwise equal in every case
     if (split && (t_out_begin >= n_tok || n_tok - t_out_begin >= 2)) {
@@ -1136,11 +1136,11 @@ void gdn_step_norm_multi(float* state, const float* h, int conv_channels, const 
         return;
     }
     static const bool commit_split = [] {
-        const char* e = std::getenv("STRATA_GDN_COMMIT_SPLIT");
+        const char* e = std::getenv("CORTEX_GDN_COMMIT_SPLIT");
         return !e || e[0] != '0';
     }();
     if (commit_split && n_keep != nullptr && t_out_begin >= n_tok) {
-        static const bool dbg = [] { const char* e = std::getenv("STRATA_DBG_GDN"); return e && e[0] == '1'; }();
+        static const bool dbg = [] { const char* e = std::getenv("CORTEX_DBG_GDN"); return e && e[0] == '1'; }();
         if (dbg) gdn_step_commit_kernel<true><<<dim3((unsigned) h_v, 4u), dim3(32, RG), 0, (cudaStream_t) stream>>>(
             state, h, conv_channels, gate, beta, h_k, h_v, n_keep, n_tok);
         else gdn_step_commit_kernel<false><<<dim3((unsigned) h_v, 4u), dim3(32, RG), 0, (cudaStream_t) stream>>>(
@@ -1167,14 +1167,14 @@ void gdn_step_norm_multi(float* state, const float* h, int conv_channels, const 
 
 namespace {
 __global__ void wait_flag_ge_kernel(const volatile uint32_t* flag, uint32_t value) {
-    while (*flag < value) strata_spin_pause();
+    while (*flag < value) cortex_spin_pause();
     __threadfence_system();
 }
 
 // the GPU's clock in ns (the same sources as gpu_stamp_kernel)
-__device__ __forceinline__ unsigned long long strata_now_ns() {
+__device__ __forceinline__ unsigned long long cortex_now_ns() {
     unsigned long long t;
-#if defined(STRATA_HIP_GFX906)
+#if defined(CORTEX_HIP_GFX906)
     t = wall_clock64() * 40ull;
 #elif defined(__HIPCC__)
     t = wall_clock64() * 10ull;
@@ -1189,10 +1189,10 @@ __device__ __forceinline__ unsigned long long strata_now_ns() {
 // kernels still run (on whatever the hand-off buffer holds) so the graph completes and no stream is left hanging.
 __global__ void wait_handoff_kernel(const volatile uint32_t* flag, uint32_t value, uint32_t* err,
                                     unsigned long long timeout_ns) {
-    const unsigned long long t0 = timeout_ns ? strata_now_ns() : 0ull;
+    const unsigned long long t0 = timeout_ns ? cortex_now_ns() : 0ull;
     while (*flag < value) {
-        strata_spin_pause();
-        if (timeout_ns && strata_now_ns() - t0 > timeout_ns) {
+        cortex_spin_pause();
+        if (timeout_ns && cortex_now_ns() - t0 > timeout_ns) {
             *(volatile uint32_t*) err = 1u;
             __threadfence_system();
             return;
@@ -1215,7 +1215,7 @@ __global__ void handoff_publish_kernel(float* dst, const float* __restrict__ a, 
         if (prev == gridDim.x - 1) {   // every block's payload is out: raise the next stage's flag
             *(volatile uint32_t*) counter = 0u;
             __threadfence_system();
-            if (drop == nullptr || *drop == 0u) {   // test hook (STRATA_TEST_HANDOFF_DROP): a lost publish
+            if (drop == nullptr || *drop == 0u) {   // test hook (CORTEX_TEST_HANDOFF_DROP): a lost publish
                 *(volatile uint32_t*) flag = 1u;
                 __threadfence_system();
             }
@@ -1226,10 +1226,10 @@ __global__ void handoff_publish_kernel(float* dst, const float* __restrict__ a, 
 // wait_flag_ge, with the GPU's clock as it arrives (t_in) and as it leaves (t_out), either may be null
 __global__ void wait_flag_ge_stamped_kernel(const volatile uint32_t* flag, uint32_t value, volatile unsigned long long* t_in,
                                             volatile unsigned long long* t_out) {
-    if (t_in != nullptr) *t_in = strata_now_ns();
-    while (*flag < value) strata_spin_pause();
+    if (t_in != nullptr) *t_in = cortex_now_ns();
+    while (*flag < value) cortex_spin_pause();
     __threadfence_system();
-    if (t_out != nullptr) *t_out = strata_now_ns();
+    if (t_out != nullptr) *t_out = cortex_now_ns();
 }
 }  // namespace
 
@@ -1428,7 +1428,7 @@ __global__ void resident_plan_par_kernel(const int32_t* __restrict__ ids, int n,
 }
 __global__ void wait_flag_ge_or_kernel(const volatile uint32_t* flag, uint32_t value, const volatile uint32_t* skip) {
     if (*skip == value) return;
-    while (*flag < value) strata_spin_pause();
+    while (*flag < value) cortex_spin_pause();
     __threadfence_system();
 }
 __global__ void copy_i32_unless_kernel(int32_t* __restrict__ dst, const volatile int32_t* src, int n,
@@ -1475,7 +1475,7 @@ namespace {
 __global__ void wait_copy_i32_kernel(const volatile uint32_t* flag, uint32_t value, int32_t* __restrict__ dst,
                                      const volatile int32_t* src, int n) {
     if (threadIdx.x == 0) {
-        while (*flag < value) strata_spin_pause();
+        while (*flag < value) cortex_spin_pause();
         __threadfence_system();
     }
     __syncthreads();
@@ -1530,7 +1530,7 @@ __global__ void gpu_stamp_kernel(unsigned long long* buf, int i) {
         pdl_wait();
     }
     unsigned long long t;
-#if defined(STRATA_HIP_GFX906)
+#if defined(CORTEX_HIP_GFX906)
     t = wall_clock64() * 40ull;   // gfx906: the wall clock runs at 25 MHz (hipDeviceAttributeWallClockRate) -> ns
 #elif defined(__HIPCC__)
     t = wall_clock64() * 10ull;   // gfx10.3 / gfx11 / gfx12: a constant 100 MHz counter, in ns
@@ -1584,18 +1584,18 @@ bool pdl_supported() {
 #if defined(__HIPCC__) || !defined(CUDART_VERSION) || CUDART_VERSION < 12030
     return false;   // HIP; or a CUDA runtime without the capture-dependency query pdl_launch_ok needs
 #else
-    // per device (a layer split runs on several): 1 = runs, 2 = does not.  sm_90+ (the card's, or STRATA_EMULATE_CC's),
+    // per device (a layer split runs on several): 1 = runs, 2 = does not.  sm_90+ (the card's, or CORTEX_EMULATE_CC's),
     // and code built for it: on a build with only older code the driver JIT-compiles PTX without griddepcontrol.
     static std::atomic<int> state[64];
     int dev = 0;
     if (cudaGetDevice(&dev) != cudaSuccess || dev < 0 || dev >= 64) { cudaGetLastError(); return false; }
     int s = state[dev].load(std::memory_order_relaxed);
     if (s == 0) {
-        static const bool env_on = [] { const char* v = std::getenv("STRATA_DF_PDL"); return v != nullptr && std::atoi(v) != 0; }();   // opt-in until the A/B says otherwise
+        static const bool env_on = [] { const char* v = std::getenv("CORTEX_DF_PDL"); return v != nullptr && std::atoi(v) != 0; }();   // opt-in until the A/B says otherwise
         int major = 0;
         cudaFuncAttributes fa{};
         const bool on = env_on && cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, dev) == cudaSuccess &&
-                        strata::cc_major_of(major) >= 9 &&
+                        cortex::cc_major_of(major) >= 9 &&
                         cudaFuncGetAttributes(&fa, gpu_stamp_kernel<true>) == cudaSuccess && fa.ptxVersion >= 90 &&
                         fa.binaryVersion >= 90;
         cudaGetLastError();
@@ -1632,8 +1632,8 @@ bool pdl_launch_ok(const void* kernel, cudaStream_t stream) {
     }
     // every node the next captured node will depend on is a kernel (CUDA allows a programmatic edge only between two
     // kernel nodes): never after a memcpy, memset, host or event node.  A join of branches gives several kernels, a
-    // programmatic edge from each; STRATA_DF_PDL=2 allows a single predecessor only.
-    static const int mode = [] { const char* v = std::getenv("STRATA_DF_PDL"); return v ? std::atoi(v) : 1; }();
+    // programmatic edge from each; CORTEX_DF_PDL=2 allows a single predecessor only.
+    static const int mode = [] { const char* v = std::getenv("CORTEX_DF_PDL"); return v ? std::atoi(v) : 1; }();
     cudaStreamCaptureStatus status = cudaStreamCaptureStatusNone;
     const cudaGraphNode_t* deps = nullptr;
     const cudaGraphEdgeData* edges = nullptr;
@@ -1659,4 +1659,4 @@ bool pdl_launch_ok(const void* kernel, cudaStream_t stream) {
 }
 #endif
 
-}  // namespace strata::kernels
+}  // namespace cortex::kernels

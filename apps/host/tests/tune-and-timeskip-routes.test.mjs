@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url';
 /**
  * The tuning and Time-skip client routes.
  *
- * These are contract tests for the bridge between the App Host and Strata Control. They are
+ * These are contract tests for the bridge between the App Host and Cortex Control. They are
  * deliberately about the *shapes and the refusals*, not about measurement numbers: the numbers come
  * from the job, and the job has its own tests. What matters here is that the Host does not become a
  * second source of truth.
@@ -37,19 +37,19 @@ async function listenFree() {
 
 /** Start the host against a disposable home, and wait for health. */
 async function startHost({ python } = {}) {
-  const home = await mkdtemp(join(tmpdir(), 'strata-tune-routes-'));
+  const home = await mkdtemp(join(tmpdir(), 'cortex-tune-routes-'));
   await mkdir(join(home, 'data'), { recursive: true });
   const port = await listenFree();
   const child = spawn(process.execPath, [HOST, '--dist', join(REPO, 'apps/host/dist')], {
     cwd: join(REPO, 'apps/host'),
     env: {
       ...process.env,
-      STRATA_HOME: home,
+      CORTEX_HOME: home,
       // the Time-skip runs of whoever uses this PC live in their own state folder; a test must not read (or write) them
-      STRATA_TIMESKIP_DIR: join(home, 'time-skip'),
-      STRATA_PORT: String(port),
-      STRATA_REAL_ENGINE: '0',
-      ...(python ? { STRATA_PYTHON: python } : {}),
+      CORTEX_TIMESKIP_DIR: join(home, 'time-skip'),
+      CORTEX_PORT: String(port),
+      CORTEX_REAL_ENGINE: '0',
+      ...(python ? { CORTEX_PYTHON: python } : {}),
     },
     stdio: 'ignore',
   });
@@ -84,9 +84,9 @@ test('an unconfigured engine is reported as unavailable rather than guessed at',
 test('the tuning plan comes from the engine binary and excludes what it cannot accept', { timeout: 60000 }, async () => {
   // A stub engine that accepts exactly two of the flags the static table knows about. The plan must
   // offer only those two, and must name each exclusion.
-  const dir = await mkdtemp(join(tmpdir(), 'strata-tune-stub-'));
-  // A Python stub, run by Strata Control as [python, stub.py] on every OS (a #! script is WinError 193 on Windows).
-  const engine = join(dir, 'strata-stub.py');
+  const dir = await mkdtemp(join(tmpdir(), 'cortex-tune-stub-'));
+  // A Python stub, run by Cortex Control as [python, stub.py] on every OS (a #! script is WinError 193 on Windows).
+  const engine = join(dir, 'cortex-stub.py');
   await writeFile(engine, 'import sys\nfor line in ("usage:", "  --kv KV", "  --ple-io MODE"):\n    print(line, file=sys.stderr)\n');
 
   const { child, base } = await startHost();
@@ -188,13 +188,13 @@ test('an HTTP caller cannot supply an arbitrary revision command', { timeout: 30
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ workspace: '/nonexistent-workspace', prompt: 'x',
-                             reviseCommand: 'touch /tmp/strata-should-not-exist' }),
+                             reviseCommand: 'touch /tmp/cortex-should-not-exist' }),
     });
     // The run fails because the workspace does not exist -- the point is that it fails for *that*
     // reason, and the injected command is never run.
     assert.ok(r.status >= 400, 'a nonexistent workspace must not start a run');
   } finally {
     child.kill('SIGKILL');
-    await rm('/tmp/strata-should-not-exist', { force: true });
+    await rm('/tmp/cortex-should-not-exist', { force: true });
   }
 });

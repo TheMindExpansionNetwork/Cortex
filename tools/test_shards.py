@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT))
 import setup as S  # noqa: E402
-import strata_pack  # noqa: E402
+import cortex_pack  # noqa: E402
 
 
 class Stop(Exception):
@@ -115,7 +115,7 @@ class PackVerifyHash(unittest.TestCase):
         (self.dir / "manifest.json").write_text(json.dumps({"tensors": {}, "source": source}), encoding="utf-8")
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            rc = strata_pack.verify(self.gguf, self.dir, limit, 0)
+            rc = cortex_pack.verify(self.gguf, self.dir, limit, 0)
         return rc, out.getvalue()
 
     def test_matching_hash_passes(self):
@@ -141,21 +141,21 @@ class PackBuildOccupied(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self.tmp.name)
-        self.saved = strata_pack.G.GGUFFile
-        strata_pack.G.GGUFFile = lambda path: (_ for _ in ()).throw(Stop(str(path)))
+        self.saved = cortex_pack.G.GGUFFile
+        cortex_pack.G.GGUFFile = lambda path: (_ for _ in ()).throw(Stop(str(path)))
 
     def tearDown(self):
-        strata_pack.G.GGUFFile = self.saved
+        cortex_pack.G.GGUFFile = self.saved
         self.tmp.cleanup()
 
     def run_build(self, out):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            rc = strata_pack.build(self.dir / "m-00001-of-00002.gguf", out, None, True)
+            rc = cortex_pack.build(self.dir / "m-00001-of-00002.gguf", out, None, True)
         return rc, buf.getvalue()
 
     def test_occupied_dir_is_refused_naming_it(self):
-        for marker in ("manifest.json", "index.txt", "native_experts.txt"):   # strata_pack.PACK_MARKERS
+        for marker in ("manifest.json", "index.txt", "native_experts.txt"):   # cortex_pack.PACK_MARKERS
             with self.subTest(marker=marker):
                 out = self.dir / marker.replace(".", "-")
                 out.mkdir()
@@ -184,7 +184,7 @@ class PackBuildOccupied(unittest.TestCase):
         (out / "manifest.json").write_text("the pack that was there", encoding="utf-8")
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf), self.assertRaises(Stop):
-            strata_pack.build(self.dir / "m-00001-of-00002.gguf", out, None, True, True)
+            cortex_pack.build(self.dir / "m-00001-of-00002.gguf", out, None, True, True)
 
     def test_force_unmakes_the_old_pack_before_building(self):
         # #634 follow-up: --force drops the old pack's markers before the build opens the GGUF, so a forced build
@@ -192,12 +192,12 @@ class PackBuildOccupied(unittest.TestCase):
         # over partly new experts; the data files are left to the build, which rewrites each one
         out = self.dir / "forced-markers"
         out.mkdir()
-        for name in strata_pack.PACK_MARKERS:
+        for name in cortex_pack.PACK_MARKERS:
             (out / name).write_text("the pack that was there", encoding="utf-8")
         (out / "experts.bin").write_bytes(b"its experts")
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf), self.assertRaises(Stop):
-            strata_pack.build(self.dir / "m-00001-of-00002.gguf", out, None, True, True)
+            cortex_pack.build(self.dir / "m-00001-of-00002.gguf", out, None, True, True)
         self.assertEqual([p.name for p in out.iterdir()], ["experts.bin"])
         self.assertEqual((out / "experts.bin").read_bytes(), b"its experts")
 

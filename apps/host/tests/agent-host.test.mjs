@@ -2,7 +2,7 @@
  * The host's HTTP surface for agent chats, against a real host process, the real Harness and a
  * scripted worker standing in as an API model.
  *
- * Needs STRATA_HARNESS_DIR (a built Harness) for everything except the "component missing" test.
+ * Needs CORTEX_HARNESS_DIR (a built Harness) for everything except the "component missing" test.
  * What is exercised: /api/chat/stream (NDJSON), /api/chat/approval, /api/chat/stop, /api/agent/status,
  * resume across a host restart, two chats at once, and the visible fallback when the component is absent.
  */
@@ -16,8 +16,8 @@ import { join, resolve } from 'node:path';
 import { startScriptedWorker } from './helpers/scripted-worker.mjs';
 import { resolveHarness } from '../server/agent/harness-runtime.mjs';
 
-const HARNESS = process.env.STRATA_HARNESS_DIR;
-const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'STRATA_HARNESS_DIR is not set to a built Harness' : false;
+const HARNESS = process.env.CORTEX_HARNESS_DIR;
+const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'CORTEX_HARNESS_DIR is not set to a built Harness' : false;
 const HOST = resolve(import.meta.dirname, '..', 'server', 'index.mjs');
 
 const freePort = () => new Promise(r => { const s = createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); }); });
@@ -26,8 +26,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function startHost(t, { home, ws, harness = HARNESS } = {}) {
   const port = await freePort();
-  const env = { ...process.env, STRATA_HOME: home, STRATA_PORT: String(port), STRATA_WORKSPACE: ws, STRATA_REAL_ENGINE: '0', STRATA_COMPONENTS_DIR: join(home, 'components') };
-  if (harness) env.STRATA_HARNESS_DIR = harness; else delete env.STRATA_HARNESS_DIR;
+  const env = { ...process.env, CORTEX_HOME: home, CORTEX_PORT: String(port), CORTEX_WORKSPACE: ws, CORTEX_REAL_ENGINE: '0', CORTEX_COMPONENTS_DIR: join(home, 'components') };
+  if (harness) env.CORTEX_HARNESS_DIR = harness; else delete env.CORTEX_HARNESS_DIR;
   const child = spawn(process.execPath, [HOST], { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   let log = '';
   child.stdout.on('data', d => { log += d; }); child.stderr.on('data', d => { log += d; });
@@ -66,7 +66,7 @@ async function startHost(t, { home, ws, harness = HARNESS } = {}) {
 
 async function setup(t, { harness = HARNESS, reuse } = {}) {
   const worker = reuse?.worker ?? await startScriptedWorker({ model: 'cloud-model' });
-  const home = reuse?.home ?? mkdtempSync(join(tmpdir(), 'strata-host-'));
+  const home = reuse?.home ?? mkdtempSync(join(tmpdir(), 'cortex-host-'));
   const ws = join(home, 'workspace'); mkdirSync(ws, { recursive: true });
   const host = await startHost(t, { home, ws, harness });
   let connectionId = reuse?.connectionId;

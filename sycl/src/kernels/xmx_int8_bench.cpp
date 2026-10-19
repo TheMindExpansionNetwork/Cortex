@@ -1,6 +1,6 @@
 // xmx_int8_bench (0.1.44): what a DPAS int8 expert GEMM costs next to the FP16 joint_matrix one, on one device.
-//   xmx_int8_bench [M=160] [experts=64] [reps=20]      build: -DSTRATA_XMX_SG16 for Xe2 (8x16x32), none for DG2 (8x8x32)
-// Shape of a Strata expert: gate+up N=1280, K=2560 (down: N=2560, K=640).  Modes:
+//   xmx_int8_bench [M=160] [experts=64] [reps=20]      build: -DCORTEX_XMX_SG16 for Xe2 (8x16x32), none for DG2 (8x8x32)
+// Shape of a Cortex expert: gate+up N=1280, K=2560 (down: N=2560, K=640).  Modes:
 //   f16    : half A (M x K) and half W (N x K), float accumulate - the GEMM the current dequant + oneMKL path runs
 //   i8     : int8 A and W, int32 accumulate over the whole K (no per-block scale): the DPAS floor
 //   i8blk  : int8 A and W, one DPAS per 32 of K into a zeroed int32 tile, then acc += float(tile) * dw[n] * dx[m][kb]
@@ -19,7 +19,7 @@
 
 namespace jm = sycl::ext::oneapi::experimental::matrix;
 using half = sycl::half;
-#ifdef STRATA_XMX_SG16
+#ifdef CORTEX_XMX_SG16
 constexpr int SGW = 16;
 #else
 constexpr int SGW = 8;

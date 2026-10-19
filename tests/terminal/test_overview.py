@@ -9,8 +9,8 @@ import unittest
 
 from rich.console import Console
 
-from strata_cli import overview
-from strata_cli.monitor import MonitorApp
+from cortex_cli import overview
+from cortex_cli.monitor import MonitorApp
 
 GIB = 2 ** 30
 
@@ -94,7 +94,7 @@ class Build(unittest.TestCase):
 class Draw(unittest.TestCase):
     def test_the_approved_layout(self):
         text = draw(overview.build(metrics("reading")), connect=True)
-        for part in ("STRATA  Overview", "IQ3_S 128K", "Reading prompt · 97%", "[LIVE]", "[1 Overview]", "7 Connect",
+        for part in ("CORTEX  Overview", "IQ3_S 128K", "Reading prompt · 97%", "[LIVE]", "[1 Overview]", "7 Connect",
                      "Model state", "[Reading]", "35,610 / 36,742 tokens · 97%",
                      "Speed", "GPU load", "VRAM", "GPU temp", "Power", "PCIe", "CPU", "Disk read",
                      "88 %", "RTX 5070", "11.2 / 12 GB", "1,644 experts cached", "54 °C", "114 W", "of 250 W limit", "Gen4 x16",
@@ -165,7 +165,7 @@ class InTheMonitor(unittest.TestCase):
     def test_an_older_server_without_metrics_keeps_the_earlier_overview(self):
         class Old(Source):
             def get(self, path):
-                from strata_cli.client import ClientError
+                from cortex_cli.client import ClientError
                 raise ClientError("not found", http_status=404)
 
         async def go():

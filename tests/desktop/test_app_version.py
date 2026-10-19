@@ -1,5 +1,5 @@
 """The desktop app's version is written in one place: apps/desktop/src-tauri/Cargo.toml (Tauri reads it for the installer and file names when
-tauri.conf.json has no version; the shell passes it to the host as STRATA_APP_VERSION; the host reads the same file in a checkout)."""
+tauri.conf.json has no version; the shell passes it to the host as CORTEX_APP_VERSION; the host reads the same file in a checkout)."""
 import json
 import re
 import unittest
@@ -26,7 +26,7 @@ class AppVersionTests(unittest.TestCase):
 
     def test_no_script_hard_codes_a_file_name_with_a_version(self):
         text = (DESKTOP / "scripts" / "make-dmg.sh").read_text(encoding="utf-8")
-        self.assertNotRegex(text, r"Strata_\d+\.\d+\.\d+")
+        self.assertNotRegex(text, r"Cortex_\d+\.\d+\.\d+")
         self.assertIn("Cargo.toml", text)
 
 

@@ -9,7 +9,7 @@
 #include <cstring>
 #include <vector>
 
-namespace strata::kernels::cpu::detail {
+namespace cortex::kernels::cpu::detail {
 
 // CPU_ALLOC and the sized macros also handle kernels whose CPU mask exceeds CPU_SETSIZE.
 // Keep the native mask opaque: copy its bytes for storage and use CPU_*_S to inspect it.
@@ -65,14 +65,14 @@ inline int pin_thread_to_cpu(int core) {
     return pthread_setaffinity_np(pthread_self(), target.bytes, target.set);
 }
 
-}  // namespace strata::kernels::cpu::detail
+}  // namespace cortex::kernels::cpu::detail
 #elif defined(__APPLE__)
 #include <thread>
 #include <vector>
 
 // macOS has no thread-to-core pinning (the scheduler places threads; affinity tags are hints at most): every CPU is
 // allowed and a pin is a no-op, so the pool keeps its threads where the OS puts them.
-namespace strata::kernels::cpu::detail {
+namespace cortex::kernels::cpu::detail {
 inline int get_thread_affinity(std::vector<unsigned long>& mask, std::vector<int>* cpus = nullptr) {
     mask.assign(1, ~0ul);
     if (cpus) {
@@ -83,5 +83,5 @@ inline int get_thread_affinity(std::vector<unsigned long>& mask, std::vector<int
 }
 inline int set_thread_affinity(const std::vector<unsigned long>&) { return 0; }
 inline int pin_thread_to_cpu(int) { return 0; }   // nothing to do: the OS places the thread
-}  // namespace strata::kernels::cpu::detail
+}  // namespace cortex::kernels::cpu::detail
 #endif

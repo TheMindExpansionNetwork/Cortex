@@ -4,7 +4,7 @@
 //
 //     build/dequant_wide_parity [--bench]
 // --bench adds each kernel's time per call on the prompt path's shapes (FP16 out).  Exit 0: every case bitwise equal.
-#include "strata/kernels/dequant_bf16.hpp"
+#include "cortex/kernels/dequant_bf16.hpp"
 
 #include <cuda_runtime.h>
 
@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-namespace K = strata::kernels;
+namespace K = cortex::kernels;
 
 static void ck(cudaError_t e, const char* what) {
     if (e != cudaSuccess) { std::fprintf(stderr, "dequant_wide_parity: %s: %s\n", what, cudaGetErrorString(e)); std::exit(2); }

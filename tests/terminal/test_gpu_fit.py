@@ -1,4 +1,4 @@
-"""strata_control/gpu_fit.py: the one rule for which graphics cards a model uses (app, strata launch and setup share it)."""
+"""cortex_control/gpu_fit.py: the one rule for which graphics cards a model uses (app, cortex launch and setup share it)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import re
 import unittest
 from pathlib import Path
 
-from strata_control import gpu_fit as G
+from cortex_control import gpu_fit as G
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -107,7 +107,7 @@ class GpuFitRule(unittest.TestCase):
         self.assertEqual((G.DENSE_GB, G.SYSTEM_ROOM_GB, G.DENSE_EXTRA_GB), tuple(float(x) for x in m.groups()))
 
     def test_fit_matches_the_launch_catalog_port_of_native_fit(self):
-        from strata_cli.launch.catalog import fit_on
+        from cortex_cli.launch.catalog import fit_on
         for ram, vram in ((62, 16), (32, 10), (16, 0), (128, 24)):
             a = fit_on({"memory_gb": 44.0}, ram, vram)
             b = G.fit(44.0, ram, vram)
@@ -117,7 +117,7 @@ class GpuFitRule(unittest.TestCase):
 
 
 class GpuFitInTheModelList(unittest.TestCase):
-    """The app reads the options from the model list (tools/strata_mcp.py model_table): the same rule, nothing duplicated in the UI."""
+    """The app reads the options from the model list (tools/cortex_mcp.py model_table): the same rule, nothing duplicated in the UI."""
 
     def setUp(self):
         from tests.terminal.launch_support import Home
@@ -126,7 +126,7 @@ class GpuFitInTheModelList(unittest.TestCase):
 
     def sizes(self, hw):
         from tests.terminal.launch_support import catalog
-        table = catalog(hw).strata.model_table(hw)
+        table = catalog(hw).cortex.model_table(hw)
         return {s["model"]: s for f in table for s in f["sizes"]}
 
     def test_two_cards_give_options_on_every_model(self):

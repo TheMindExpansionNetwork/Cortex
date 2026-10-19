@@ -37,9 +37,9 @@ function byteChunks(text, n) {
 }
 
 async function loadCompletion() {
-  const home = await mkdtemp(join(tmpdir(), 'strata-framing-'));
-  process.env.STRATA_HOME = home;
-  process.env.STRATA_MODELS_DIR = join(home, 'models');
+  const home = await mkdtemp(join(tmpdir(), 'cortex-framing-'));
+  process.env.CORTEX_HOME = home;
+  process.env.CORTEX_MODELS_DIR = join(home, 'models');
   const { proxyCompletion } = await import('../server/inference.mjs');
   return { proxyCompletion, home };
 }

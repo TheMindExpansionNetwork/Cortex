@@ -5,11 +5,11 @@
 //   3. --batch-mtp (or --adapt-async 1) turns that default into one group, and says which feature did it;
 //   4. a number or `auto` given explicitly is honoured, with or without those features;
 //   5. no layer split: the number given (1) stays.
-#include "strata/program/batch_groups.hpp"
+#include "cortex/program/batch_groups.hpp"
 
 #include <cstdio>
 
-namespace bg = strata::program::batch_groups;
+namespace bg = cortex::program::batch_groups;
 
 namespace {
 int g_fail = 0;
@@ -55,7 +55,7 @@ int main() {
         i.mtp_serial = true;
         r = bg::resolve(i);
         check(r.groups == 1 && r.from_auto && r.serial == bg::Serial::BatchMtp && r.would_be == 2 && !r.mtp_dropped,
-              "STRATA_BATCH_MTP_SERIAL: one group, because of --batch-mtp");
+              "CORTEX_BATCH_MTP_SERIAL: one group, because of --batch-mtp");
         check(bg::serial_what(r.serial)[0] == '-', "the reason names the feature");
     }
     {
@@ -70,7 +70,7 @@ int main() {
         i.adapt_async = true;
         check(bg::resolve(i).serial == bg::Serial::AdaptAsync, "both: --adapt-async 1 still gives one group");
         i.mtp_serial = true;
-        check(bg::resolve(i).serial == bg::Serial::BatchMtp, "both with STRATA_BATCH_MTP_SERIAL: --batch-mtp is named");
+        check(bg::resolve(i).serial == bg::Serial::BatchMtp, "both with CORTEX_BATCH_MTP_SERIAL: --batch-mtp is named");
     }
     {   // nothing to give way: the slots do not divide, so auto is one group anyway and there is nothing to say
         bg::Input i = in(3, 1);

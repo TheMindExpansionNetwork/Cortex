@@ -9,8 +9,8 @@ Build it for engine 0.1.38 or newer (earlier engines read `per_layer_token_embd.
 below). UD-Q4_K_XL's manual workflow asks nothing of setup, and neither does this one.
 
 > **Status (MODEL-UPDATE Phase 1).** The Q6_K gate/up kernels are part of every build now (they were the opt-in
-> `-DSTRATA_Q6K_EXPERTS=ON`): measured to leave other models' expert-cache slots unchanged ([QUANTS.md](QUANTS.md)). The
-> MMQ prompt kernels for Q6_K come with the K-quant library and `STRATA_MMQ_KQ=1`; without it the prompt takes the FP16
+> `-DCORTEX_Q6K_EXPERTS=ON`): measured to leave other models' expert-cache slots unchanged ([QUANTS.md](QUANTS.md)). The
+> MMQ prompt kernels for Q6_K come with the K-quant library and `CORTEX_MMQ_KQ=1`; without it the prompt takes the FP16
 > path. The file runs on the standard engine (AMD R9700: the quality yardstick in [QUANTS.md](QUANTS.md)).
 
 ## What is in the file
@@ -83,7 +83,7 @@ it. `mtp/rt` is the base model's draft layer as always.
 
 ```json
 {
-  "exe": "build/strata",
+  "exe": "build/cortex",
   "args": [
     "--pack", "packs/ud-q6_k_xl",
     "--native", "/path/to/Qwen3.8-Flash-Next-UD-Q6_K_XL-00001-of-00006.gguf",
@@ -93,7 +93,7 @@ it. `mtp/rt` is the base model's draft layer as always.
   "cwd": ".",
   "tokenizer": "packs/ud-q6_k_xl/tokenizer",
   "model_name": "qwen3.8-flash-next-ud-q6_k_xl",
-  "log": "strata-ud-q6_k_xl.log",
+  "log": "cortex-ud-q6_k_xl.log",
   "host": "127.0.0.1",
   "port": 8080
 }
@@ -110,7 +110,7 @@ it (the PLE Q8_0 reader is the other half):
 - **Decode windows:** the grouped expert kernels (`native_expert_grouped`) take gate/up Q6_K — a pinned copy of
   llama.cpp's `vec_dot_q6_K_q8_1` behind `Fmt<14>`, and the dequantizer (`dequantize_q6_K` folded onto the kernel's
   32 threads). Per-token MMVQ (`native_mmvq`) already had Q6_K.
-- **The prompt path:** llama.cpp's MMQ prompt kernels instantiate Q6_K (the K-quant library, `STRATA_MMQ_KQ=1`; it builds
+- **The prompt path:** llama.cpp's MMQ prompt kernels instantiate Q6_K (the K-quant library, `CORTEX_MMQ_KQ=1`; it builds
   `template-instances/mmq-instance-q6_k.cu` alongside q4_k/q5_k/q5_1; `moe_mmq` accepts and dispatches it).
 - **The gates:** `native_expert_supported` took Q6_K/Q8_0 pairs (gate/up Q8_0 as in layer 2 was already in the
   lists) — the engine previously refused the whole pack with "no GPU kernels for".

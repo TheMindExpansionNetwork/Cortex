@@ -9,16 +9,16 @@
 //      intermediate is overwritten with NaN bytes, so a kernel that read its input before the kernel writing it had
 //      finished would see NaNs and fail;
 //   2. every programmatic edge of the PDL graph joins two kernel nodes, and every node with a programmatic in-edge
-//      has kernels only before it (the kernel after the memcpy must be an ordinary launch); with STRATA_DF_PDL=2 also
+//      has kernels only before it (the kernel after the memcpy must be an ordinary launch); with CORTEX_DF_PDL=2 also
 //      no programmatic edge into a node with a second in-edge (the kernel after the join);
 //   3. power: where pdl_supported() (sm_90+ with code built for it) the PDL graph has programmatic edges, elsewhere
 //      it has none.
 // Also copy_rows_strided against the cudaMemcpy2DAsync it replaces in the verify window.  GPU, synthetic, no model.
-#include "strata/kernels/bf16_bits.hpp"
-#include "strata/kernels/bf16_gemv.hpp"
-#include "strata/kernels/native_mmvq.hpp"
-#include "strata/kernels/pdl.hpp"
-#include "strata/kernels/verify_kernels.hpp"
+#include "cortex/kernels/bf16_bits.hpp"
+#include "cortex/kernels/bf16_gemv.hpp"
+#include "cortex/kernels/native_mmvq.hpp"
+#include "cortex/kernels/pdl.hpp"
+#include "cortex/kernels/verify_kernels.hpp"
 
 #include <cuda_runtime.h>
 
@@ -32,7 +32,7 @@
 #include <string>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 
@@ -249,11 +249,11 @@ int main(int argc, char** argv) {
     size_t prog0, bad0, multi0, mixed0, prog1, bad1, multi1, mixed1;
     cudaGraphExec_t plain = capture(false, b, w_q8, w_iq4, w_b1, w_b2, s, side, ef, ej, prog0, bad0, multi0, mixed0);
     cudaGraphExec_t pdl = capture(true, b, w_q8, w_iq4, w_b1, w_b2, s, side, ef, ej, prog1, bad1, multi1, mixed1);
-    const char* mode = std::getenv("STRATA_DF_PDL");
+    const char* mode = std::getenv("CORTEX_DF_PDL");
     const bool single = mode != nullptr && std::atoi(mode) == 2;
     std::printf("graph edges: ordinary capture %zu programmatic; PDL capture %zu programmatic, %zu not kernel to kernel, "
                 "%zu nodes with a programmatic and a non-kernel in-edge, %zu into a node with other in-edges%s\n", prog0,
-                prog1, bad1, mixed1, multi1, single ? " (STRATA_DF_PDL=2: must be 0)" : "");
+                prog1, bad1, mixed1, multi1, single ? " (CORTEX_DF_PDL=2: must be 0)" : "");
     if (prog0 != 0 || bad1 != 0 || mixed1 != 0 || (single && multi1 != 0)) ++g_fail;
 #if CUDART_VERSION >= 12030
     if (supported && prog1 == 0) {

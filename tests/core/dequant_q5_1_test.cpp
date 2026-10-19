@@ -1,7 +1,7 @@
-// dequantize_q5_1 (strata/artifact/dequant.hpp: the PLE table of a Q5_1 GGUF) against ggml's dequantize_row_q5_1,
+// dequantize_q5_1 (cortex/artifact/dequant.hpp: the PLE table of a Q5_1 GGUF) against ggml's dequantize_row_q5_1,
 // on synthetic blocks: random codes, high bits and scales, plus the edge codes 0 and 31 and a negative minimum.
 // No model, no GPU.
-#include "strata/artifact/dequant.hpp"
+#include "cortex/artifact/dequant.hpp"
 #include "ggml.h"
 
 #include <cmath>
@@ -31,7 +31,7 @@ int main() {
     const auto* traits = ggml_get_type_traits(GGML_TYPE_Q5_1);
     std::vector<float> want((size_t) kBlocks * 32), got((size_t) kBlocks * 32);
     traits->to_float(blocks.data(), want.data(), (int64_t) want.size());
-    for (int b = 0; b < kBlocks; ++b) strata::dequantize_q5_1(blocks.data() + (size_t) b * kBlockBytes, got.data() + b * 32);
+    for (int b = 0; b < kBlocks; ++b) cortex::dequantize_q5_1(blocks.data() + (size_t) b * kBlockBytes, got.data() + b * 32);
     double max_abs = 0.0;
     for (size_t i = 0; i < want.size(); ++i) max_abs = std::fmax(max_abs, std::fabs((double) got[i] - want[i]));
     const bool ok = max_abs <= 1e-6;

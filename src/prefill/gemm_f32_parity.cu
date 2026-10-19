@@ -1,13 +1,13 @@
 // src/prefill/gemm_f32_parity.cu - Pascal: Gemm::f16's opt-in FP32 route (cublasSgemm on FP32 copies of the FP16
-// operands, STRATA_DENSE_F32=1) against the cuBLAS FP16-operand call it replaces, bitwise, over the dense projections'
+// operands, CORTEX_DENSE_F32=1) against the cuBLAS FP16-operand call it replaces, bitwise, over the dense projections'
 // shapes and a sweep of chunk sizes T (GPU, synthetic, no model).  Whether the two agree is a property of the cuBLAS
-// build (measured: 12.4.5.8 on a Tesla P40, 5,201 sizes): run this before setting STRATA_DENSE_F32=1.
+// build (measured: 12.4.5.8 on a Tesla P40, 5,201 sizes): run this before setting CORTEX_DENSE_F32=1.
 //
 //     build/gemm_f32_parity [--quick | --full] [--bench]
 // default: every 7th T from the route's first to 8192, every T of 7000-7100 and around the powers of two, 8192;
 // --quick: every 251st T; --full: every T.  --bench prints both times for a few T.  Exit 0: every output bitwise
 // equal (or the route is not built here: not the experimental CUDA 12 engine).
-#include "strata/prefill/gemm.hpp"
+#include "cortex/prefill/gemm.hpp"
 
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
@@ -53,7 +53,7 @@ int main(int argc, char** argv) {
     std::printf("gemm_f32_parity: compute capability %d.%d\n", maj, min);
     cudaStream_t st = nullptr;
     if (!ok(cudaStreamCreate(&st), "stream")) return 1;
-    strata::prefill::Gemm gemm;
+    cortex::prefill::Gemm gemm;
     std::string err;
     if (!gemm.init(st, 0, err)) { std::printf("FAIL: %s\n", err.c_str()); return 1; }
     // the shapes the route takes and its first T for each (gemm.cu, dense_f32_min_t)
@@ -86,9 +86,9 @@ int main(int argc, char** argv) {
         long long bad = 0, bad_outputs = 0;
         int64_t first_bad = 0;
         for (int64_t T : ts) {
-            strata::prefill::gemm_set_dense_f32(0);
+            cortex::prefill::gemm_set_dense_f32(0);
             gemm.f16(X, W, Ya, T, N, K);
-            strata::prefill::gemm_set_dense_f32(1);
+            cortex::prefill::gemm_set_dense_f32(1);
             gemm.f16(X, W, Yb, T, N, K);
             cudaMemsetAsync(cnt, 0, 4, st);
             count_diff<<<(unsigned) ((T * N + 255) / 256), 256, 0, st>>>((const unsigned*) Ya, (const unsigned*) Yb, T * N, cnt);
@@ -107,7 +107,7 @@ int main(int argc, char** argv) {
                 if (T < s.t_min) continue;
                 double ms[2] = {0, 0};
                 for (int on = 0; on < 2; ++on) {
-                    strata::prefill::gemm_set_dense_f32(on);
+                    cortex::prefill::gemm_set_dense_f32(on);
                     gemm.f16(X, W, Ya, T, N, K);
                     cudaEventRecord(e0, st);
                     for (int i = 0; i < 3; ++i) gemm.f16(X, W, Ya, T, N, K);
@@ -123,7 +123,7 @@ int main(int argc, char** argv) {
         }
         cudaFree(W); cudaFree(X); cudaFree(Ya); cudaFree(Yb);
     }
-    strata::prefill::gemm_set_dense_f32(-1);
+    cortex::prefill::gemm_set_dense_f32(-1);
     std::printf("gemm_f32_parity: %lld sizes, %s\n", cases, bad_cases ? "FAILED" : "OK (bitwise)");
     return bad_cases ? 1 : 0;
 }

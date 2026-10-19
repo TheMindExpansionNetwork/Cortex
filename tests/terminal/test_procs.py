@@ -1,4 +1,4 @@
-"""Leftover detection: a process is ended only when it is exactly what Strata recorded and its starter is gone."""
+"""Leftover detection: a process is ended only when it is exactly what Cortex recorded and its starter is gone."""
 
 import json
 import os
@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from strata_control import procs
+from cortex_control import procs
 
 SLEEP = [sys.executable, "-c", "import time; time.sleep(120)"]
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -18,7 +18,7 @@ NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 class Procs(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="strata-procs-")
+        self.temp = tempfile.TemporaryDirectory(prefix="cortex-procs-")
         self.addCleanup(self.temp.cleanup)
         patcher = mock.patch.dict(os.environ, {"LOCALAPPDATA": self.temp.name, "XDG_STATE_HOME": self.temp.name})
         patcher.start()

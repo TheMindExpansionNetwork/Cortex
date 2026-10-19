@@ -58,15 +58,15 @@ for rel in all_sources():
     edit(rel, sub(r"(const dpct::err0 q =)\s*DPCT_CHECK_ERROR\(\(+(\w+)\)*->ext_oneapi_empty\(\)\)+;",
                   r"\1 \2->ext_oneapi_empty() ? 0 : 1;"))
 
-# 2b. every `(dpct::queue_ptr) stream` cast goes through strata::q_of(), which maps CUDA's null stream to the
-#     default in-order queue instead of dereferencing a null sycl::queue* (include/strata/sycl_queue.hpp).
+# 2b. every `(dpct::queue_ptr) stream` cast goes through cortex::q_of(), which maps CUDA's null stream to the
+#     default in-order queue instead of dereferencing a null sycl::queue* (include/cortex/sycl_queue.hpp).
 def q_of(s):
-    t = re.sub(r"\(\(sycl::queue \*\)\(\(dpct::queue_ptr\)\s*(\w+)\)\)", r"strata::q_of(\1)", s)
-    t = re.sub(r"(?<!\w)\(\(dpct::queue_ptr\)\s*(\w+)\)", r"strata::q_of(\1)", t)   # not a call's own paren
-    t = re.sub(r"\(dpct::queue_ptr\)\s*((?:\w+(?:->|\.))*\w+)\b", r"strata::q_of(\1)", t)
-    t = re.sub(r"static_cast<dpct::queue_ptr>\((\w+)\)", r"strata::q_of(\1)", t)
-    if t != s and '#include "strata/sycl_queue.hpp"' not in t:
-        t = t.replace("#include <dpct/dpct.hpp>\n", '#include <dpct/dpct.hpp>\n#include "strata/sycl_queue.hpp"\n', 1)
+    t = re.sub(r"\(\(sycl::queue \*\)\(\(dpct::queue_ptr\)\s*(\w+)\)\)", r"cortex::q_of(\1)", s)
+    t = re.sub(r"(?<!\w)\(\(dpct::queue_ptr\)\s*(\w+)\)", r"cortex::q_of(\1)", t)   # not a call's own paren
+    t = re.sub(r"\(dpct::queue_ptr\)\s*((?:\w+(?:->|\.))*\w+)\b", r"cortex::q_of(\1)", t)
+    t = re.sub(r"static_cast<dpct::queue_ptr>\((\w+)\)", r"cortex::q_of(\1)", t)
+    if t != s and '#include "cortex/sycl_queue.hpp"' not in t:
+        t = t.replace("#include <dpct/dpct.hpp>\n", '#include <dpct/dpct.hpp>\n#include "cortex/sycl_queue.hpp"\n', 1)
     return t
 for rel in all_sources():
     edit(str(rel), q_of)
@@ -76,33 +76,33 @@ edit("src/kernels/cuda/s_gemv.dp.cpp", lambda s: s.replace("const float d = *blk
      .replace("Q8K ? *xb", "Q8K ? *(const float*) xb"))
 
 # 7c. the doorbell: `volatile` device loads/stores of host-mapped flags do not bypass the GPU caches on Intel
-#     (the spin never saw the host's write). System-scope atomic load/store do (include/strata/sycl_doorbell.hpp).
+#     (the spin never saw the host's write). System-scope atomic load/store do (include/cortex/sycl_doorbell.hpp).
 def doorbell(s):
     if "sycl_doorbell.hpp" not in s:
-        s = s.replace('#include "strata/sycl_queue.hpp"\n', '#include "strata/sycl_queue.hpp"\n#include "strata/sycl_doorbell.hpp"\n', 1)
-    s = s.replace("    *seq = *seq + 1u;", "    strata::sys_store(seq, strata::sys_load(seq) + 1u);")
-    s = s.replace("    const uint32_t want = *seq;\n", "    const uint32_t want = strata::sys_load(seq);\n")
-    s = s.replace("    while (*flag != want) /* spin (no __nanosleep on SYCL) */;", "    while (strata::sys_load(flag) != want) /* spin (no __nanosleep on SYCL) */;")
-    s = s.replace("    while (*flag < value) /* spin (no __nanosleep on SYCL) */;", "    while (strata::sys_load(flag) < value) /* spin (no __nanosleep on SYCL) */;")
-    s = s.replace("    if (*skip == value) return;", "    if (strata::sys_load(skip) == value) return;")
-    s = s.replace("    *skip = ring;\n}", "    strata::sys_store(skip, ring);\n}")
-    s = s.replace("        *(volatile uint32_t*) seq = *(volatile uint32_t*) seq + 1u;", "        strata::sys_store(seq, strata::sys_load(seq) + 1u);")
+        s = s.replace('#include "cortex/sycl_queue.hpp"\n', '#include "cortex/sycl_queue.hpp"\n#include "cortex/sycl_doorbell.hpp"\n', 1)
+    s = s.replace("    *seq = *seq + 1u;", "    cortex::sys_store(seq, cortex::sys_load(seq) + 1u);")
+    s = s.replace("    const uint32_t want = *seq;\n", "    const uint32_t want = cortex::sys_load(seq);\n")
+    s = s.replace("    while (*flag != want) /* spin (no __nanosleep on SYCL) */;", "    while (cortex::sys_load(flag) != want) /* spin (no __nanosleep on SYCL) */;")
+    s = s.replace("    while (*flag < value) /* spin (no __nanosleep on SYCL) */;", "    while (cortex::sys_load(flag) < value) /* spin (no __nanosleep on SYCL) */;")
+    s = s.replace("    if (*skip == value) return;", "    if (cortex::sys_load(skip) == value) return;")
+    s = s.replace("    *skip = ring;\n}", "    cortex::sys_store(skip, ring);\n}")
+    s = s.replace("        *(volatile uint32_t*) seq = *(volatile uint32_t*) seq + 1u;", "        cortex::sys_store(seq, cortex::sys_load(seq) + 1u);")
     # bounded spins (see kSpinMax in sycl_doorbell.hpp)
-    s = s.replace("    while (strata::sys_load(flag) != want) /* spin (no __nanosleep on SYCL) */;",
-                  "    for (uint32_t spin = 0; spin < strata::kSpinMax && strata::sys_load(flag) != want; ++spin) {}")
-    s = s.replace("    while (strata::sys_load(flag) < value) /* spin (no __nanosleep on SYCL) */;",
-                  "    for (uint32_t spin = 0; spin < strata::kSpinMax && strata::sys_load(flag) < value; ++spin) {}")
-    # upstream 0.1.31 spells the waits `while (*flag ...) strata_spin_pause();` and the ring with 4-space indent:
+    s = s.replace("    while (cortex::sys_load(flag) != want) /* spin (no __nanosleep on SYCL) */;",
+                  "    for (uint32_t spin = 0; spin < cortex::kSpinMax && cortex::sys_load(flag) != want; ++spin) {}")
+    s = s.replace("    while (cortex::sys_load(flag) < value) /* spin (no __nanosleep on SYCL) */;",
+                  "    for (uint32_t spin = 0; spin < cortex::kSpinMax && cortex::sys_load(flag) < value; ++spin) {}")
+    # upstream 0.1.31 spells the waits `while (*flag ...) cortex_spin_pause();` and the ring with 4-space indent:
     # same treatment (system-scope loads/stores, bounded: an unbounded orphaned spin wedges the B70's GT)
-    s = s.replace("    *(volatile uint32_t*) seq = *(volatile uint32_t*) seq + 1u;", "    strata::sys_store(seq, strata::sys_load(seq) + 1u);")
-    s = s.replace("    while (*flag != want) strata_spin_pause();",
-                  "    for (uint32_t spin = 0; spin < strata::kSpinMax && strata::sys_load(flag) != want; ++spin) strata_spin_pause();")
-    s = s.replace("    while (*flag < value) strata_spin_pause();",
-                  "    for (uint32_t spin = 0; spin < strata::kSpinMax && strata::sys_load(flag) < value; ++spin) strata_spin_pause();")
+    s = s.replace("    *(volatile uint32_t*) seq = *(volatile uint32_t*) seq + 1u;", "    cortex::sys_store(seq, cortex::sys_load(seq) + 1u);")
+    s = s.replace("    while (*flag != want) cortex_spin_pause();",
+                  "    for (uint32_t spin = 0; spin < cortex::kSpinMax && cortex::sys_load(flag) != want; ++spin) cortex_spin_pause();")
+    s = s.replace("    while (*flag < value) cortex_spin_pause();",
+                  "    for (uint32_t spin = 0; spin < cortex::kSpinMax && cortex::sys_load(flag) < value; ++spin) cortex_spin_pause();")
     return s
 # 0.1.31: dp4a.hpp's spin pause is __nanosleep, which SYCL lacks: the bounded spin (kSpinMax) is the backoff
-edit("include/strata/kernels/dp4a.hpp", lambda s: s.replace("    __nanosleep(100);\n",
-     "    // SYCL port: no __nanosleep; the doorbell waits are bounded by strata::kSpinMax instead\n"))
+edit("include/cortex/kernels/dp4a.hpp", lambda s: s.replace("    __nanosleep(100);\n",
+     "    // SYCL port: no __nanosleep; the doorbell waits are bounded by cortex::kSpinMax instead\n"))
 # 0.1.31/0.1.32: fused_gr's per-block shared-memory query stays CUDA (dpct leaves the attribute untranslated)
 edit("src/kernels/cuda/fused_gr.dp.cpp", lambda s: s.replace(
     "        cudaDeviceGetAttribute(&per_block, cudaDevAttrMaxSharedMemoryPerBlock, dev);\n",
@@ -110,8 +110,8 @@ edit("src/kernels/cuda/fused_gr.dp.cpp", lambda s: s.replace(
 # upstream PR #413 / 0.1.36+: the key-head DeltaNet kernel's cp.async helpers keep CUDA's address conversion in the
 # non-NVPTX branch; the SYCL build takes the plain-copy form (upstream's own pre-sm_80 path)
 def gdn_plain_copies(s):
-    s = s.replace("#if defined(DPCT_COMPATIBILITY_TEMP) && DPCT_COMPATIBILITY_TEMP < 800\n#define STRATA_GDN_CP_ASYNC 0",
-                  "#if 1   // SYCL port: plain copies (no cp.async)\n#define STRATA_GDN_CP_ASYNC 0")
+    s = s.replace("#if defined(DPCT_COMPATIBILITY_TEMP) && DPCT_COMPATIBILITY_TEMP < 800\n#define CORTEX_GDN_CP_ASYNC 0",
+                  "#if 1   // SYCL port: plain copies (no cp.async)\n#define CORTEX_GDN_CP_ASYNC 0")
     return s.replace("*reinterpret_cast<float4*>(smem) = *reinterpret_cast<const float4*>(gmem);",
                      "*reinterpret_cast<sycl::float4*>(smem) = *reinterpret_cast<const sycl::float4*>(gmem);")
 edit("src/prefill/kernels.dp.cpp", gdn_plain_copies)
@@ -129,9 +129,9 @@ def gr_kernel_names(s):
     return pat.sub(lambda m: (">>(" if m.group(2) == "gr_down_staged_kernel" else f", dpct_kernel_scalar<{m.group(3)}>>>(")
                    + m.group(1) + m.group(2) + "(", s)
 edit("src/kernels/cuda/fused_gr.dp.cpp", gr_kernel_names)
-# 7c'. #1397: the bound of those spins is chosen per device at run time (strata::spin_max(queue), sycl_doorbell.hpp), not the
+# 7c'. #1397: the bound of those spins is chosen per device at run time (cortex::spin_max(queue), sycl_doorbell.hpp), not the
 #      build's constant kSpinMax: each waiting kernel takes it as a `uint32_t spin_max` argument and its launcher passes
-#      strata::spin_max(*strata::q_of(stream)). Idempotent: a file that already has the argument is left alone.
+#      cortex::spin_max(*cortex::q_of(stream)). Idempotent: a file that already has the argument is left alone.
 def spin_bound_at_run_time(s):
     for kernel, launcher in (("doorbell_wait_kernel", "doorbell_wait"), ("wait_flag_ge_or_kernel", "wait_flag_ge_or"),
                              ("wait_flag_ge_kernel", "wait_flag_ge")):
@@ -143,13 +143,13 @@ def spin_bound_at_run_time(s):
         s = call.sub(lambda c: c.group(0) if "spin_max" in c.group(1) else c.group(1) + ", spin_max);", s)
         head = re.compile(r"^(void " + launcher + r"\([^)]*\)(?: try)? \{\n)", re.M)
         h = head.search(s)
-        if h and "strata::spin_max(" not in s[h.end():h.end() + 200]:
+        if h and "cortex::spin_max(" not in s[h.end():h.end() + 200]:
             at = h.end()
             guard = re.match(r"    if \([^\n]*\) return;\n", s[at:])   # a null-argument guard stays first
             if guard:
                 at += guard.end()
-            s = s[:at] + "    const uint32_t spin_max = strata::spin_max(*strata::q_of(stream));\n" + s[at:]
-    return s.replace("strata::kSpinMax", "spin_max")
+            s = s[:at] + "    const uint32_t spin_max = cortex::spin_max(*cortex::q_of(stream));\n" + s[at:]
+    return s.replace("cortex::kSpinMax", "spin_max")
 edit("src/kernels/cuda/elementwise.dp.cpp", lambda s: spin_bound_at_run_time(doorbell(s)))
 edit("src/kernels/cuda/verify_kernels.dp.cpp", lambda s: spin_bound_at_run_time(doorbell(s)))
 
@@ -184,9 +184,9 @@ for rel in all_sources():
 # 7e. dpct::dp4a is emulation (eight integer ops); sycl::ext::oneapi::dot_acc is the DP4A instruction on Xe.
 def native_dp4a(s):
     if "dpct::dp4a(" not in s: return s
-    s = s.replace("dpct::dp4a(", "strata::dp4a(")
+    s = s.replace("dpct::dp4a(", "cortex::dp4a(")
     if "sycl_math.hpp" not in s:
-        s = s.replace("#include <dpct/dpct.hpp>\n", '#include <dpct/dpct.hpp>\n#include "strata/sycl_math.hpp"\n', 1)
+        s = s.replace("#include <dpct/dpct.hpp>\n", '#include <dpct/dpct.hpp>\n#include "cortex/sycl_math.hpp"\n', 1)
     return s
 for rel in all_sources():
     edit(str(rel), native_dp4a)
@@ -244,10 +244,10 @@ edit("src/kernels/cuda/verify_kernels.dp.cpp", lambda s: s.replace(
 #     make the launchers that have no in-kernel fallback refuse the device (their callers then use the older
 #     kernels, exactly as on a pre-Ampere card). The XMX joint_matrix versions are phase-4 follow-up work.
 OFF = "#if 0   // SYCL: inline PTX (mma/ldmatrix/cp.async) - the XMX port is pending; see tools/fixups.py"
-# 0.1.31: a Turing m16n8k8 branch (`#elif !STRATA_PA_SM80`) with its own inline PTX; dpct's DPCT_COMPATIBILITY_TEMP
+# 0.1.31: a Turing m16n8k8 branch (`#elif !CORTEX_PA_SM80`) with its own inline PTX; dpct's DPCT_COMPATIBILITY_TEMP
 # selects it on SYCL. Unreachable there (qsa_prompt_attn_batch refuses the device), so it compiles to nothing.
 edit("src/kernels/cuda/qsa_prompt_attn.dp.cpp", lambda s: s.replace(
-    '#elif !STRATA_PA_SM80\n    asm volatile("mma.sync.aligned.m16n8k8',
+    '#elif !CORTEX_PA_SM80\n    asm volatile("mma.sync.aligned.m16n8k8',
     '#elif 0   // SYCL: Turing\'s m16n8k8 PTX (unreachable: the launcher refuses this device)\n    asm volatile("mma.sync.aligned.m16n8k8'))
 ON = "#if 1   // SYCL: the scalar path (the PTX one above is not ported yet)"
 for rel in ["src/kernels/cuda/qsa_prompt_attn.dp.cpp", "src/kernels/cuda/qsa_select.dp.cpp",
@@ -304,13 +304,13 @@ edit("src/core/remote_experts.cpp", lambda s: s.replace(
     "    if (!(spin && spin[0] == '0'))\n        cudaInitDevice(device, cudaDeviceScheduleSpin | cudaDeviceMapHost, 0);",
     "    (void) spin;   // SYCL: no cudaInitDevice scheduling flags; the runtime picks its own wait policy"))
 # 16. graph.hpp: the event's timestamp is written from a const launch(); dpct added the member without `mutable`.
-edit("include/strata/core/graph.hpp", lambda s: s.replace(
+edit("include/cortex/core/graph.hpp", lambda s: s.replace(
     "    std::chrono::time_point<std::chrono::steady_clock> done__ct1;", "    mutable std::chrono::time_point<std::chrono::steady_clock> done__ct1;"))
 print("files changed:", changed)
 
 # 0.1.29: a stream cast dpct leaves as cudaStream_t (sampler's capture check): the port's queue lookup.
 for rel in all_sources():
-    edit(str(rel), sub(r"\(\(cudaStream_t\)(\w+)\)->", r"strata::q_of(\1)->"))
+    edit(str(rel), sub(r"\(\(cudaStream_t\)(\w+)\)->", r"cortex::q_of(\1)->"))
 # 0.1.29: sycl::free takes void*; NativeEmbed frees a const device pointer.
 edit("src/core/native_head.cpp", lambda s: s.replace("sycl::free(dev_, dpct::get_in_order_queue())", "sycl::free((void *) dev_, dpct::get_in_order_queue())"))
 
@@ -326,7 +326,7 @@ for p in sorted((root / "src" / "kernels").glob("*_parity.cpp")):
 # 0.1.39 (#423, tmking01): generate.cpp's stage_room (the expert cache of every later stage of a layer split) lost its
 # cudaMemGetInfo in the migration - the DPCT1106 note stayed, the call did not - so every later GPU read 0 bytes free.
 edit("src/program/generate.cpp", sub(
-    r"(    const strata::core::OnDevice on\(dev\);\n        size_t fb = 0, tb = 0;\n)(?!        dpct::get_current_device)",
+    r"(    const cortex::core::OnDevice on\(dev\);\n        size_t fb = 0, tb = 0;\n)(?!        dpct::get_current_device)",
     r"\1        dpct::get_current_device().get_memory_info(fb, tb);   // #423 (tmking01): dpct dropped cudaMemGetInfo here\n"))
 
 # A770: only subgroup row zero reaches the native router's synchronization.
@@ -337,6 +337,6 @@ edit("src/kernels/cuda/native_router.dp.cpp", lambda s: s.replace(
 
 # MtpDrafter: CUDA's `cudaStream_t cs_ = nullptr` came out as the device's default in-order queue. A drafter that never
 # loads (no --mtp) kept it, and its destructor waited on and destroyed that queue: exit 139 after the output.
-edit("include/strata/core/mtp.hpp", lambda s: s.replace(
+edit("include/cortex/core/mtp.hpp", lambda s: s.replace(
     "    dpct::queue_ptr cs_ = &dpct::get_in_order_queue();\n",
     "    dpct::queue_ptr cs_ = nullptr;   // load() creates it; not the device's queue, which ~MtpDrafter would destroy\n"))

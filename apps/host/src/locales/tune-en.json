@@ -22,7 +22,7 @@
  "tune21": "This PC changed since it was tuned, so these settings are not used until you tune again.",
  "tune22": "This PC or the engine changed since it was tuned. A short check takes about 2 minutes.",
  "tune23": "No saved tuning for these choices yet.",
- "tune24": "Strata tries different settings on this PC and keeps the ones that make answers faster. Your model is unloaded while this runs, and the computer will be busy.",
+ "tune24": "Cortex tries different settings on this PC and keeps the ones that make answers faster. Your model is unloaded while this runs, and the computer will be busy.",
  "tune25": "Finish the current operation first.",
  "tune26": "How long to spend",
  "tune27": "Quick (about 20 minutes)",

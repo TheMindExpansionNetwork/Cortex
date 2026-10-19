@@ -7,8 +7,8 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/kernels/qsa.hpp"
-#include "strata/kernels/qsa_select.hpp"
+#include "cortex/kernels/qsa.hpp"
+#include "cortex/kernels/qsa_select.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -17,7 +17,7 @@
 #include <random>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 void ck(dpct::err0 e, const char *w) {

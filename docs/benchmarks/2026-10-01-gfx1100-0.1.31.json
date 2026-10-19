@@ -2,7 +2,7 @@
   "source_commit": "9259cad4cfa3543cd3b8decab5962672b968c649",
   "date": "2026-10-01",
   "candidate_binary_sha256": "17f60a01ff553593af813b2ded8b288179ee9285d8a270a10b90f6bb63e5de1d",
-  "note": "Strata 0.1.31 vs 0.1.30 on one RX 7900 XTX (gfx1100), same pack (coder-iq1_m) and settings; sequential same-config runs about an hour apart, not interleaved. Throughput cap 128; not a coding-quality benchmark.",
+  "note": "Cortex 0.1.31 vs 0.1.30 on one RX 7900 XTX (gfx1100), same pack (coder-iq1_m) and settings; sequential same-config runs about an hour apart, not interleaved. Throughput cap 128; not a coding-quality benchmark.",
   "control": [
     {
       "kind": "warmup",

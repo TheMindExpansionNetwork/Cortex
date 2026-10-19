@@ -15,8 +15,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from strata_cli.cli import main
-from strata_control import calibration, journal, management, profiles, runtime
+from cortex_cli.cli import main
+from cortex_control import calibration, journal, management, profiles, runtime
 import setup
 
 
@@ -32,17 +32,17 @@ class CalibrationFlowTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        patcher = mock.patch.dict(os.environ, {"STRATA_PROFILE_DIR": str(self.root / "profiles"),
-                                           "STRATA_RUNTIME_DIR": str(self.root / "runtime"),
+        patcher = mock.patch.dict(os.environ, {"CORTEX_PROFILE_DIR": str(self.root / "profiles"),
+                                           "CORTEX_RUNTIME_DIR": str(self.root / "runtime"),
                                            "XDG_CONFIG_HOME": str(self.root / "settings"),
                                            "APPDATA": str(self.root / "settings"),
-                                           "STRATA_API_KEY": ""})
+                                           "CORTEX_API_KEY": ""})
         patcher.start()
         self.addCleanup(patcher.stop)
-        # setup's own answer: <XDG_CONFIG_HOME>/strata/settings.json, or %APPDATA%/Strata/settings.json on Windows
+        # setup's own answer: <XDG_CONFIG_HOME>/cortex/settings.json, or %APPDATA%/Cortex/settings.json on Windows
         self.settings_file = setup.settings_path()
         self.assertTrue(str(self.settings_file).startswith(str(self.root)), "settings must stay in the temp tree")
-        engine = self.root / "strata-engine"
+        engine = self.root / "cortex-engine"
         engine.write_bytes(b"fake engine")
         engine.chmod(0o700)
         tokenizer = self.root / "tokenizer"
@@ -58,10 +58,10 @@ class CalibrationFlowTests(unittest.TestCase):
                                            "cwd": str(self.root), "model_name": "test-model", "port": 8095}),
                                encoding="utf-8")
         profiles.create("local", str(self.config))
-        hardware = mock.patch("strata_control.calibration._hardware_key", return_value="test-gpu|24GB|test-cpu")
+        hardware = mock.patch("cortex_control.calibration._hardware_key", return_value="test-gpu|24GB|test-cpu")
         hardware.start()
         self.addCleanup(hardware.stop)
-        port = mock.patch("strata_control.calibration._port_active", return_value=False)
+        port = mock.patch("cortex_control.calibration._port_active", return_value=False)
         port.start()
         self.addCleanup(port.stop)
 
@@ -88,7 +88,7 @@ class CalibrationFlowTests(unittest.TestCase):
         self.assertEqual(created["job_id"], measure_id)
         self.assertEqual(send("calibration.job", {"job_id": measure_id})["job"]["state"], "launching")
         with mock.patch("tools.calibrate.run", side_effect=self.fake_result), \
-                mock.patch("strata_control.calibration._smoke", return_value=2):
+                mock.patch("cortex_control.calibration._smoke", return_value=2):
             measured = send("calibration.measure", {**reviewed, "job_id": measure_id})
             self.assertEqual(measured["operation_id"], measure_id)
             recovered = send("calibration.job", {"job_id": measure_id})["job"]
@@ -135,7 +135,7 @@ class CalibrationFlowTests(unittest.TestCase):
         self.assertEqual(recovered["state"], "succeeded")
         self.assertEqual(recovered["outcome"], "report_recovered")
         self.assertEqual(journal.load("local", job_id)["state"], "succeeded")
-        result = subprocess.run([sys.executable, "-m", "strata_control.management"],
+        result = subprocess.run([sys.executable, "-m", "cortex_control.management"],
             input=json.dumps({"schema_version": 1, "action": "calibration.job", "profile": "local",
                               "params": {"job_id": job_id}}), text=True, capture_output=True,
             cwd=Path(__file__).resolve().parents[2], env=os.environ.copy(), check=True)
@@ -215,7 +215,7 @@ class CalibrationFlowTests(unittest.TestCase):
         def bridge(action):
             request = {"schema_version": 1, "action": action, "profile": "local",
                        "params": {"job_id": job_id}}
-            child = subprocess.run([sys.executable, "-m", "strata_control.management"],
+            child = subprocess.run([sys.executable, "-m", "cortex_control.management"],
                 input=json.dumps(request), text=True, capture_output=True,
                 cwd=Path(__file__).resolve().parents[2], env=os.environ.copy(), check=True)
             return json.loads(child.stdout)
@@ -251,7 +251,7 @@ class CalibrationFlowTests(unittest.TestCase):
             send("calibration.cancel", {"job_id": job_id})
 
     def test_pruning_finished_receipt_removes_progress_and_cancel_marker(self):
-        from strata_control import calibration_jobs
+        from cortex_control import calibration_jobs
 
         def send(action, params):
             return management.dispatch({"schema_version": 1, "action": action,
@@ -294,7 +294,7 @@ class CalibrationFlowTests(unittest.TestCase):
             send("calibration.measure", {**measure, "if_source_sha256": "0" * 64})
         self.assertEqual(journal.list_runs("local"), [])
         with mock.patch("tools.calibrate.run", side_effect=self.fake_result), \
-                mock.patch("strata_control.calibration._smoke", return_value=3):
+                mock.patch("cortex_control.calibration._smoke", return_value=3):
             measured = send("calibration.measure", measure)
             self.assertTrue(measured["ok"])
             self.assertTrue(measured["applicable"])
@@ -424,7 +424,7 @@ class CalibrationFlowTests(unittest.TestCase):
         finally:
             os.close(lease)
         self.assertEqual(self.config.read_bytes(), applied)
-        with mock.patch("strata_control.calibration._port_active", return_value=True):
+        with mock.patch("cortex_control.calibration._port_active", return_value=True):
             with self.assertRaisesRegex(profiles.ProfileError, "server is listening"):
                 calibration.rollback_result("local", report_path, exclusive_ack=True,
                                             smoke=lambda cfg: self.fail("rollback smoke ran"))
@@ -513,7 +513,7 @@ class CalibrationFlowTests(unittest.TestCase):
         previous = self.config.read_bytes()
         elsewhere = self.root / "elsewhere"
         elsewhere.mkdir()
-        (self.root / ".strata-calibration-backups").symlink_to(elsewhere, target_is_directory=True)
+        (self.root / ".cortex-calibration-backups").symlink_to(elsewhere, target_is_directory=True)
         with self.assertRaisesRegex(profiles.ProfileError, "owner-only and not a symlink"):
             calibration.apply_result("local", report_path, exclusive_ack=True, smoke=lambda cfg: 2)
         self.assertEqual(self.config.read_bytes(), previous)
@@ -537,7 +537,7 @@ class CalibrationFlowTests(unittest.TestCase):
                 raise OSError("simulated failure after config replacement")
             return original_replace(path, payload)
 
-        with mock.patch("strata_control.calibration._replace_bytes", side_effect=fail_restore):
+        with mock.patch("cortex_control.calibration._replace_bytes", side_effect=fail_restore):
             with self.assertRaisesRegex(profiles.ProfileError, "applied state restored"):
                 calibration.rollback_result("local", report_path, exclusive_ack=True, smoke=lambda cfg: 2)
         self.assertEqual(self.config.read_bytes(), current_config)
@@ -575,7 +575,7 @@ class CalibrationFlowTests(unittest.TestCase):
     def test_machine_cli_measure_review_apply_emits_one_json_record(self):
         report_path = self.root / "calibration.json"
         with mock.patch("tools.calibrate.run", side_effect=self.fake_result), \
-                mock.patch("strata_control.calibration._smoke", return_value=3):
+                mock.patch("cortex_control.calibration._smoke", return_value=3):
             for args, expected_key in ((["--measure", "--out", str(report_path), "--exclusive"], "report"),
                                        (["--review-result", str(report_path)], "review"),
                                        (["--apply-result", str(report_path), "--exclusive"], "application"),
@@ -614,7 +614,7 @@ class CalibrationFlowTests(unittest.TestCase):
         report_path = self.root / "calibration.json"
         calibration.measure("local", report_path, exclusive_ack=True, runner=self.fake_result, say=lambda _: None)
         output = io.StringIO()
-        with mock.patch("strata_control.calibration._smoke", side_effect=OSError("private engine trace")):
+        with mock.patch("cortex_control.calibration._smoke", side_effect=OSError("private engine trace")):
             with redirect_stdout(output):
                 code = main(["engine", "calibrate", "--profile", "local", "--apply-result",
                              str(report_path), "--exclusive", "--output", "json"])
@@ -628,11 +628,11 @@ class CalibrationFlowTests(unittest.TestCase):
         report_path = self.root / "calibration.json"
         with self.assertRaisesRegex(profiles.ProfileError, "exclusive-access"):
             calibration.measure("local", report_path, runner=self.fake_result)
-        with mock.patch("strata_control.calibration._port_active", return_value=True):
+        with mock.patch("cortex_control.calibration._port_active", return_value=True):
             with self.assertRaisesRegex(profiles.ProfileError, "server is listening"):
                 calibration.measure("local", report_path, exclusive_ack=True, runner=self.fake_result)
         profiles.set_values("local", ["port=9123"])
-        with mock.patch("strata_control.calibration._port_active",
+        with mock.patch("cortex_control.calibration._port_active",
                         side_effect=lambda cfg: cfg.get("port") == 9123) as checked:
             with self.assertRaisesRegex(profiles.ProfileError, "server is listening"):
                 calibration.measure("local", report_path, exclusive_ack=True, runner=self.fake_result)
@@ -705,7 +705,7 @@ class CalibrationFlowTests(unittest.TestCase):
                     raise OSError("simulated failure after settings replacement")
             return original_replace(path, payload)
 
-        with mock.patch("strata_control.calibration._replace_bytes", side_effect=fail_settings):
+        with mock.patch("cortex_control.calibration._replace_bytes", side_effect=fail_settings):
             with self.assertRaisesRegex(profiles.ProfileError, "config restored"):
                 calibration.apply_result("local", report_path, exclusive_ack=True, smoke=lambda cfg: 2)
         self.assertEqual(self.config.read_bytes(), source)

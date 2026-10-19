@@ -7,8 +7,8 @@
 
 | Repository | Revision | Role |
 | --- | --- | --- |
-| Strata (integration checkout) | branch `strata/rebuild-2026-10`, HEAD `e0951ce243511597eb243018191f194af9d5f8bc` | the product |
-| Strata (pristine reference) | `296b59d2` (`main`) | unchanged baseline |
+| Cortex (integration checkout) | branch `cortex/rebuild-2026-10`, HEAD `e0951ce243511597eb243018191f194af9d5f8bc` | the product |
+| Cortex (pristine reference) | `296b59d2` (`main`) | unchanged baseline |
 | DeepSeek Harness | `57190202` | agent loop and durable sessions |
 | HyperCore-Tune | `4f9ab7fa` | evaluated for tuning; decision D07 |
 | ggml (llama.cpp) | `3cf03257` | engine host sources |
@@ -18,14 +18,14 @@ No upstream drift: every pin above is the revision that was reviewed.
 
 ## Artifacts
 
-    DMG      apps/desktop/src-tauri/target/release/bundle/dmg/Strata_0.1.0_aarch64.dmg
+    DMG      apps/desktop/src-tauri/target/release/bundle/dmg/Cortex_0.1.0_aarch64.dmg
              sha256 e18c2f4ca60e0142177dc67789b63469f4365bca46860c284173d55b603766fd
              hdiutil verify VALID; packaged self-test 8/8 from inside the mounted image
-    Terminal release/artifacts/strata-terminal-0.1.44.1-darwin-arm64.tar.gz
+    Terminal release/artifacts/cortex-terminal-0.1.44.1-darwin-arm64.tar.gz
              bytes 42480892
              sha256 fafa0076fd30f9fa3d3f1250d8afbf39225bddb80e07a3d818bae2b01e2814d8
              self-contained: bundled CPython 3.12.15, verified with no usable system Python
-    Engine   build-metal/strata
+    Engine   build-metal/cortex
              sha256 aef25be339b60ad56d34c192847bd59e4351779eed6a1de9166f81836041ee3f
              built from source on this Mac; Metal kernel parity 17/17 with one known defect
 
@@ -52,7 +52,7 @@ written as `pending-hardware`.
 
 ## Exact limitations
 
-1. **Real-model inference has not run and cannot on this machine.** `include/strata/core/geometry.hpp`
+1. **Real-model inference has not run and cannot on this machine.** `include/cortex/core/geometry.hpp`
    fixes the compiled shape (n_embd 2560, 48 layers, 512 experts, vocab 248320), so no small or
    synthetic model is possible; the smallest pack is 37.6 GB mapped plus a 28.8 GB n-gram table, and
    `docs/MAC.md` measures 32 GB as the smallest tested Mac against this host's 16 GiB with ~21 GiB

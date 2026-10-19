@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Package the Windows HIP engine as the ready-made zip setup.py downloads (strata-windows-x64-hip.zip).
+"""Package the Windows HIP engine as the ready-made zip setup.py downloads (cortex-windows-x64-hip.zip).
 
     python tools/hip/package_windows.py --build build-hip-win --rocm <rocm-sdk path --root> \\
         --archs "gfx1100;gfx1201" --rocm-version 10.2.0a20260930 --out dist
 
 tools/hip/build_windows.bat runs it after the build.  The zip holds:
 
-    strata.exe, strata-device.exe, BUILD.json      (backend "hip", the archs, the ROCm and hipBLASLt versions)
-    strata-vision.exe, strata-vision-hip.exe       the picture readers when --vision-cpu / --vision-hip are given: the CPU reader
+    cortex.exe, cortex-device.exe, BUILD.json      (backend "hip", the archs, the ROCm and hipBLASLt versions)
+    cortex-vision.exe, cortex-vision-hip.exe       the picture readers when --vision-cpu / --vision-hip are given: the CPU reader
                                                    (the fallback; starts on any PC) and the GPU reader (tools/vision,
-                                                   STRATA_VISION_HIP; imports the same ROCm DLLs as strata.exe)
+                                                   CORTEX_VISION_HIP; imports the same ROCm DLLs as cortex.exe)
     amdhip64_7.dll, amd_comgr.dll + what they import   the HIP runtime beside the exes too (#468 #461: before System32)
     rocm/bin/*.dll                                 the ROCm DLLs the two programs load (their import tables, followed
                                                    through the ROCm DLLs, + amd_comgr.dll, which the HIP runtime loads
@@ -35,14 +35,14 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-ASSET = "strata-windows-x64-hip.zip"
-PROGRAMS = ("strata.exe", "strata-device.exe")
+ASSET = "cortex-windows-x64-hip.zip"
+PROGRAMS = ("cortex.exe", "cortex-device.exe")
 DYNAMIC = ("amd_comgr.dll",)                     # LoadLibrary'd by amdhip64_7.dll: not in any import table
 CRT = ("msvcp140.dll", "msvcp140_1.dll", "msvcp140_2.dll", "vcruntime140.dll", "vcruntime140_1.dll",
-       "msvcp140_atomic_wait.dll", "msvcp140_codecvt_ids.dll", "vcruntime140_threads.dll", "concrt140.dll")      # strata.exe imports msvcp140_atomic_wait.dll (VS 2022 std::atomic wait)
-KPACKS = ("blas_lib",)       # rocblas.dll's own device code; rocSOLVER's (27 MB per arch) is never launched by Strata
+       "msvcp140_atomic_wait.dll", "msvcp140_codecvt_ids.dll", "vcruntime140_threads.dll", "concrt140.dll")      # cortex.exe imports msvcp140_atomic_wait.dll (VS 2022 std::atomic wait)
+KPACKS = ("blas_lib",)       # rocblas.dll's own device code; rocSOLVER's (27 MB per arch) is never launched by Cortex
 LICENSES = ("rocblas", "rocsolver", "hipblas", "hipblas-common", "hipblaslt", "amd_comgr", "rocm-core")
-NOTICE = """Strata's Windows HIP engine ships these AMD ROCm components unmodified, from AMD's TheRock Python wheels
+NOTICE = """Cortex's Windows HIP engine ships these AMD ROCm components unmodified, from AMD's TheRock Python wheels
 (ROCm {rocm}, https://nightly.repo.amd.com/rocm/whl-next/, built from https://github.com/ROCm/TheRock):
 
 {dlls}
@@ -76,13 +76,13 @@ def main() -> int:
     ap.add_argument("--archs", required=True, help="the archs the engine was compiled for, ';'-separated")
     ap.add_argument("--rocm-version", required=True)
     ap.add_argument("--out", required=True, type=Path)
-    ap.add_argument("--vision-cpu", type=Path, help="strata-vision.exe built for the CPU (tools/vision, STRATA_PORTABLE=ON)")
-    ap.add_argument("--vision-hip", type=Path, help="strata-vision-hip.exe built for the same archs (STRATA_VISION_HIP=ON)")
+    ap.add_argument("--vision-cpu", type=Path, help="cortex-vision.exe built for the CPU (tools/vision, CORTEX_PORTABLE=ON)")
+    ap.add_argument("--vision-hip", type=Path, help="cortex-vision-hip.exe built for the same archs (CORTEX_VISION_HIP=ON)")
     a = ap.parse_args()
     archs = [x for x in re.split(r"[;, ]+", a.archs) if x]
     rbin = a.rocm / "bin"
     objdump = a.rocm / "lib" / "llvm" / "bin" / "llvm-objdump.exe"
-    stage = a.out / "strata-windows-x64-hip"
+    stage = a.out / "cortex-windows-x64-hip"
     shutil.rmtree(stage, ignore_errors=True)
     (stage / "rocm" / "bin").mkdir(parents=True)
 
@@ -159,7 +159,7 @@ def main() -> int:
     (lic / "NOTICE.txt").write_text(NOTICE.format(rocm=a.rocm_version, dlls="\n".join("  " + d for d in shipped)),
                                     encoding="utf-8")
 
-    version = re.search(r"project\(strata VERSION ([\d.]+)", (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")).group(1)
+    version = re.search(r"project\(cortex VERSION ([\d.]+)", (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")).group(1)
     hl = (a.rocm / "include" / "hipblaslt" / "hipblaslt-version.h").read_text(encoding="utf-8")
     hlv = [int(re.search(rf"#define\s+HIPBLASLT_VERSION_{k}\s+(\d+)", hl).group(1)) for k in ("MAJOR", "MINOR", "PATCH")]
     meta = {"source": "prebuilt", "backend": "hip", "platform": "windows-x64", "version": version, "archs": archs,

@@ -74,7 +74,7 @@ class QuietPromptCancel(unittest.TestCase):
             real_popen = server.subprocess.Popen
             with mock.patch.object(server.subprocess, 'Popen', lambda cmd, **kw:
                                    real_popen([sys.executable, str(script), *cmd[1:]], **kw)):
-                engine = server.StrataEngine('strata', ['--batch', str(batch), '--events', str(events)])
+                engine = server.CortexEngine('cortex', ['--batch', str(batch), '--events', str(events)])
             service = server.Service(engine, server.ByteTokenizer(),
                                      server.ChatTemplate(Path(__file__).parent / 'chat_template.jinja'))
             http = server.serve(service, port=0)
@@ -166,7 +166,7 @@ class QuietPromptCancel(unittest.TestCase):
 
 class QuietWaitPolicy(unittest.TestCase):
     def test_expired_silence_is_not_a_heartbeat(self):
-        engine = object.__new__(server.StrataEngine)
+        engine = object.__new__(server.CortexEngine)
         engine.proc = mock.Mock()
         engine.proc.poll.return_value = None
         engine.proc.stdin = io.StringIO()
@@ -193,7 +193,7 @@ class QuietWaitPolicy(unittest.TestCase):
     def test_polling_keeps_ten_second_heartbeats(self):
         for control in (False, True):
             with self.subTest(control=control):
-                engine = object.__new__(server.StrataEngine)
+                engine = object.__new__(server.CortexEngine)
                 engine.proc = mock.Mock()
                 engine.proc.poll.return_value = None
                 engine.proc.stdin = io.StringIO()

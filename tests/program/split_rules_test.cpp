@@ -3,9 +3,9 @@
 #include <cstdlib>
 #include <vector>
 
-#include "strata/program/split_rules.hpp"
+#include "cortex/program/split_rules.hpp"
 
-using namespace strata::program::split_rules;
+using namespace cortex::program::split_rules;
 
 static int failed = 0;
 #define CHECK(x) do { if (!(x)) { std::fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x); ++failed; } } while (0)

@@ -9,7 +9,7 @@ files, and this is the boundary.
 
 - **A file tree** — `treerow` per node, directories expandable, sizes on files,
   a `Select` for workspace root.
-- **A "What Strata may touch" card** — the scope explanation.
+- **A "What Cortex may touch" card** — the scope explanation.
 - **Filters** — a few `Select` controls and a search field.
 
 ## Where it falls short

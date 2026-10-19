@@ -1,4 +1,4 @@
-"""Owner question 2026-10-18: a PC with an RTX 5060 Ti (16 GB) and an AMD R9700 (32 GB). Every Strata engine drives the cards of ONE make
+"""Owner question 2026-10-18: a PC with an RTX 5060 Ti (16 GB) and an AMD R9700 (32 GB). Every Cortex engine drives the cards of ONE make
 (CUDA: NVIDIA, HIP: AMD), so one model is never split across makes, only the cards the engine can drive are offered, a bigger card of the
 other make is mentioned in one plain line, and two models at once (one per make) is said to be unsupported."""
 
@@ -10,10 +10,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from strata_cli.launch import cmd, settings as S
-from strata_cli.launch.runner import cards_for_launch
-from strata_cli.launch.screens import flow_for
-from strata_control import gpu_fit as G
+from cortex_cli.launch import cmd, settings as S
+from cortex_cli.launch.runner import cards_for_launch
+from cortex_cli.launch.screens import flow_for
+from cortex_control import gpu_fit as G
 from tests.terminal.launch_support import HW_12, Home, catalog
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,7 +24,7 @@ NV_2080TI = {"index": 0, "name": "NVIDIA GeForce RTX 2080 Ti", "vram_gb": 11.0, 
 NV_5070 = {"index": 1, "name": "NVIDIA GeForce RTX 5070", "vram_gb": 12.0, "usable": True, "vendor": "nvidia", "arch": "120"}
 NV_5070_ALONE = {**NV_5070, "index": 0}
 
-NOTE_AMD = "This computer also has an AMD AI PRO R9700 (32 GB). The AMD build of Strata can use it — it fits bigger models."
+NOTE_AMD = "This computer also has an AMD AI PRO R9700 (32 GB). The AMD build of Cortex can use it — it fits bigger models."
 
 
 class GpuFitMixes(unittest.TestCase):
@@ -36,7 +36,7 @@ class GpuFitMixes(unittest.TestCase):
         self.assertEqual(r["other_vendor_note"], NOTE_AMD)
         self.assertEqual(r["vendor"], "nvidia")
         self.assertEqual(len(r["ignored"]), 1)
-        self.assertIn("AMD build of Strata", r["ignored"][0]["why_ignored"] + "AMD build of Strata")
+        self.assertIn("AMD build of Cortex", r["ignored"][0]["why_ignored"] + "AMD build of Cortex")
         self.assertIn("needs the AMD build", r["ignored"][0]["why_ignored"])
 
     def test_amd_engine_offers_only_the_r9700_and_has_no_note_because_the_nvidia_card_is_smaller(self):
@@ -88,7 +88,7 @@ class LaunchMix(unittest.TestCase):
         self.home = Home().__enter__()
         self.addCleanup(self.home.__exit__, None, None, None)
         self.hw = {**HW_12, "gpus": [NV_5060TI, AMD_R9700]}
-        p = mock.patch("strata_cli.launch.catalog.Catalog.installed_backend", return_value=None)
+        p = mock.patch("cortex_cli.launch.catalog.Catalog.installed_backend", return_value=None)
         p.start()
         self.addCleanup(p.stop)
 
@@ -101,7 +101,7 @@ class LaunchMix(unittest.TestCase):
         self.assertEqual(len(flow_for(type("C", (), {"computer": comp}))), 9)       # no Cards step: one card the engine can drive
 
     def test_with_the_amd_engine_installed_the_r9700_counts_and_the_note_goes(self):
-        with mock.patch("strata_cli.launch.catalog.Catalog.installed_backend", return_value="hip"):
+        with mock.patch("cortex_cli.launch.catalog.Catalog.installed_backend", return_value="hip"):
             comp = catalog(self.hw).computer()
         self.assertEqual(comp.engine_vendor, "amd")
         self.assertEqual(comp.main_vram_gb, 32.0)
@@ -121,7 +121,7 @@ class LaunchMix(unittest.TestCase):
         self.assertIn("Card 2 is an AMD card", text)
         self.assertIn("cannot be split across NVIDIA and AMD cards", text)
         self.assertIn("one model at a time", text)
-        self.assertIn("install the AMD build of Strata", errors[0].next)
+        self.assertIn("install the AMD build of Cortex", errors[0].next)
 
     def test_cards_for_launch_never_returns_the_other_make(self):
         hw = {**HW_12, "ram_gb": 32.0, "gpus": [NV_5060TI, {**NV_5060TI, "index": 1}, {**AMD_R9700, "index": 2}]}
@@ -133,15 +133,15 @@ class LaunchMix(unittest.TestCase):
         cat = catalog(self.hw)
         mcp = cat.mcp
         hw = dict(self.hw)
-        mcp.Strata._engine_vendor(hw)
+        mcp.Cortex._engine_vendor(hw)
         self.assertEqual(hw["engine_vendor"], "nvidia")
         self.assertEqual(hw["gpu_note"], NOTE_AMD)
-        usable = cat.strata.engine_gpus(hw)
+        usable = cat.cortex.engine_gpus(hw)
         self.assertEqual([g["name"] for g in usable], ["NVIDIA GeForce RTX 5060 Ti"])
-        self.assertEqual(cat.strata.gpu_options({"ram_gb": 20, "arena_gb": 30, "download_gb": 30}, 62.0, hw),
+        self.assertEqual(cat.cortex.gpu_options({"ram_gb": 20, "arena_gb": 30, "download_gb": 30}, 62.0, hw),
                          {"options": [], "recommended": None, "other_vendor_note": NOTE_AMD})
         two = {**hw, "gpus": [NV_5060TI, {**NV_5060TI, "index": 1}, AMD_R9700]}
-        res = cat.strata.gpu_options({"ram_gb": 20, "arena_gb": 30, "download_gb": 30}, 62.0, two)
+        res = cat.cortex.gpu_options({"ram_gb": 20, "arena_gb": 30, "download_gb": 30}, 62.0, two)
         self.assertEqual({tuple(o["cards"]) for o in res["options"]}, {(0,), (0, 1), (1,)})
 
 

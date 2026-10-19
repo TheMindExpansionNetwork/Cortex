@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build and manage the thin, read-only Strata monitor zipapp.
+"""Build and manage the thin, read-only Cortex monitor zipapp.
 
 The bundle contains no engine, model, installer or terminal framework. One-shot
 JSON status uses stdlib only; interactive mode needs the explicit Textual add-on.
@@ -21,28 +21,28 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES_V2 = (
-    "strata_cli/__init__.py",
-    "strata_cli/client.py",
-    "strata_cli/connections.py",
-    "strata_cli/render.py",
-    "strata_cli/monitor.py",
-    "strata_cli/monitor_commands.py",
-    "strata_cli/logs.py",
+    "cortex_cli/__init__.py",
+    "cortex_cli/client.py",
+    "cortex_cli/connections.py",
+    "cortex_cli/render.py",
+    "cortex_cli/monitor.py",
+    "cortex_cli/monitor_commands.py",
+    "cortex_cli/logs.py",
 )
-SOURCES_V3 = (*SOURCES_V2, "strata_cli/dashboard.py")
-SOURCES_V4 = (*SOURCES_V3, "strata_cli/detail_dashboard.py")
-SOURCES_V5 = (*SOURCES_V4, "strata_cli/nav.py")      # schema 5: the view tabs every screen shares (strata_cli/nav.py)
-# schema 6: the two modules the interactive Monitor imports at run time (strata_cli/monitor.py, render.py) that earlier lists missed.
+SOURCES_V3 = (*SOURCES_V2, "cortex_cli/dashboard.py")
+SOURCES_V4 = (*SOURCES_V3, "cortex_cli/detail_dashboard.py")
+SOURCES_V5 = (*SOURCES_V4, "cortex_cli/nav.py")      # schema 5: the view tabs every screen shares (cortex_cli/nav.py)
+# schema 6: the two modules the interactive Monitor imports at run time (cortex_cli/monitor.py, render.py) that earlier lists missed.
 # tests/terminal/test_monitor_bundle.py derives the import closure of the bundle's entry point and fails if this list falls behind.
-SOURCES = (*SOURCES_V5, "strata_cli/consoleinfo.py", "strata_cli/overview.py")
-BOOTSTRAP = b"from strata_cli.monitor_commands import main\nraise SystemExit(main())\n"
+SOURCES = (*SOURCES_V5, "cortex_cli/consoleinfo.py", "cortex_cli/overview.py")
+BOOTSTRAP = b"from cortex_cli.monitor_commands import main\nraise SystemExit(main())\n"
 MEMBERS_V1 = ("__main__.py", *SOURCES_V2)
 LICENSE_NOTICE = "LICENSE"
 MEMBERS_V2 = (*MEMBERS_V1, LICENSE_NOTICE)
-MEMBERS_V3 = (*MEMBERS_V2, "strata_cli/dashboard.py")
-MEMBERS_V4 = (*MEMBERS_V3, "strata_cli/detail_dashboard.py")
-MEMBERS_V5 = (*MEMBERS_V4, "strata_cli/nav.py")
-MEMBERS = (*MEMBERS_V5, "strata_cli/consoleinfo.py", "strata_cli/overview.py")
+MEMBERS_V3 = (*MEMBERS_V2, "cortex_cli/dashboard.py")
+MEMBERS_V4 = (*MEMBERS_V3, "cortex_cli/detail_dashboard.py")
+MEMBERS_V5 = (*MEMBERS_V4, "cortex_cli/nav.py")
+MEMBERS = (*MEMBERS_V5, "cortex_cli/consoleinfo.py", "cortex_cli/overview.py")
 COMPATIBILITY = {"python_min": "3.10", "telemetry_schema": [1]}
 MAX_BUNDLE_BYTES = 1024 * 1024
 MAX_MANIFEST_BYTES = 64 * 1024
@@ -61,7 +61,7 @@ def build(bundle: Path) -> dict:
     if bundle.exists() or manifest_path(bundle).exists():
         raise FileExistsError("bundle or manifest already exists; choose a new output path")
     bundle.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=".strata-monitor-build-", dir=bundle.parent) as directory:
+    with tempfile.TemporaryDirectory(prefix=".cortex-monitor-build-", dir=bundle.parent) as directory:
         stage = Path(directory) / "source"
         stage.mkdir()
         (stage / "__main__.py").write_bytes(BOOTSTRAP)
@@ -75,10 +75,10 @@ def build(bundle: Path) -> dict:
                               compressed=True)
         with zipfile.ZipFile(temp_bundle) as archive:
             names = archive.namelist()
-            if set(names) != set((*MEMBERS, "strata_cli/")) or len(names) != len(MEMBERS) + 1:
+            if set(names) != set((*MEMBERS, "cortex_cli/")) or len(names) != len(MEMBERS) + 1:
                 raise ValueError("bundle member list changed during build")
             files = {name: digest(archive.read(name)) for name in MEMBERS}
-        report = {"schema_version": 6, "kind": "strata-monitor-bundle",
+        report = {"schema_version": 6, "kind": "cortex-monitor-bundle",
                   "bundle": bundle.name, "sha256": digest(temp_bundle.read_bytes()),
                   "files": files, "interactive_dependency": "textual==8.2.8",
                   "compatibility": COMPATIBILITY, "license": "MIT", "license_file": LICENSE_NOTICE,
@@ -101,7 +101,7 @@ def verify(bundle: Path) -> dict:
     report = json.loads(manifest_path(bundle).read_text())
     if (not isinstance(report, dict) or type(report.get("schema_version")) is not int or
             report["schema_version"] not in (1, 2, 3, 4, 5, 6) or
-            report.get("kind") != "strata-monitor-bundle" or
+            report.get("kind") != "cortex-monitor-bundle" or
             report.get("publisher_signature") is not None or
             report.get("bundle") != bundle.name or report.get("sha256") != digest(bundle.read_bytes())):
         raise ValueError("bundle manifest or SHA-256 mismatch")
@@ -113,7 +113,7 @@ def verify(bundle: Path) -> dict:
             raise ValueError("bundle compatibility or license notice mismatch")
     with zipfile.ZipFile(bundle) as archive:
         names = archive.namelist()
-        if len(names) != len(members) + 1 or set(names) != set((*members, "strata_cli/")):
+        if len(names) != len(members) + 1 or set(names) != set((*members, "cortex_cli/")):
             raise ValueError("bundle contains missing, duplicate or unexpected files")
         if any(info.flag_bits & 1 for info in archive.infolist()):
             raise ValueError("encrypted bundle members are unsupported")
@@ -163,7 +163,7 @@ def _installed(target: Path) -> tuple[Path, dict]:
 
 
 def _stage_copy(bundle: Path, report: dict, target: Path) -> Path:
-    stage = Path(tempfile.mkdtemp(prefix=".strata-monitor-install-", dir=target.parent))
+    stage = Path(tempfile.mkdtemp(prefix=".cortex-monitor-install-", dir=target.parent))
     try:
         staged_bundle = stage / bundle.name
         shutil.copyfile(bundle, staged_bundle, follow_symlinks=False)
@@ -264,7 +264,7 @@ def rollback(target: Path, *, plan: bool = False,
         return result
     if if_active_sha256 != active["sha256"] or if_rollback_sha256 != prior["sha256"]:
         raise ValueError("monitor rollback digests changed or are missing; preview again")
-    swap = Path(tempfile.mkdtemp(prefix=".strata-monitor-swap-", dir=target.parent))
+    swap = Path(tempfile.mkdtemp(prefix=".cortex-monitor-swap-", dir=target.parent))
     if os.name == "nt":
         # os.rename onto an existing directory fails on Windows (POSIX replaces an empty one):
         # keep only the unique name mkdtemp reserved.
@@ -330,7 +330,7 @@ def uninstall(target: Path, *, plan: bool = False,
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Build or locally manage a thin Strata monitor bundle")
+    ap = argparse.ArgumentParser(description="Build or locally manage a thin Cortex monitor bundle")
     sp = ap.add_subparsers(dest="action", required=True)
     sp.add_parser("build").add_argument("bundle", type=Path)
     sp.add_parser("verify").add_argument("bundle", type=Path)

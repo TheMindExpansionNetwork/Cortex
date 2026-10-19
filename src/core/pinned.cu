@@ -1,7 +1,7 @@
 // src/core/pinned.cu - P2.S1: the pinned host arena and the parallel expert load.
-#include "strata/core/pinned.hpp"
-#include "strata/platform/memory.hpp"
-#include "strata/core/pin_budget.hpp"
+#include "cortex/core/pinned.hpp"
+#include "cortex/platform/memory.hpp"
+#include "cortex/core/pin_budget.hpp"
 
 #include <cuda_runtime.h>
 
@@ -21,9 +21,9 @@
 // Loader fix: `fseek`/`ftell` are 32-bit on Windows by default (and the pack is 42.9 GB), and the 64-bit
 // spelling is not the same on the two platforms the engine builds for.
 #ifdef _WIN32
-#define STRATA_FSEEK64(f, o) _fseeki64((f), (long long) (o), SEEK_SET)
+#define CORTEX_FSEEK64(f, o) _fseeki64((f), (long long) (o), SEEK_SET)
 #else
-#define STRATA_FSEEK64(f, o) fseeko((f), (off_t) (o), SEEK_SET)
+#define CORTEX_FSEEK64(f, o) fseeko((f), (off_t) (o), SEEK_SET)
 #endif
 
 #ifdef _WIN32
@@ -39,12 +39,12 @@
 #endif
 #endif
 
-namespace strata::core {
+namespace cortex::core {
 
 namespace {
 
 constexpr uint64_t kSharedArenaHeaderBytes = 4096;
-constexpr char kSharedArenaMagic[16] = "STRATA-ARENA-V1";
+constexpr char kSharedArenaMagic[16] = "CORTEX-ARENA-V1";
 
 struct SharedArenaHeader {
     char magic[16];
@@ -119,8 +119,8 @@ void* reserve(uint64_t bytes, PageBacking& got, std::string& note, const std::st
     // MEM_LARGE_PAGES needs SeLockMemoryPrivilege; a normal account does not have it and VirtualAlloc then
     // fails with ERROR_PRIVILEGE_NOT_HELD.  That is the EXPECTED outcome on a desktop, not an error.
     SIZE_T large = GetLargePageMinimum();
-    // A/B switch: STRATA_NO_LARGEPAGES=1 skips the large-page attempt, same run, same boot.
-    if (large > 0 && std::getenv("STRATA_NO_LARGEPAGES") == nullptr) {
+    // A/B switch: CORTEX_NO_LARGEPAGES=1 skips the large-page attempt, same run, same boot.
+    if (large > 0 && std::getenv("CORTEX_NO_LARGEPAGES") == nullptr) {
         // MEM_LARGE_PAGES requires the allocation size to be an exact multiple of the large page size -
         // anything else is ERROR_INVALID_PARAMETER (87), which reads like a privilege problem but is not.
         // Round up: the slack is under 2 MB and the tail stays unused.
@@ -137,8 +137,8 @@ void* reserve(uint64_t bytes, PageBacking& got, std::string& note, const std::st
         note = "large pages refused for " + std::to_string((unsigned long long) lbytes) + " B (GetLargePageMinimum=" +
                std::to_string((unsigned long long) large) + ", VirtualAlloc error " +
                std::to_string((unsigned long long) GetLastError()) + "); using 4 KB pages";
-    } else if (std::getenv("STRATA_NO_LARGEPAGES") != nullptr) {
-        note = "large pages skipped (STRATA_NO_LARGEPAGES); using 4 KB pages";
+    } else if (std::getenv("CORTEX_NO_LARGEPAGES") != nullptr) {
+        note = "large pages skipped (CORTEX_NO_LARGEPAGES); using 4 KB pages";
     } else {
         note = "this system has no large-page minimum; using 4 KB pages";
     }
@@ -234,10 +234,10 @@ void* reserve(uint64_t bytes, PageBacking& got, std::string& note, const std::st
         return (uint8_t*) map + kSharedArenaHeaderBytes;
     }
 
-    // STRATA_NO_LARGEPAGES=1 is the same-run A/B switch the Windows branch documents; honor it
+    // CORTEX_NO_LARGEPAGES=1 is the same-run A/B switch the Windows branch documents; honor it
     // here too, so the large-page path can be compared without changing the pool or rebooting.
-    if (std::getenv("STRATA_NO_LARGEPAGES") != nullptr) {
-        note = "large pages skipped (STRATA_NO_LARGEPAGES); using 4 KB pages";
+    if (std::getenv("CORTEX_NO_LARGEPAGES") != nullptr) {
+        note = "large pages skipped (CORTEX_NO_LARGEPAGES); using 4 KB pages";
     } else {
         void* p = mmap(nullptr, bytes, PROT_READ | PROT_WRITE,
                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | MAP_HUGE_2MB, -1, 0);
@@ -275,8 +275,8 @@ void* reserve(uint64_t bytes, PageBacking& got, std::string& note, const std::st
     void* p = (void*) aligned;
     // #771: with THP "always" the kernel already backs this mapping with huge pages where it can; the extra
     // MADV_HUGEPAGE only adds direct reclaim and compaction on every fault (defrag=madvise), which on a fragmented
-    // machine stretched a 25 s start to 432 s.  So it is not asked for there.  STRATA_NO_ARENA_THP=1 skips it
-    // anywhere (the request alone; STRATA_NO_LARGEPAGES also skips the hugetlb try).
+    // machine stretched a 25 s start to 432 s.  So it is not asked for there.  CORTEX_NO_ARENA_THP=1 skips it
+    // anywhere (the request alone; CORTEX_NO_LARGEPAGES also skips the hugetlb try).
     std::string thp_mode;
     if (std::FILE* f = std::fopen("/sys/kernel/mm/transparent_hugepage/enabled", "r")) {
         char line[128] = {0};
@@ -287,28 +287,28 @@ void* reserve(uint64_t bytes, PageBacking& got, std::string& note, const std::st
         }
         std::fclose(f);
     }
-    const bool skip_thp_request = std::getenv("STRATA_NO_ARENA_THP") != nullptr || thp_mode == "always";
-    if (std::getenv("STRATA_NO_LARGEPAGES") == nullptr && skip_thp_request) {
+    const bool skip_thp_request = std::getenv("CORTEX_NO_ARENA_THP") != nullptr || thp_mode == "always";
+    if (std::getenv("CORTEX_NO_LARGEPAGES") == nullptr && skip_thp_request) {
         const std::string four_k = "; using 4 KB pages";
         if (note.size() >= four_k.size() && note.compare(note.size() - four_k.size(), four_k.size(), four_k) == 0)
             note.resize(note.size() - four_k.size());
-        note += std::getenv("STRATA_NO_ARENA_THP") != nullptr
-                    ? "; transparent huge pages skipped (STRATA_NO_ARENA_THP)"
+        note += std::getenv("CORTEX_NO_ARENA_THP") != nullptr
+                    ? "; transparent huge pages skipped (CORTEX_NO_ARENA_THP)"
                     : "; transparent huge pages are on for every mapping (THP always): MADV_HUGEPAGE not requested";
-    } else if (std::getenv("STRATA_NO_LARGEPAGES") == nullptr && std::getenv("STRATA_ARENA_THP") == nullptr &&
+    } else if (std::getenv("CORTEX_NO_LARGEPAGES") == nullptr && std::getenv("CORTEX_ARENA_THP") == nullptr &&
                free_huge_bytes() < bytes / 2) {
         // #2126: THP "madvise" + defrag "madvise" makes every fault of a MADV_HUGEPAGE mapping reclaim and compact
         // until it finds a 2 MiB block.  When less than half of the arena could be backed by blocks that are free
         // now (a 62 GB box holding 47 GB of anonymous memory: 148K failed compactions, 100% system time, the load
-        // never ended), that is minutes of kernel work per GiB for a TLB gain.  Said, and STRATA_ARENA_THP=1 asks for it anyway.
+        // never ended), that is minutes of kernel work per GiB for a TLB gain.  Said, and CORTEX_ARENA_THP=1 asks for it anyway.
         const std::string four_k = "; using 4 KB pages";
         if (note.size() >= four_k.size() && note.compare(note.size() - four_k.size(), four_k.size(), four_k) == 0)
             note.resize(note.size() - four_k.size());
         note += "; transparent huge pages NOT requested: only " + std::to_string(free_huge_bytes() >> 30) +
                 " GiB of free 2 MiB blocks for a " + std::to_string(bytes >> 30) +
-                " GiB arena, compaction would stall the load (STRATA_ARENA_THP=1 requests them anyway) (#2126)";
-        std::fprintf(stderr, "strata: expert arena: %s\n", note.c_str());   // said now: the load that follows can take minutes
-    } else if (std::getenv("STRATA_NO_LARGEPAGES") == nullptr && madvise(p, bytes, MADV_HUGEPAGE) == 0) {
+                " GiB arena, compaction would stall the load (CORTEX_ARENA_THP=1 requests them anyway) (#2126)";
+        std::fprintf(stderr, "cortex: expert arena: %s\n", note.c_str());   // said now: the load that follows can take minutes
+    } else if (std::getenv("CORTEX_NO_LARGEPAGES") == nullptr && madvise(p, bytes, MADV_HUGEPAGE) == 0) {
         const std::string four_k = "; using 4 KB pages";
         if (note.size() >= four_k.size() && note.compare(note.size() - four_k.size(), four_k.size(), four_k) == 0)
             note.resize(note.size() - four_k.size());
@@ -344,7 +344,7 @@ bool clear_error() { (void) cudaGetLastError(); return true; }
 }  // namespace
 
 int arena_pin_cap_gib() {
-    const char* e = std::getenv("STRATA_ARENA_PIN_GIB");
+    const char* e = std::getenv("CORTEX_ARENA_PIN_GIB");
     if (e == nullptr || *e == '\0') return -1;
     if (std::string(e) == "auto") return -2;   // #243: the Windows shared-memory budget sets the sliced pin's cap
     const int v = std::atoi(e);
@@ -366,7 +366,7 @@ bool sliced_pin_limit(uint64_t& limit, std::string& why) {
     uint64_t budget = 0, usage = 0;
     std::string err = "no CUDA device properties";
     if (cudaGetDevice(&dev) == cudaSuccess && cudaGetDeviceProperties(&p, dev) == cudaSuccess &&
-        strata::platform::gpu_shared_memory_budget(p.luid, budget, usage, err)) {
+        cortex::platform::gpu_shared_memory_budget(p.luid, budget, usage, err)) {
         limit = budget > usage + 4 * GiB ? budget - usage - 4 * GiB : 0;
         std::snprintf(buf, sizeof buf, "the GPU's shared-memory budget %.1f GiB - %.1f GiB in use - 4 GiB",
                       (double) budget / GiB, (double) usage / GiB);
@@ -374,7 +374,7 @@ bool sliced_pin_limit(uint64_t& limit, std::string& why) {
         return true;
     }
     (void) cudaGetLastError();
-    const uint64_t ram = strata::platform::total_physical_memory();
+    const uint64_t ram = cortex::platform::total_physical_memory();
     if (ram == 0) return false;
     limit = ram / 2 > 8 * GiB ? ram / 2 - 8 * GiB : 0;
     std::snprintf(buf, sizeof buf, "%s: RAM/2 - 8 GiB of %.1f GiB", err.c_str(), (double) ram / GiB);
@@ -411,13 +411,13 @@ PinnedArena::PinnedArena(uint64_t bytes, const std::vector<uint64_t>& bounds,
     // Register with CUDA BEFORE any page is touched: cudaHostRegister pins what is resident now, and a region
     // that has already been faulted in page by page is far more expensive to register and may fail outright.
     if (base) {
-        // #243: STRATA_ARENA_PIN_GIB=N caps the registration from the start where the caller set no cap
+        // #243: CORTEX_ARENA_PIN_GIB=N caps the registration from the start where the caller set no cap
         const int env_gib = arena_pin_cap_gib();
         uint64_t cap = max_pinned_bytes;
         std::string cap_why = "by the engine (multi-GPU under WDDM, or remote experts)";
         if (cap == 0 && env_gib > 0) {
             cap = (uint64_t) env_gib << 30;
-            cap_why = "by STRATA_ARENA_PIN_GIB";
+            cap_why = "by CORTEX_ARENA_PIN_GIB";
         }
         const bool capped = cap > 0 && cap < bytes && bounds.size() >= 2;
         const cudaError_t e = capped ? cudaSuccess :
@@ -433,7 +433,7 @@ PinnedArena::PinnedArena(uint64_t bytes, const std::vector<uint64_t>& bounds,
             uint64_t limit = cap;
             std::string limit_why;
 #ifdef _WIN32
-            // #243 (opt-in, STRATA_ARENA_PIN_GIB=auto): not up to the driver's refusal but below the shared-memory
+            // #243 (opt-in, CORTEX_ARENA_PIN_GIB=auto): not up to the driver's refusal but below the shared-memory
             // budget, for a PC where the full sliced pin leaves WDDM refusing later allocations.  Not the default: a
             // 64 GB PC pins 30 GiB past that budget without trouble, and capping it at 26 cost ~20% prompt speed.
             if (!capped && env_gib == -2) limited = sliced_pin_limit(limit, limit_why);
@@ -454,16 +454,16 @@ PinnedArena::PinnedArena(uint64_t bytes, const std::vector<uint64_t>& bounds,
             note = (capped ? "cudaHostRegister limited to " + std::to_string(cap >> 30) + " GiB " + cap_why + "; " :
                              "cudaHostRegister of the whole arena FAILED (" + std::string(cudaGetErrorString(e)) + "); " +
                              (limited ? "slices capped at " + std::string(gib) + " GiB (" + limit_why +
-                                        "; STRATA_ARENA_PIN_GIB=auto; N sets a cap; #243); " : std::string())) +
+                                        "; CORTEX_ARENA_PIN_GIB=auto; N sets a cap; #243); " : std::string())) +
                    std::to_string(registered_slices) + " slices pinned (" + std::to_string(registered_bytes >> 30) +
                    " GiB); " + note;
             if (registered_bytes < bytes) {
-                const char* env = std::getenv("STRATA_ARENA_LOCK");
+                const char* env = std::getenv("CORTEX_ARENA_LOCK");
                 if (backing == PageBacking::LargePages) {   // #779: large pages cannot be paged out: nothing to lock
                     note = "large pages are resident without a lock; " + note;
                 } else if (env == nullptr || std::string(env) != "0") {
-                    const strata::platform::LockResult lr =
-                        strata::platform::lock_resident((uint8_t*) base + registered_bytes, bytes - registered_bytes);
+                    const cortex::platform::LockResult lr =
+                        cortex::platform::lock_resident((uint8_t*) base + registered_bytes, bytes - registered_bytes);
                     locked_bytes = lr.locked_bytes;
                     note = lr.note + "; " + note;
                 }
@@ -485,16 +485,16 @@ PinnedArena::PinnedArena(uint64_t bytes, const std::vector<uint64_t>& bounds,
             (void) cudaGetLastError();
             // Plan v0.3 P0.1: keep it RESIDENT instead. Unpinned, Windows trims the arena under memory pressure
             // and the CPU pool's rate then depends on the OS; locking it through the working set needs no
-            // special privilege. STRATA_ARENA_LOCK=0 is the A/B arm.
-            const char* env = std::getenv("STRATA_ARENA_LOCK");
+            // special privilege. CORTEX_ARENA_LOCK=0 is the A/B arm.
+            const char* env = std::getenv("CORTEX_ARENA_LOCK");
             if (backing == PageBacking::LargePages) {       // #779: large pages cannot be paged out: nothing to lock
                 note = "large pages are resident without a lock; " + note;
             } else if (env == nullptr || std::string(env) != "0") {
-                const strata::platform::LockResult lr = strata::platform::lock_resident(base, bytes);
+                const cortex::platform::LockResult lr = cortex::platform::lock_resident(base, bytes);
                 locked_bytes = lr.locked_bytes;
                 note = lr.note + "; " + note;
             } else {
-                note = "arena lock disabled (STRATA_ARENA_LOCK=0); " + note;
+                note = "arena lock disabled (CORTEX_ARENA_LOCK=0); " + note;
             }
         }
     }
@@ -512,14 +512,14 @@ PinnedArena::PinnedArena(uint64_t bytes, ByNeed, const std::vector<std::pair<uin
     }
     if (base == nullptr) return;
     // Register BEFORE any page is touched (see the first constructor).  Same caps as there: the engine's
-    // `max_pinned_bytes`, else STRATA_ARENA_PIN_GIB=N (> 0); "auto" (-2) is the sliced pin's and does not apply.
+    // `max_pinned_bytes`, else CORTEX_ARENA_PIN_GIB=N (> 0); "auto" (-2) is the sliced pin's and does not apply.
     const int env_gib = arena_pin_cap_gib();
     uint64_t cap = max_pinned_bytes;
     if (cap == 0 && env_gib > 0) cap = (uint64_t) env_gib << 30;
 #ifdef _WIN32
     // WDDM: the pin must leave margin (the budget is ~RAM/2 and later cudaMallocs need room).  Unset: 29 GiB;
     // "auto" (-2): the sliced pin's shared-memory-budget limit (29 GiB when it cannot be worked out);
-    // STRATA_ARENA_PIN_GIB=0 ("the whole arena"): no cap, up to the driver's refusal.
+    // CORTEX_ARENA_PIN_GIB=0 ("the whole arena"): no cap, up to the driver's refusal.
     if (cap == 0 && env_gib != 0) {
         uint64_t lim = 0;
         std::string why;
@@ -570,16 +570,16 @@ PinnedArena::PinnedArena(uint64_t bytes, ByNeed, const std::vector<std::pair<uin
     note = "pin by need: " + std::to_string(pin_ranges.size()) + " ranges registered (" + std::to_string(total >> 20) +
            " MiB)" + (refused ? ", the driver refused the next one" : capped ? ", the cap was reached" : "") +
            "; " + note;
-    const char* env = std::getenv("STRATA_ARENA_LOCK");
+    const char* env = std::getenv("CORTEX_ARENA_LOCK");
     if (backing == PageBacking::LargePages) {   // #779: large pages cannot be paged out: nothing to lock
         note = "large pages are resident without a lock; " + note;
         locked_ranges.clear();
     } else if (env != nullptr && std::string(env) == "0") {
-        note = "arena lock disabled (STRATA_ARENA_LOCK=0); " + note;
+        note = "arena lock disabled (CORTEX_ARENA_LOCK=0); " + note;
         locked_ranges.clear();
     } else {
         for (const auto& r : locked_ranges) holes.emplace_back((uint8_t*) base + r.first, r.second);
-        const strata::platform::LockResult lr = strata::platform::lock_resident_ranges(holes);
+        const cortex::platform::LockResult lr = cortex::platform::lock_resident_ranges(holes);
         locked_bytes = lr.locked_bytes;
         note = lr.note + " (" + std::to_string(hole_bytes >> 20) + " MiB of holes); " + note;
         // a partial lock is unlocked region by region in the destructor; what it did not reach was never locked
@@ -616,12 +616,12 @@ void PinnedArena::register_slices(std::atomic<int>& ready) {
     note = "cudaHostRegister per layer, pipelined with the load: " + std::to_string(registered_slices) + " of " +
            std::to_string(n) + " slices pinned; " + note;
     if (i < n && base != nullptr) {   // the rest stays resident through the working-set lock, as the sliced fallback does
-        const char* env = std::getenv("STRATA_ARENA_LOCK");
+        const char* env = std::getenv("CORTEX_ARENA_LOCK");
         if (backing == PageBacking::LargePages) {           // #779: large pages cannot be paged out: nothing to lock
             note = "large pages are resident without a lock; " + note;
         } else if (env == nullptr || std::string(env) != "0") {
-            const strata::platform::LockResult lr =
-                strata::platform::lock_resident((uint8_t*) base + registered_bytes, capacity - registered_bytes);
+            const cortex::platform::LockResult lr =
+                cortex::platform::lock_resident((uint8_t*) base + registered_bytes, capacity - registered_bytes);
             locked_bytes = lr.locked_bytes;
             note = lr.note + "; " + note;
         }
@@ -631,7 +631,7 @@ void PinnedArena::register_slices(std::atomic<int>& ready) {
 
 PinnedArena::~PinnedArena() {
     if (base && by_need) {
-        for (const auto& r : locked_ranges) strata::platform::unlock_resident((uint8_t*) base + r.first, r.second);
+        for (const auto& r : locked_ranges) cortex::platform::unlock_resident((uint8_t*) base + r.first, r.second);
         for (const auto& r : pin_ranges) pin_unregister((uint8_t*) base + r.first);
         release(mapping_base ? mapping_base : base, mapping_bytes ? mapping_bytes : capacity);
         base = nullptr;
@@ -640,7 +640,7 @@ PinnedArena::~PinnedArena() {
         return;
     }
     if (base) {
-        if (locked_bytes) strata::platform::unlock_resident((uint8_t*) base + (slice_bytes ? registered_bytes : 0), locked_bytes);
+        if (locked_bytes) cortex::platform::unlock_resident((uint8_t*) base + (slice_bytes ? registered_bytes : 0), locked_bytes);
         if (slice_bytes) {
             for (uint64_t off : slice_starts) pin_unregister((uint8_t*) base + off);
         } else {
@@ -737,9 +737,9 @@ LoadStats load_experts_direct(const std::string& path, uint8_t* dst, const std::
 
 bool experts_unbuffered(const std::vector<std::string>& files, uint64_t arena_bytes, std::string& why,
                         bool cache_counts, uint64_t read_bytes) {
-    const char* env = std::getenv("STRATA_UNBUFFERED_LOAD");
+    const char* env = std::getenv("CORTEX_UNBUFFERED_LOAD");
     if (env != nullptr && env[0] != '\0') {
-        why = std::string("STRATA_UNBUFFERED_LOAD=") + env;
+        why = std::string("CORTEX_UNBUFFERED_LOAD=") + env;
         return env[0] != '0';
     }
 #ifdef _WIN32
@@ -785,7 +785,7 @@ bool experts_unbuffered(const std::vector<std::string>& files, uint64_t arena_by
     const uint64_t avail = ms.ullAvailPhys;
     // what the cache could keep beside the arena (~4 GiB for everything else)
     const uint64_t need = read_bytes == kAllFileBytes ? total_bytes : read_bytes;
-    const bool keepable = strata::platform::file_cache_keeps(avail, arena_bytes, need);
+    const bool keepable = cortex::platform::file_cache_keeps(avail, arena_bytes, need);
     char msg[256];
     if (read_bytes == kAllFileBytes)
         std::snprintf(msg, sizeof msg, "%d of %d probe reads from the file cache; %.1f GiB available, %.1f GiB of files",
@@ -860,7 +860,7 @@ LoadStats load_experts_ranges(const std::string& path, uint8_t* dst, const std::
             uint64_t pos = 0;
             uint64_t h = 1469598103934665603ull;
             // 64-bit seek: the pack is 42.9 GB, so the 32-bit `fseek` would wrap past 4 GiB
-            if (STRATA_FSEEK64(f, off) != 0) {
+            if (CORTEX_FSEEK64(f, off) != 0) {
                 std::lock_guard<std::mutex> g(err_mu);
                 err = "seek to " + std::to_string(off) + " B failed in layer " + std::to_string(L);
                 return;
@@ -956,4 +956,4 @@ StreamStats stream_bandwidth(const uint8_t* src, uint64_t bytes, uint64_t chunk,
     return st;
 }
 
-}  // namespace strata::core
+}  // namespace cortex::core

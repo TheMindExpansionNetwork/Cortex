@@ -1,4 +1,4 @@
-// src/kernels/pf_wmma_parity.cpp - gemm_iq_f16_grouped (the Volta prompt experts, STRATA_PF_WMMA) against a double
+// src/kernels/pf_wmma_parity.cpp - gemm_iq_f16_grouped (the Volta prompt experts, CORTEX_PF_WMMA) against a double
 // reference over the same FP16 weights (iq_dequant_f16, the FP16 path's dequantization) and FP16 activations.
 //
 //     build/pf_wmma_parity            (needs a CUDA GPU with FP16 tensor cores: sm_70+; synthetic blobs, no model)
@@ -8,7 +8,7 @@
 // 200 and 300 rows (one past the 256-row chunk); the rows placed past a nonzero first bound.  The sums are FP32 on
 // tensor cores in another order than the reference, so the check is a tolerance: max |got - ref| <= 2e-3 * (max |ref|
 // of the matrix) + 1e-6.
-#include "strata/kernels/iq_kernels.hpp"
+#include "cortex/kernels/iq_kernels.hpp"
 
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
@@ -21,7 +21,7 @@
 #include <random>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 

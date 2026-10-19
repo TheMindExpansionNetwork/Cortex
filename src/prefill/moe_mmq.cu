@@ -1,23 +1,23 @@
-// src/prefill/moe_mmq.cu - see include/strata/prefill/moe_mmq.hpp.  llama.cpp's MMQ (ggml-cuda, MIT) is compiled
+// src/prefill/moe_mmq.cu - see include/cortex/prefill/moe_mmq.hpp.  llama.cpp's MMQ (ggml-cuda, MIT) is compiled
 // from the pinned llama.cpp checkout the build already takes ggml from; src/prefill/ggml_cuda_host.cu supplies the
 // few host symbols of ggml-cuda.cu it references.
-#include "strata/prefill/moe_mmq.hpp"
+#include "cortex/prefill/moe_mmq.hpp"
 
 #include "common.cuh"
 #include "mmq.cuh"
 #include "quantize.cuh"
-#if defined(STRATA_MMQ_TAB) && !defined(__HIPCC__)
+#if defined(CORTEX_MMQ_TAB) && !defined(__HIPCC__)
 #include "moe_mmq_tab.hpp"   // declarations only: the tab kernels live in the per-type mmq-tab-*.cu TUs
 #endif
 
-#include "strata/prefill/mmq_kq_abi.hpp"
+#include "cortex/prefill/mmq_kq_abi.hpp"
 
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
-namespace strata::prefill::mmq {
+namespace cortex::prefill::mmq {
 namespace {
 // The Gyro trellis types (ids 144-146) are outside the type table of an upstream ggml (indexed by the id): their block
 // geometry is known here (128 weights; 34 / 26 / 30 bytes), everything else asks ggml.
@@ -28,21 +28,21 @@ inline const char* type_label(int t) {
     return t == 144 ? "tq2_t" : t == 145 ? "tqk6" : t == 146 ? "tqk7" : ggml_type_name((ggml_type) t);
 }
 }  // namespace
-#if defined(STRATA_KQ_DSO)
+#if defined(CORTEX_KQ_DSO)
 namespace kq {
 int abi_args_size() { return (int) sizeof(mmq_args); }
 }  // namespace kq
 #endif
 namespace {
-#if defined(STRATA_MMQ_KQUANTS)
-// MODEL-UPDATE Phase 1: the K-quant products through MMQ are opt-in at run time (STRATA_MMQ_KQ=1); on CUDA their
-// kernels are the strata_kq library (mmq_kq_loader.cpp), opened only then
+#if defined(CORTEX_MMQ_KQUANTS)
+// MODEL-UPDATE Phase 1: the K-quant products through MMQ are opt-in at run time (CORTEX_MMQ_KQ=1); on CUDA their
+// kernels are the cortex_kq library (mmq_kq_loader.cpp), opened only then
 bool kq_ok() {
-#if defined(STRATA_KQ_DSO)
+#if defined(CORTEX_KQ_DSO)
     return kq::available();
 #else
     static const bool on = [] {
-        const char* v = std::getenv("STRATA_MMQ_KQ");
+        const char* v = std::getenv("CORTEX_MMQ_KQ");
         return v != nullptr && v[0] == '1';
     }();
     return on;
@@ -103,10 +103,10 @@ __global__ void copy1_kernel(const uint8_t* __restrict__ a, int64_t na, const ui
     else if (i < na + nb + nc) c_dst[i - na - nb] = c[i - na - nb];
 }
 
-// Strata blob: gate/up codes [1280][640 B], down codes [2560][160 B], gate/up scales [1280][40] f16, down scales
+// Cortex blob: gate/up codes [1280][640 B], down codes [2560][160 B], gate/up scales [1280][40] f16, down scales
 // [2560][10] f16 (the layout of prefill/kernels.cu's blob_dequant_kernel).  A GGUF Q2_0 block is {f16 d; 16 code
 // bytes} with the same 2-bit codes in the same order, so a block is a scale and a 16-byte run of codes.
-__global__ void strata_q2_kernel(const uint8_t* __restrict__ blob, uint16_t* __restrict__ gu, uint16_t* __restrict__ dn) {
+__global__ void cortex_q2_kernel(const uint8_t* __restrict__ blob, uint16_t* __restrict__ gu, uint16_t* __restrict__ dn) {
     constexpr size_t O_D_CODES = (size_t) 1280 * 640, O_GU_SC = O_D_CODES + (size_t) 2560 * 160,
                      O_D_SC = O_GU_SC + (size_t) 1280 * 40 * 2;
     const int64_t i = (int64_t) blockIdx.x * blockDim.x + threadIdx.x;   // one GGUF block
@@ -187,10 +187,10 @@ __global__ void set_bounds_kernel(int32_t* d, int32_t rows) {
 
 unsigned blocks(int64_t n) { return (unsigned) ((n + 255) / 256); }
 
-#if defined(STRATA_MMQ_TAB) && !defined(__HIPCC__)
-// STRATA_MMQ_DIRECT: a group's guards (y < g.n, byte stores) and its two zero tails (y == g.n: gate/up, y == g.n + 1:
+#if defined(CORTEX_MMQ_TAB) && !defined(__HIPCC__)
+// CORTEX_MMQ_DIRECT: a group's guards (y < g.n, byte stores) and its two zero tails (y == g.n: gate/up, y == g.n + 1:
 // down; uint4 stores when `tail16`, which the host checked: both pointers and the size 16-byte aligned).  Only in a
-// STRATA_MMQ_TAB build: the engine loads every kernel at start (EAGER), so a build without it keeps today's image.
+// CORTEX_MMQ_TAB build: the engine loads every kernel at start (EAGER), so a build without it keeps today's image.
 __global__ void prep_group_kernel(GuardTab g, int64_t guard, uint8_t* tail_gu, uint8_t* tail_d, int64_t tail, bool tail16) {
     const int y = (int) blockIdx.y;
     const int64_t i = (int64_t) blockIdx.x * blockDim.x + threadIdx.x;
@@ -207,24 +207,24 @@ __global__ void prep_group_kernel(GuardTab g, int64_t guard, uint8_t* tail_gu, u
     }
 }
 
-// the pointer-table MMQ per type: the native packs' nine types (CMake's _strata_mmq_tab_types, all of them checked
+// the pointer-table MMQ per type: the native packs' nine types (CMake's _cortex_mmq_tab_types, all of them checked
 // bit for bit by prefill_mmq_tab_test).  false: no instance - the optional Q5_0 and K-quant experts keep the gather
 bool run_tab(ggml_backend_cuda_context* ctx, const mmq_args* a, const mmq_x_tab* tab, cudaStream_t s) {
     const ggml_type t = a ? a->type_x : GGML_TYPE_COUNT;
-#define STRATA_TAB_CASE(T) case T: return ctx == nullptr || mul_mat_q_tab_case<T>(*ctx, *a, *tab, s)
+#define CORTEX_TAB_CASE(T) case T: return ctx == nullptr || mul_mat_q_tab_case<T>(*ctx, *a, *tab, s)
     switch (t) {
-        STRATA_TAB_CASE(GGML_TYPE_Q2_0);
-        STRATA_TAB_CASE(GGML_TYPE_IQ2_XXS);
-        STRATA_TAB_CASE(GGML_TYPE_IQ2_XS);
-        STRATA_TAB_CASE(GGML_TYPE_IQ2_S);
-        STRATA_TAB_CASE(GGML_TYPE_IQ3_XXS);
-        STRATA_TAB_CASE(GGML_TYPE_IQ3_S);
-        STRATA_TAB_CASE(GGML_TYPE_IQ4_NL);
-        STRATA_TAB_CASE(GGML_TYPE_IQ4_XS);
-        STRATA_TAB_CASE(GGML_TYPE_Q8_0);
+        CORTEX_TAB_CASE(GGML_TYPE_Q2_0);
+        CORTEX_TAB_CASE(GGML_TYPE_IQ2_XXS);
+        CORTEX_TAB_CASE(GGML_TYPE_IQ2_XS);
+        CORTEX_TAB_CASE(GGML_TYPE_IQ2_S);
+        CORTEX_TAB_CASE(GGML_TYPE_IQ3_XXS);
+        CORTEX_TAB_CASE(GGML_TYPE_IQ3_S);
+        CORTEX_TAB_CASE(GGML_TYPE_IQ4_NL);
+        CORTEX_TAB_CASE(GGML_TYPE_IQ4_XS);
+        CORTEX_TAB_CASE(GGML_TYPE_Q8_0);
         default: return false;
     }
-#undef STRATA_TAB_CASE
+#undef CORTEX_TAB_CASE
 }
 // whether run_tab has an instance for type t (no launch)
 bool tab_has_type(int t) {
@@ -234,7 +234,7 @@ bool tab_has_type(int t) {
 }
 #else
 bool run_tab(ggml_backend_cuda_context*, const mmq_args*, const void*, cudaStream_t) {
-    std::fprintf(stderr, "prefill mmq: this build has no pointer-table MMQ (STRATA_MMQ_TAB)\n");
+    std::fprintf(stderr, "prefill mmq: this build has no pointer-table MMQ (CORTEX_MMQ_TAB)\n");
     std::exit(1);
 }
 bool tab_has_type(int) { return false; }
@@ -254,11 +254,11 @@ bool built() { return true; }
 
 Nvfp4Mode nvfp4_mode() {
     static const Nvfp4Mode m = [] {
-        const char* e = std::getenv("STRATA_PREFILL_NVFP4");
+        const char* e = std::getenv("CORTEX_PREFILL_NVFP4");
         if (e == nullptr || std::strcmp(e, "w4a8") == 0) return Nvfp4Mode::W4A8;
         if (std::strcmp(e, "w4a4") == 0) return Nvfp4Mode::W4A4;
         if (std::strcmp(e, "fp16") == 0) return Nvfp4Mode::FP16;
-        std::fprintf(stderr, "STRATA_PREFILL_NVFP4=%s: expected w4a8, w4a4 or fp16\n", e);
+        std::fprintf(stderr, "CORTEX_PREFILL_NVFP4=%s: expected w4a8, w4a4 or fp16\n", e);
         std::exit(1);
     }();
     return m;
@@ -267,18 +267,18 @@ Nvfp4Mode nvfp4_mode() {
 bool supported(int t) {
     switch ((ggml_type) t) {
         case GGML_TYPE_Q2_0:
-#ifdef STRATA_ORCA_Q4KS_MMQ
-        case GGML_TYPE_Q5_0:   // #296 (Q4_K and Q5_1: STRATA_MMQ_KQUANTS)
+#ifdef CORTEX_ORCA_Q4KS_MMQ
+        case GGML_TYPE_Q5_0:   // #296 (Q4_K and Q5_1: CORTEX_MMQ_KQUANTS)
 #endif
         case GGML_TYPE_IQ2_XXS: case GGML_TYPE_IQ2_XS: case GGML_TYPE_IQ2_S:
         case GGML_TYPE_IQ3_XXS: case GGML_TYPE_IQ3_S: case GGML_TYPE_IQ4_NL: case GGML_TYPE_IQ4_XS:
         case GGML_TYPE_Q8_0:   // the draft layer's dense matrices (E-9)
-#ifdef STRATA_MMQ_TQ
+#ifdef CORTEX_MMQ_TQ
         case GGML_TYPE_TQ2_T: case GGML_TYPE_TQK6: case GGML_TYPE_TQK7:   // APR experts (agention fork's MMQ)
 #endif
             return true;
-#ifdef STRATA_MMQ_KQUANTS
-        // Unsloth's UD-Q4/Q5/Q6_K_XL experts; on HIP also the dense GGUF projections (STRATA_DENSE_MMQ)
+#ifdef CORTEX_MMQ_KQUANTS
+        // Unsloth's UD-Q4/Q5/Q6_K_XL experts; on HIP also the dense GGUF projections (CORTEX_DENSE_MMQ)
         case GGML_TYPE_Q4_K: case GGML_TYPE_Q5_K: case GGML_TYPE_Q5_1: case GGML_TYPE_Q6_K:
             return kq_ok();
 #endif
@@ -309,7 +309,7 @@ bool fits(int t, int64_t w_rows) {
             static bool said[GGML_TYPE_COUNT] = {};
             if (t >= 0 && t < GGML_TYPE_COUNT && !said[t]) {
                 said[t] = true;
-                std::fprintf(stderr, "strata: prompt kernels: llama.cpp's MMQ has no tile for %s (%lld rows) on GPU %d "
+                std::fprintf(stderr, "cortex: prompt kernels: llama.cpp's MMQ has no tile for %s (%lld rows) on GPU %d "
                                      "(cc %d, %zu bytes of shared memory per block): that product takes the non-MMQ path "
                                      "(#420)\n", type_label((int) t), (long long) w_rows, id, cc, smpbo);
             }
@@ -356,7 +356,7 @@ bool fp4_activations(int t) {
     if (t != GGML_TYPE_NVFP4 || nvfp4_mode() != Nvfp4Mode::W4A4) return false;
     static const bool on = [] {
         const bool ok = w4a4_available();
-        if (!ok) std::fprintf(stderr, "prefill mmq: STRATA_PREFILL_NVFP4=w4a4 needs an sm_12x card in a 12x build; W4A8\n");
+        if (!ok) std::fprintf(stderr, "prefill mmq: CORTEX_PREFILL_NVFP4=w4a4 needs an sm_12x card in a 12x build; W4A8\n");
         return ok;
     }();
     return on;
@@ -397,7 +397,7 @@ void quantize(const float* x, const int32_t* ids, void* xq, int t, int64_t cols,
 void quantize_scatter(const float* x, const int32_t* slot, const int32_t* src, void* xq, int t, int64_t cols, int64_t ld,
                       int64_t tokens, int k_used, void* stream) {
     if (tokens <= 0 || k_used <= 0) return;
-    static const bool gather = [] { const char* e = std::getenv("STRATA_QUANT_GATHER"); return e != nullptr && std::atoi(e) != 0; }();
+    static const bool gather = [] { const char* e = std::getenv("CORTEX_QUANT_GATHER"); return e != nullptr && std::atoi(e) != 0; }();
     if (gather) {
         quantize(x, src, xq, t, cols, ld, tokens * k_used, stream);
         return;
@@ -430,7 +430,7 @@ void Context::run(const Product& p, void* stream) {
             std::fprintf(stderr, "prefill mmq: a pointer table holds at most %d experts (got %d)\n", kGatherGroupMax, p.n);
             std::exit(1);
         }
-#if defined(STRATA_MMQ_TAB) && !defined(__HIPCC__)
+#if defined(CORTEX_MMQ_TAB) && !defined(__HIPCC__)
         mmq_x_tab tab{};
         for (int z = 0; z < p.n; ++z) tab.p[z] = (const char*) p.tab->p[z];
         if (!run_tab(&ctx, &a, &tab, s)) {
@@ -445,7 +445,7 @@ void Context::run(const Product& p, void* stream) {
         return;
     }
     switch (t) {
-#ifdef STRATA_ORCA_Q4KS_MMQ
+#ifdef CORTEX_ORCA_Q4KS_MMQ
         case GGML_TYPE_Q5_0: mul_mat_q_case<GGML_TYPE_Q5_0>(ctx, a, s); break;
 #endif
         case GGML_TYPE_Q2_0: mul_mat_q_case<GGML_TYPE_Q2_0>(ctx, a, s); break;
@@ -457,12 +457,12 @@ void Context::run(const Product& p, void* stream) {
         case GGML_TYPE_IQ4_NL: mul_mat_q_case<GGML_TYPE_IQ4_NL>(ctx, a, s); break;
         case GGML_TYPE_IQ4_XS: mul_mat_q_case<GGML_TYPE_IQ4_XS>(ctx, a, s); break;
         case GGML_TYPE_Q8_0: mul_mat_q_case<GGML_TYPE_Q8_0>(ctx, a, s); break;
-#ifdef STRATA_MMQ_TQ
+#ifdef CORTEX_MMQ_TQ
         case GGML_TYPE_TQ2_T: mul_mat_q_case<GGML_TYPE_TQ2_T>(ctx, a, s); break;
         case GGML_TYPE_TQK6: mul_mat_q_case<GGML_TYPE_TQK6>(ctx, a, s); break;
         case GGML_TYPE_TQK7: mul_mat_q_case<GGML_TYPE_TQK7>(ctx, a, s); break;
 #endif
-#if defined(STRATA_MMQ_KQUANTS) && defined(STRATA_KQ_DSO)
+#if defined(CORTEX_MMQ_KQUANTS) && defined(CORTEX_KQ_DSO)
         case GGML_TYPE_Q4_K: case GGML_TYPE_Q5_K: case GGML_TYPE_Q6_K: case GGML_TYPE_Q5_1: {
             const int e = kq::run((int) t, &a, s);
             if (e != 0) {
@@ -471,7 +471,7 @@ void Context::run(const Product& p, void* stream) {
             }
             break;
         }
-#elif defined(STRATA_MMQ_KQUANTS)
+#elif defined(CORTEX_MMQ_KQUANTS)
         case GGML_TYPE_Q4_K: mul_mat_q_case<GGML_TYPE_Q4_K>(ctx, a, s); break;
         case GGML_TYPE_Q5_K: mul_mat_q_case<GGML_TYPE_Q5_K>(ctx, a, s); break;
         case GGML_TYPE_Q6_K: mul_mat_q_case<GGML_TYPE_Q6_K>(ctx, a, s); break;
@@ -490,9 +490,9 @@ void Context::run(const Product& p, void* stream) {
     ck(cudaGetLastError(), "mul_mat_q");
 }
 
-// ---- STRATA_MMQ_DIRECT ----
+// ---- CORTEX_MMQ_DIRECT ----
 bool tab_built() {
-#if defined(STRATA_MMQ_TAB) && !defined(__HIPCC__)
+#if defined(CORTEX_MMQ_TAB) && !defined(__HIPCC__)
     return true;
 #else
     return false;
@@ -558,12 +558,12 @@ bool whole_tiles(int t, int64_t w_rows, int n_experts) {
 
 int direct_mode() {
     static const int mode = [] {
-        const char* v = std::getenv("STRATA_MMQ_DIRECT");
+        const char* v = std::getenv("CORTEX_MMQ_DIRECT");
         const int m = v ? std::atoi(v) : 0;
         if (m != 1 && m != 2) return 0;
         if (!tab_built()) {
-            std::fprintf(stderr, "strata: STRATA_MMQ_DIRECT=%d is ignored: this build has no pointer-table MMQ "
-                                 "(CUDA with STRATA_MMQ_TAB only)\n", m);
+            std::fprintf(stderr, "cortex: CORTEX_MMQ_DIRECT=%d is ignored: this build has no pointer-table MMQ "
+                                 "(CUDA with CORTEX_MMQ_TAB only)\n", m);
             return 0;
         }
         return m;
@@ -574,10 +574,10 @@ int direct_mode() {
 size_t direct_slot_guard() { return direct_mode() != 0 ? kSlotGuard : 0; }
 
 void prep_group(const GuardTab& g, size_t guard_bytes, void* tail_gu, void* tail_d, size_t tail_bytes, void* stream) {
-#if !defined(STRATA_MMQ_TAB) || defined(__HIPCC__)
+#if !defined(CORTEX_MMQ_TAB) || defined(__HIPCC__)
     // never reached: only a direct group calls it, and direct_mode() is 0 without the pointer-table MMQ
     (void) g; (void) guard_bytes; (void) tail_gu; (void) tail_d; (void) tail_bytes; (void) stream;
-    std::fprintf(stderr, "prefill mmq: this build has no pointer-table MMQ (STRATA_MMQ_TAB)\n");
+    std::fprintf(stderr, "prefill mmq: this build has no pointer-table MMQ (CORTEX_MMQ_TAB)\n");
     std::exit(1);
 #else
     const int n = g.n > 0 ? std::min(g.n, kGatherGroupMax) : 0;
@@ -641,10 +641,10 @@ bool gather_native_group(const GatherGroup& g, size_t up_off, size_t gu_half_byt
     return true;
 }
 
-void gather_strata_q2(const uint8_t* blob, void* gu_dst, void* d_dst, void* stream) {
-    strata_q2_kernel<<<blocks(1280LL * 40 + 2560LL * 10), 256, 0, (cudaStream_t) stream>>>(blob, (uint16_t*) gu_dst,
+void gather_cortex_q2(const uint8_t* blob, void* gu_dst, void* d_dst, void* stream) {
+    cortex_q2_kernel<<<blocks(1280LL * 40 + 2560LL * 10), 256, 0, (cudaStream_t) stream>>>(blob, (uint16_t*) gu_dst,
                                                                                          (uint16_t*) d_dst);
-    ck(cudaGetLastError(), "gather_strata_q2");
+    ck(cudaGetLastError(), "gather_cortex_q2");
 }
 
 void swiglu_scaled(const float* gu, float* h, int64_t rows, int64_t n_ff, const int32_t* bounds, int n,
@@ -684,4 +684,4 @@ void set_bounds(int32_t* dst, int32_t rows, void* stream) {
 }
 #endif
 
-}  // namespace strata::prefill::mmq
+}  // namespace cortex::prefill::mmq

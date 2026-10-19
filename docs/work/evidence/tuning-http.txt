@@ -1,6 +1,6 @@
 # Tuning through the App Host HTTP API
 # repo: 79ead84224f6b6d982b9ca71b02f6a4174cb55e3
-# The job contract is Strata Control's (strata_control/tuning.py), driven through 'strata tune'.
+# The job contract is Cortex Control's (cortex_control/tuning.py), driven through 'cortex tune'.
 # The plan is computed from the SELECTED ENGINE BINARY's own --help output, so a sweep cannot
 # be offered a dimension the engine would refuse.
 

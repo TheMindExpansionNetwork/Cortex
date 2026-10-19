@@ -17,7 +17,7 @@ export function TaskEditor({ task, assistant = false, onClose, onSaved }: {
     const valid = !!editor.title.trim() && !!editor.prompt.trim();
     async function action(fn: () => Promise<unknown>) { setPending(true); setError(''); try {
         await fn();
-        window.dispatchEvent(new Event('strata:tasks'));
+        window.dispatchEvent(new Event('cortex:tasks'));
         onSaved?.();
     }
     catch (e) {
@@ -44,7 +44,7 @@ export function TaskEditor({ task, assistant = false, onClose, onSaved }: {
     <div className="form-stack task-editor-panel settings-tab-panel" role="tabpanel" id={`task-step-${step}`} aria-labelledby={`task-tab-${step}`}>
       {tr(step === 0 ? <>
         {tr(!editor.id && !ai && !!library?.loaded ? <button type="button" className="text-action task-ai-link" onClick={() => setAi(true)}><Icon name="thinking" size={14}/>{tr("Draft it with AI")}</button> : null)}
-        {tr(ai && !suggestion ? <div className="task-assistant"><label className="input-field"><span>{tr("What would you like Strata to do?")}</span><textarea className="st-input task-instructions" rows={5} value={description} onChange={e => setDescription(e.target.value)} placeholder={tr("Help me practise Spanish every morning…")}/></label><Btn disabled={!description.trim() || pending} onClick={() => void action(async () => { const draft = await api.post<{
+        {tr(ai && !suggestion ? <div className="task-assistant"><label className="input-field"><span>{tr("What would you like Cortex to do?")}</span><textarea className="st-input task-instructions" rows={5} value={description} onChange={e => setDescription(e.target.value)} placeholder={tr("Help me practise Spanish every morning…")}/></label><Btn disabled={!description.trim() || pending} onClick={() => void action(async () => { const draft = await api.post<{
                 draft: Task;
             }>('/api/tasks/draft', { description, timeZone: editor.timeZone }); setEditor({ ...editor, ...draft.draft }); setSuggestion(true); })}>{tr(pending ? 'Drafting…' : 'Suggest a task')}</Btn></div> : <>
           <label className="input-field"><span>{tr("Name")}</span><input className="st-input" maxLength={120} disabled={pending} value={editor.title} onChange={e => setEditor({ ...editor, title: e.target.value })}/></label>
@@ -56,7 +56,7 @@ export function TaskEditor({ task, assistant = false, onClose, onSaved }: {
         <div className="task-schedule"><div className="input-field"><span>{tr("Repeat")}</span><Select ariaLabel={tr("Repeat task")} value={editor.frequency} options={[{ value: 'hourly', label: 'Every hour' }, { value: 'daily', label: 'Every day' }, { value: 'weekdays', label: 'Weekdays' }, { value: 'weekly', label: 'Every week' }]} onChange={frequency => setEditor({ ...editor, frequency })}/></div>{tr(editor.frequency !== 'hourly' ? <label className="input-field"><span>{tr("Time")}</span><input type="time" className="st-input" disabled={pending} value={editor.at} onChange={e => setEditor({ ...editor, at: e.target.value })}/></label> : null)}{tr(editor.frequency === 'weekly' ? <div className="input-field"><span>{tr("Day")}</span><Select ariaLabel={tr("Day of week")} value={String(editor.weekday)} options={['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((label, i) => ({ value: String(i), label }))} onChange={v => setEditor({ ...editor, weekday: Number(v) })}/></div> : null)}</div>
         <div className="input-field"><span>{tr("What this task may do")}</span><Select ariaLabel={tr("What this task may do")} value={editor.mode ?? 'plan'} options={[{ value: 'plan', label: 'Look only, change nothing' }, { value: 'manual', label: 'Stop and tell me before changing anything' }, { value: 'bypass', label: 'Bypass permissions' }]} onChange={mode => setEditor({ ...editor, mode: mode as Task['mode'] })}/></div>
         <label className="row small"><input type="checkbox" disabled={pending} checked={editor.enabled} onChange={e => setEditor({ ...editor, enabled: e.target.checked })}/>{tr("Run on schedule")}</label>
-        <p className="xs muted">{tr(editor.timeZone)}{tr(" \u00B7 Missed runs are skipped while Strata is closed.")}</p>
+        <p className="xs muted">{tr(editor.timeZone)}{tr(" \u00B7 Missed runs are skipped while Cortex is closed.")}</p>
       </>)}
       {tr(error ? <ErrorNotice message={error}/> : null)}
     </div>

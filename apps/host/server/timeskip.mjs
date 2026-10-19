@@ -1,8 +1,8 @@
 /**
  * Time-skip, from the App Host.
  *
- * Strata Control owns the job: checkpointing, isolated candidates, the checks and the decision all
- * live in `strata_control/time_skip.py` and are driven through the `strata timeskip` CLI. This
+ * Cortex Control owns the job: checkpointing, isolated candidates, the checks and the decision all
+ * live in `cortex_control/time_skip.py` and are driven through the `cortex timeskip` CLI. This
  * module is only the bridge — it starts that command, streams its output, and reads back the durable
  * `run.json` the job writes.
  *
@@ -88,7 +88,7 @@ function summarise(run) {
 }
 
 const TERMINAL = new Set(['completed', 'cancelled', 'failed', 'interrupted']);
-const SKIP_DIRS = new Set(['.git', '.strata', '__pycache__', 'node_modules']);
+const SKIP_DIRS = new Set(['.git', '.cortex', '__pycache__', 'node_modules']);
 const MAX_TEXT_BYTES = 200_000;
 const MAX_LISTED = 60;
 const MAX_WITH_TEXT = 12;
@@ -282,14 +282,14 @@ export function diffRun(record) {
 }
 
 /**
- * Run one `strata timeskip …` command and collect its result.
+ * Run one `cortex timeskip …` command and collect its result.
  *
  * The command is given a bounded time. A Time-skip run can legitimately take many minutes (each
  * attempt is an agent turn), so the default bound is generous, and exceeding it is reported as a
  * timeout rather than as success.
  */
 export function createTimeSkip({ repoRoot, python, pythonArgs = [], timeoutMs = 30 * 60 * 1000, env = process.env } = {}) {
-  const cli = join(repoRoot, 'strata.py');
+  const cli = join(repoRoot, 'cortex.py');
 
   /** Runs this host started and is still driving. A run that is not terminal and not in here died with its host. */
   const live = new Map();
@@ -305,7 +305,7 @@ export function createTimeSkip({ repoRoot, python, pythonArgs = [], timeoutMs = 
       const child = spawn(python, [...pythonArgs, cli, ...args, '--output', 'json'], {
         cwd: repoRoot,
         windowsHide: true,
-        env: { ...env, STRATA_TIMESKIP_DIR: root },
+        env: { ...env, CORTEX_TIMESKIP_DIR: root },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       let stdout = '';
@@ -452,7 +452,7 @@ export function createTimeSkip({ repoRoot, python, pythonArgs = [], timeoutMs = 
         '--attempts', String(Math.max(0, Math.min(10, Number(attempts) || 0))), '--output', 'json'];
       if (reviseCommand) args.push('--revise-command', reviseCommand);
       const child = spawn(python, [...pythonArgs, cli, ...args], {
-        cwd: repoRoot, windowsHide: true, env: { ...env, ...extraEnv, STRATA_TIMESKIP_DIR: root }, stdio: ['ignore', 'pipe', 'pipe'],
+        cwd: repoRoot, windowsHide: true, env: { ...env, ...extraEnv, CORTEX_TIMESKIP_DIR: root }, stdio: ['ignore', 'pipe', 'pipe'],
       });
       let out = '', err = '', closed = null;
       child.stdout.on('data', b => { out += b.toString(); });

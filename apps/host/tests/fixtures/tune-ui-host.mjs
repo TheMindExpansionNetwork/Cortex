@@ -1,4 +1,4 @@
-/** Disposable UI fixture for the Tune model dialog: the real native control over fake models, and a pretend `strata` command that
+/** Disposable UI fixture for the Tune model dialog: the real native control over fake models, and a pretend `cortex` command that
  * reports progress and a result after a few seconds. No weights, no engine. Needs the demo host on 5161 and a built dist. */
 import http from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -15,7 +15,7 @@ function status() {
 }
 const stages = [[0, 'Measuring your current settings', 9], [2000, 'Trying: Run the control thread on the last CPU core (round 1 of 2)', 7], [4000, 'Trying: Pin memory only when needed (round 2 of 2)', 3]];
 const handler = (child, args) => {
-  const cmd = args.slice(args.findIndex(a => String(a).endsWith('strata.py')) + 1);
+  const cmd = args.slice(args.findIndex(a => String(a).endsWith('cortex.py')) + 1);
   const out = json => { child.stdout.emit('data', Buffer.from(JSON.stringify(json))); child.exitCode = 0; child.emit('exit', 0); child.emit('close', 0); };
   if (cmd[0] === 'presets') {
     if (cmd[1] === 'status') return out(status());

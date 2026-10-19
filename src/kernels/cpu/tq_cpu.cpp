@@ -1,8 +1,8 @@
-// src/kernels/cpu/tq_cpu.cpp - see include/strata/kernels/cpu/tq_cpu.hpp: the state table, the scalar reference
+// src/kernels/cpu/tq_cpu.cpp - see include/cortex/kernels/cpu/tq_cpu.hpp: the state table, the scalar reference
 // kernel, the activation unpacking and the run-time ISA choice.  Compiled for the baseline x86-64 (no AVX), so
 // everything here runs on any CPU; the AVX2 / AVX-512 kernels are in their own translation units.
-#include "strata/kernels/cpu/tq_cpu.hpp"
-#include "strata/kernels/cpu/expert_layout.hpp"
+#include "cortex/kernels/cpu/tq_cpu.hpp"
+#include "cortex/kernels/cpu/expert_layout.hpp"
 
 #include "tq_states.hpp"
 #include "ggml-common-tq.h"
@@ -18,10 +18,10 @@
 // The AVX2 / AVX-512 units (tq_avx2.cpp, tq_avx512.cpp) exist on x86-64 builds only; anything else (arm64: the Metal build)
 // runs the scalar kernel.
 #if defined(__x86_64__) || defined(_M_X64)
-#define STRATA_TQ_X86 1
+#define CORTEX_TQ_X86 1
 #endif
 
-namespace strata::kernels::cpu {
+namespace cortex::kernels::cpu {
 namespace {
 
 alignas(64) int16_t g_table[(tq_detail::kTqStateMask + 1) * 4];
@@ -40,7 +40,7 @@ void fill_table() {
 }
 
 int env_isa_cap() {
-    const char* e = std::getenv("STRATA_TQ_ISA");
+    const char* e = std::getenv("CORTEX_TQ_ISA");
     if (e == nullptr || *e == 0) return 2;
     const std::string v(e);
     if (v == "scalar") return 0;
@@ -94,7 +94,7 @@ bool tq_supported(int t) noexcept { return t == 144 || t == 145 || t == 146; }
 int tq_kbits(int t) noexcept { return t == 144 ? 8 : t == 145 ? 6 : t == 146 ? 7 : 0; }
 
 bool tq_isa_ok(TqIsa isa) {
-#if defined(STRATA_TQ_X86)
+#if defined(CORTEX_TQ_X86)
     switch (isa) {
         case TqIsa::avx512: return cpu_avx512_ok();
         case TqIsa::avx2: return cpu_avx2_ok();
@@ -117,7 +117,7 @@ TqIsa tq_isa() {
 
 bool tq_kernels_enabled() {
     static const bool on = [] {
-        if (const char* e = std::getenv("STRATA_NO_TQ_KERNELS"); e != nullptr && std::atoi(e) != 0) return false;
+        if (const char* e = std::getenv("CORTEX_NO_TQ_KERNELS"); e != nullptr && std::atoi(e) != 0) return false;
         // Every CPU runs them: the scalar kernel (baseline x86-64) where there is no AVX2.  A ggml built from upstream
         // has no vec_dot for the trellis types to fall back to, so a CPU without AVX2 must not be sent there.
         return true;
@@ -170,7 +170,7 @@ ActSet& unpack_all(const void* const* act, int n, int nt) {
 void rows_on(TqIsa isa, int kb, const uint8_t* w, size_t row_bytes, int n, const tq_detail::TqAct* const* a, int nt,
              float* const* out, int r0, int r1) {
     switch (isa) {
-#if defined(STRATA_TQ_X86)
+#if defined(CORTEX_TQ_X86)
         case TqIsa::avx512: tq_detail::tq_rows_avx512(kb, w, row_bytes, n, a, nt, out, r0, r1); break;
         case TqIsa::avx2: tq_detail::tq_rows_avx2(kb, w, row_bytes, n, a, nt, out, r0, r1); break;
 #endif
@@ -212,4 +212,4 @@ void tq_gu_rows(TqIsa isa, int ggml_type, const uint8_t* blob, size_t gu_row, si
         }
 }
 
-}  // namespace strata::kernels::cpu
+}  // namespace cortex::kernels::cpu

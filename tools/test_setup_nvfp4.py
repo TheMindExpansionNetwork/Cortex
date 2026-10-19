@@ -91,7 +91,7 @@ class ReadyPacks(unittest.TestCase):
 
     def test_config_name_reads_back_as_the_size(self):
         for model in ("NVFP4", "NVFP4-NVIDIA"):
-            cfg = self.root / f"strata-{(setup.FAMILIES['nvfp4']['tag'] + model).lower()}.json"
+            cfg = self.root / f"cortex-{(setup.FAMILIES['nvfp4']['tag'] + model).lower()}.json"
             cfg.write_text('{"args": ["--max-context", "32768"]}', encoding="utf-8")
             ch = setup.choices_from_config(cfg)
             self.assertEqual((ch["family"], ch["model"]), ("nvfp4", model))
@@ -219,7 +219,7 @@ class MockedInstall(unittest.TestCase):
         code, out, cfg, _ = self.run_install("128GB-1x24GB")
         self.assertEqual(code, 0, out[-2000:])
         a = cfg["args"]
-        self.assertTrue(self.flag(a, "--pack").endswith("Maximilian228--Qwen3.8-Flash-Next-NVFP4-GPTQ-Strata/pack"))
+        self.assertTrue(self.flag(a, "--pack").endswith("Maximilian228--Qwen3.8-Flash-Next-NVFP4-GPTQ-Cortex/pack"))
         dense = self.flag(a, "--native")
         self.assertTrue(dense.endswith("/qwen-nvfp4-gptq-dense.gguf"))
         self.assertEqual(self.flag(a, "--native-dense-gguf"), dense)
@@ -243,7 +243,7 @@ class MockedInstall(unittest.TestCase):
     def test_nvidia_size_and_its_license(self):
         code, out, cfg, _ = self.run_install("128GB-1x24GB", "NVFP4-NVIDIA")
         self.assertEqual(code, 0, out[-2000:])
-        self.assertIn("NVIDIA-NVFP4-Strata/pack", self.flag(cfg["args"], "--pack"))
+        self.assertIn("NVIDIA-NVFP4-Cortex/pack", self.flag(cfg["args"], "--pack"))
         self.assertIn("NVIDIA Open Model License", out)
 
     def test_qad_size_is_prepared_and_uses_its_own_files(self):
@@ -258,7 +258,7 @@ class MockedInstall(unittest.TestCase):
         self.assertNotIn("--embd-gguf", a)                  # its dense GGUF holds the token embedding
         self.assertTrue(self.flag(a, "--mtp").endswith(base + "/mtp/rt"))   # NVIDIA's own draft layer, not Qwen's
         self.assertIn("NVIDIA Open Model Agreement", out)
-        self.assertIn("turned into a Strata pack on this PC", out)
+        self.assertIn("turned into a Cortex pack on this PC", out)
 
     def test_qad_reads_pictures_with_its_prepared_dense_gguf(self):
         code, out, cfg, _ = self.run_install("128GB-1x24GB", "NVFP4-QAD", extra_argv=["--vision", "gpu"])

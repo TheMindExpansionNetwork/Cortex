@@ -3,11 +3,11 @@
  *
  * The Linux app starts the host itself (the "shell" process, which has no window) and shows the page in a separate window
  * process. WebKitGTK can crash that process on some computers; the shell then keeps the host running and opens the same page
- * in the default browser ("browser mode"). A person can also choose browser mode (`--browser`, STRATA_UI=browser).
+ * in the default browser ("browser mode"). A person can also choose browser mode (`--browser`, CORTEX_UI=browser).
  *
  *   mode 'window'   the app window shows the page; the window process registers the app updater here (Tauri's signed updater).
  *   mode 'browser'  an ordinary browser tab shows the page. There is no window process, so the app cannot update itself, and
- *                   closing the tab does not stop the engine: the menu has "Quit Strata" (POST /api/app/quit) and the command
+ *                   closing the tab does not stop the engine: the menu has "Quit Cortex" (POST /api/app/quit) and the command
  *                   line has `--quit`.
  *   mode null       not started by the app (the host run by hand, a test, a source checkout): nothing here applies.
  *
@@ -17,14 +17,14 @@
  *   window controls      none to offer: the browser has its own tab and window; the page never called the shell for them
  *   notifications        the page does not use the shell for them; the host sends the one desktop notification it needs (notify-send)
  *   app updater          NOT available: Tauri's updater lives in the window process. Settings says so in plain words and the
- *                        engine and component updates (Strata Control) still work.
+ *                        engine and component updates (Cortex Control) still work.
  */
 import { execFile, spawn } from 'node:child_process';
 import { externalEnvironment } from './external-env.mjs';
 import { createAppUpdater } from './app-updater.mjs';
 
 export const APP_UPDATE_UNAVAILABLE = 'app-update-unavailable';
-export const BROWSER_UPDATE_MESSAGE = "The Strata app itself can't be updated in browser mode. Start Strata from its icon, without --browser, to update it.";
+export const BROWSER_UPDATE_MESSAGE = "The Cortex app itself can't be updated in browser mode. Start Cortex from its icon, without --browser, to update it.";
 const BRIDGE_URL = /^http:\/\/127\.0\.0\.1:\d+$/;
 const MODES = new Set(['window', 'browser']);
 
@@ -55,14 +55,14 @@ export async function openInBrowser(url, { openers = OPENERS, start = startOpene
 /** One desktop notification (notify-send), best effort: no notification daemon or no notify-send is not an error. */
 export function sendNotification(message, { run = execFile, env = externalEnvironment() } = {}) {
   return new Promise(resolve => {
-    try { run('notify-send', ['--app-name=Strata', '--icon=dialog-information', 'Strata', message], { env, timeout: 5000 }, error => resolve(!error)); }
+    try { run('notify-send', ['--app-name=Cortex', '--icon=dialog-information', 'Cortex', message], { env, timeout: 5000 }, error => resolve(!error)); }
     catch { resolve(false); }
   });
 }
 
 export function createAppUi({ env = process.env, shutdown = () => {}, open = openInBrowser, notify = sendNotification, createUpdater = createAppUpdater } = {}) {
-  let mode = MODES.has(env.STRATA_UI_MODE) ? env.STRATA_UI_MODE : null;
-  let reason = mode === 'browser' ? (env.STRATA_UI_REASON || 'chosen') : null;
+  let mode = MODES.has(env.CORTEX_UI_MODE) ? env.CORTEX_UI_MODE : null;
+  let reason = mode === 'browser' ? (env.CORTEX_UI_REASON || 'chosen') : null;
   let bridge = null;
   const originalBridge = createUpdater({ env });   // the older way: the shell passed the bridge in the environment
 
@@ -86,10 +86,10 @@ export function createAppUi({ env = process.env, shutdown = () => {}, open = ope
     /** The window process hands over its updater bridge (a loopback address and a token). */
     setBridge({ url, token } = {}) {
       if (typeof url !== 'string' || !BRIDGE_URL.test(url) || typeof token !== 'string' || token.length < 16) throw new Error('That is not a bridge address.');
-      bridge = createUpdater({ env: { STRATA_SHELL_BRIDGE: url, STRATA_SHELL_TOKEN: token } });
+      bridge = createUpdater({ env: { CORTEX_SHELL_BRIDGE: url, CORTEX_SHELL_TOKEN: token } });
       return true;
     },
-    /** Open the page in the default browser without changing the mode (a second start while Strata runs). */
+    /** Open the page in the default browser without changing the mode (a second start while Cortex runs). */
     openPage: url => open(url),
     /** The shell moves everyone to a browser tab: the window could not start or has stopped. */
     async switchToBrowser({ url, reason: why = 'window-failed', notice = '', openPage = true } = {}) {
@@ -98,9 +98,9 @@ export function createAppUi({ env = process.env, shutdown = () => {}, open = ope
       if (notice) void notify(notice);
       return { mode, reason, opened };
     },
-    /** The "Quit Strata" menu entry: only in browser mode, where closing the tab leaves the engine running. */
+    /** The "Quit Cortex" menu entry: only in browser mode, where closing the tab leaves the engine running. */
     quit() {
-      if (mode !== 'browser') return { ok: false, status: 409, error: 'Close the Strata window to quit.' };
+      if (mode !== 'browser') return { ok: false, status: 409, error: 'Close the Cortex window to quit.' };
       setImmediate(() => void shutdown());
       return { ok: true, status: 202 };
     },

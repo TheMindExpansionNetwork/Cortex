@@ -38,12 +38,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-iq3_s.log",
+   "log": "<T>/cortex-iq3_s.log",
    "model_name": "qwen3.8-flash-next-iq3_s",
    "port": 8080,
    "tokenizer": "<T>/data/packs/iq3_s/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": true,
     "max_tokens": 1024,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -90,12 +90,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-iq3_xxs.log",
+   "log": "<T>/cortex-iq3_xxs.log",
    "model_name": "qwen3.8-flash-next-iq3_xxs",
    "port": 8080,
    "tokenizer": "<T>/data/packs/iq3_xxs/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": true,
     "max_tokens": 1024,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -142,12 +142,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-q2_0.log",
+   "log": "<T>/cortex-q2_0.log",
    "model_name": "qwen3.8-flash-next-q2_0",
    "port": 8080,
    "tokenizer": "<T>/data/packs/q2_0/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": true,
     "max_tokens": 1024,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -194,12 +194,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-iq3_s.log",
+   "log": "<T>/cortex-iq3_s.log",
    "model_name": "qwen3.8-flash-next-iq3_s",
    "port": 8080,
    "tokenizer": "<T>/data/packs/iq3_s/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": true,
     "max_tokens": 1024,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -239,8 +239,8 @@
    ],
    "cwd": "<T>",
    "env": {
-    "STRATA_HC_Q8": "1",
-    "STRATA_ROUTE_TAIL_SKIP": "0"
+    "CORTEX_HC_Q8": "1",
+    "CORTEX_ROUTE_TAIL_SKIP": "0"
    },
    "exe": "<T>/engine/<EXE>",
    "gpu": 0,
@@ -248,12 +248,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-unsloth-ud-q4_k_xl.log",
+   "log": "<T>/cortex-unsloth-ud-q4_k_xl.log",
    "model_name": "qwen3.8-flash-next-unsloth-ud-q4_k_xl",
    "port": 8080,
    "tokenizer": "<T>/data/packs/unsloth-ud-q4_k_xl/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": true,
     "max_tokens": 1024,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -303,12 +303,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-iq3_s.log",
+   "log": "<T>/cortex-iq3_s.log",
    "model_name": "qwen3.8-flash-next-iq3_s",
    "port": 8080,
    "tokenizer": "<T>/data/packs/iq3_s/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": true,
     "max_tokens": 1024,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -358,12 +358,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-iq3_xxs.log",
+   "log": "<T>/cortex-iq3_xxs.log",
    "model_name": "qwen3.8-flash-next-iq3_xxs",
    "port": 8080,
    "tokenizer": "<T>/data/packs/iq3_xxs/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": true,
     "max_tokens": 1024,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -409,12 +409,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-q2_0.log",
+   "log": "<T>/cortex-q2_0.log",
    "model_name": "qwen3.8-flash-next-q2_0",
    "port": 8080,
    "tokenizer": "<T>/data/packs/q2_0/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": true,
     "max_tokens": 1024,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -460,12 +460,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-iq3_xxs.log",
+   "log": "<T>/cortex-iq3_xxs.log",
    "model_name": "qwen3.8-flash-next-iq3_xxs",
    "port": 8080,
    "tokenizer": "<T>/data/packs/iq3_xxs/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": true,
     "max_tokens": 1024,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -505,7 +505,7 @@
    ],
    "cwd": "<T>",
    "env": {
-    "STRATA_HC_Q8": "1"
+    "CORTEX_HC_Q8": "1"
    },
    "exe": "<T>/engine/<EXE>",
    "gpu": 0,
@@ -513,12 +513,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-unsloth-ud-q4_k_xl.log",
+   "log": "<T>/cortex-unsloth-ud-q4_k_xl.log",
    "model_name": "qwen3.8-flash-next-unsloth-ud-q4_k_xl",
    "port": 8080,
    "tokenizer": "<T>/data/packs/unsloth-ud-q4_k_xl/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": true,
     "max_tokens": 1024,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -566,12 +566,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-iq3_s.log",
+   "log": "<T>/cortex-iq3_s.log",
    "model_name": "qwen3.8-flash-next-iq3_s",
    "port": 8080,
    "tokenizer": "<T>/data/packs/iq3_s/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": false,
     "max_tokens": 300,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -616,12 +616,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-iq3_xxs.log",
+   "log": "<T>/cortex-iq3_xxs.log",
    "model_name": "qwen3.8-flash-next-iq3_xxs",
    "port": 8080,
    "tokenizer": "<T>/data/packs/iq3_xxs/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": false,
     "max_tokens": 300,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -665,12 +665,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-q2_0.log",
+   "log": "<T>/cortex-q2_0.log",
    "model_name": "qwen3.8-flash-next-q2_0",
    "port": 8080,
    "tokenizer": "<T>/data/packs/q2_0/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": false,
     "max_tokens": 300,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -715,12 +715,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-iq3_s.log",
+   "log": "<T>/cortex-iq3_s.log",
    "model_name": "qwen3.8-flash-next-iq3_s",
    "port": 8080,
    "tokenizer": "<T>/data/packs/iq3_s/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": false,
     "max_tokens": 300,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -759,7 +759,7 @@
    ],
    "cwd": "<T>",
    "env": {
-    "STRATA_HC_Q8": "1"
+    "CORTEX_HC_Q8": "1"
    },
    "exe": "<T>/engine/<EXE>",
    "gpu": 0,
@@ -767,12 +767,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-unsloth-ud-q4_k_xl.log",
+   "log": "<T>/cortex-unsloth-ud-q4_k_xl.log",
    "model_name": "qwen3.8-flash-next-unsloth-ud-q4_k_xl",
    "port": 8080,
    "tokenizer": "<T>/data/packs/unsloth-ud-q4_k_xl/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": false,
     "max_tokens": 300,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -818,12 +818,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-iq3_s.log",
+   "log": "<T>/cortex-iq3_s.log",
    "model_name": "qwen3.8-flash-next-iq3_s",
    "port": 8080,
    "tokenizer": "<T>/data/packs/iq3_s/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": true,
     "max_tokens": 1024,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -870,12 +870,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-iq3_xxs.log",
+   "log": "<T>/cortex-iq3_xxs.log",
    "model_name": "qwen3.8-flash-next-iq3_xxs",
    "port": 8080,
    "tokenizer": "<T>/data/packs/iq3_xxs/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": true,
     "max_tokens": 1024,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -922,12 +922,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-q2_0.log",
+   "log": "<T>/cortex-q2_0.log",
    "model_name": "qwen3.8-flash-next-q2_0",
    "port": 8080,
    "tokenizer": "<T>/data/packs/q2_0/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": true,
     "max_tokens": 1024,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -972,12 +972,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-iq3_s.log",
+   "log": "<T>/cortex-iq3_s.log",
    "model_name": "qwen3.8-flash-next-iq3_s",
    "port": 8080,
    "tokenizer": "<T>/data/packs/iq3_s/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": true,
     "max_tokens": 1024,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -1017,7 +1017,7 @@
    ],
    "cwd": "<T>",
    "env": {
-    "STRATA_HC_Q8": "1"
+    "CORTEX_HC_Q8": "1"
    },
    "exe": "<T>/engine/<EXE>",
    "gpu": 0,
@@ -1025,12 +1025,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-unsloth-ud-q4_k_xl.log",
+   "log": "<T>/cortex-unsloth-ud-q4_k_xl.log",
    "model_name": "qwen3.8-flash-next-unsloth-ud-q4_k_xl",
    "port": 8080,
    "tokenizer": "<T>/data/packs/unsloth-ud-q4_k_xl/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": true,
     "max_tokens": 1024,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -1075,12 +1075,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-iq3_s.log",
+   "log": "<T>/cortex-iq3_s.log",
    "model_name": "qwen3.8-flash-next-iq3_s",
    "port": 8080,
    "tokenizer": "<T>/data/packs/iq3_s/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": false,
     "max_tokens": 300,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -1126,12 +1126,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-iq3_xxs.log",
+   "log": "<T>/cortex-iq3_xxs.log",
    "model_name": "qwen3.8-flash-next-iq3_xxs",
    "port": 8080,
    "tokenizer": "<T>/data/packs/iq3_xxs/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": false,
     "max_tokens": 300,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -1177,12 +1177,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-q2_0.log",
+   "log": "<T>/cortex-q2_0.log",
    "model_name": "qwen3.8-flash-next-q2_0",
    "port": 8080,
    "tokenizer": "<T>/data/packs/q2_0/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": false,
     "max_tokens": 300,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -1228,12 +1228,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-iq3_s.log",
+   "log": "<T>/cortex-iq3_s.log",
    "model_name": "qwen3.8-flash-next-iq3_s",
    "port": 8080,
    "tokenizer": "<T>/data/packs/iq3_s/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": false,
     "max_tokens": 300,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -1272,8 +1272,8 @@
    ],
    "cwd": "<T>",
    "env": {
-    "STRATA_HC_Q8": "1",
-    "STRATA_ROUTE_TAIL_SKIP": "0"
+    "CORTEX_HC_Q8": "1",
+    "CORTEX_ROUTE_TAIL_SKIP": "0"
    },
    "exe": "<T>/engine/<EXE>",
    "gpu": 0,
@@ -1281,12 +1281,12 @@
    "lib_dirs": [
     "<cuda>"
    ],
-   "log": "<T>/strata-unsloth-ud-q4_k_xl.log",
+   "log": "<T>/cortex-unsloth-ud-q4_k_xl.log",
    "model_name": "qwen3.8-flash-next-unsloth-ud-q4_k_xl",
    "port": 8080,
    "tokenizer": "<T>/data/packs/unsloth-ud-q4_k_xl/tokenizer",
    "vision": {
-    "exe": "<T>/engine/strata-vision.exe",
+    "exe": "<T>/engine/cortex-vision.exe",
     "gpu": false,
     "max_tokens": 300,
     "mmproj": "<T>/models/mmproj-Qwen3.8-Flash-Next-BF16.gguf",

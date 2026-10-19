@@ -7,11 +7,11 @@ from serve import cache_drop
 class CacheDrop(unittest.TestCase):
     def test_default_off(self):
         self.assertFalse(cache_drop.enabled({}))
-        self.assertFalse(cache_drop.enabled({"STRATA_DROP_CACHE_ON_EXIT": "0"}))
+        self.assertFalse(cache_drop.enabled({"CORTEX_DROP_CACHE_ON_EXIT": "0"}))
 
     @unittest.skipIf(os.name == "nt", "POSIX only")
     def test_on(self):
-        self.assertTrue(cache_drop.enabled({"STRATA_DROP_CACHE_ON_EXIT": "1"}))
+        self.assertTrue(cache_drop.enabled({"CORTEX_DROP_CACHE_ON_EXIT": "1"}))
 
     def test_files_and_advise(self):
         with tempfile.TemporaryDirectory() as d:
@@ -25,7 +25,7 @@ class CacheDrop(unittest.TestCase):
 
     def test_not_while_engine_runs_or_not_opted_in(self):
         with tempfile.TemporaryDirectory() as d:
-            env = {"STRATA_DROP_CACHE_ON_EXIT": "1"}
+            env = {"CORTEX_DROP_CACHE_ON_EXIT": "1"}
             calls = []
             run = lambda *a: calls.append(1)
             alive = SimpleNamespace(proc=SimpleNamespace(poll=lambda: None), spawn=("e", ["--native", d]), model_path=d)

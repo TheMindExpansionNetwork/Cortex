@@ -6,7 +6,7 @@
  * test start) next to the model files. It reports through the job's own progress fields, so the UI shows one combined total.
  *
  * It never throws: a failed engine download leaves the model files alone and becomes `engine.state === 'failed'` with a retry
- * message. Loading, starting and serving never download (STRATA_NO_ACQUIRE stays on for them); this runs only inside the install
+ * message. Loading, starting and serving never download (CORTEX_NO_ACQUIRE stays on for them); this runs only inside the install
  * job the user started. Contract: see phaseA-tests/notes-split-s6.md ("Job contract").
  */
 
@@ -75,7 +75,7 @@ export function createEngineStep({ control, signal = null, onChange = () => {} }
     const modelRemaining = Number.isFinite(model?.remaining_gb) ? model.remaining_gb : null;
     const active = !['done', 'current', 'skipped', 'failed'].includes(part.state);
     const engineRemaining = active || part.state === 'done' ? Math.max(0, part.total_gb - part.done_gb) : 0;
-    /* The install knows its files (strata_mcp files_progress): the model's parts and the picture reader, each counted. Without that, one
+    /* The install knows its files (cortex_mcp files_progress): the model's parts and the picture reader, each counted. Without that, one
        model part from the combined figures. The engine is added either way. */
     const own = Array.isArray(install.parts) && install.parts.some(p => p?.kind === 'model') ? install.parts.filter(p => p?.kind !== 'engine') : null;
     const parts = [

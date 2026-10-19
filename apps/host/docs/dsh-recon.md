@@ -104,7 +104,7 @@ URL announcement: `dsh web: <authenticatedUrl> (LAN: …)`, `DSH_WEB_URL` is exp
 | `dsh-client-ui-settings-models` | Models page: API keys (write-only), per-provider model lists, hand-declared custom routes |
 | `dsh-client-ui-settings-plugins` | "Built-in plugins" section shell owning the tab row (`settings.plugins.tab`) |
 | `dsh-client-ui-settings-plugin-inventory` | Read-only "Plugin list" tab: agent presets (open) + collapsed global inventory + search |
-| `dsh-client-ui-settings-account` | Account/login section (STRIP for Strata) |
+| `dsh-client-ui-settings-account` | Account/login section (STRIP for Cortex) |
 | `dsh-client-ui-settings-shell` / `-agent-loop` / `-subagent` / `-web-search` / `-session-log` | Official plugin pages: Shell, Agent loop, Subagent, Web search, session-log upload |
 | `dsh-client-ui-shortcuts` | "Keyboard shortcuts" dialog (Mod+/): search, recorder, restore defaults |
 | `dsh-client-ui-plugin-manager` | Plugins sidebar entry: install/enable bundles, pnpm output, install-script approval |
@@ -202,7 +202,7 @@ Binding rules: each command declares defaults per profile `desktop:{macos,window
 | Deliverables | Turn-end changed-files card with host line counts, each opening the turn's review tab in that file; explicit delivered-file cards; inline-code references in closing prose become links; split/unified diff, "Enable line wrap", "Binary file; changes cannot be shown", "File too large; changes cannot be shown" | `ui-deliverables` |
 | User questions | Agent question card beside the chat input: choose options, enter text, skip, submit one answer batch; timeout/abort copy ("ask_user_question timed out before the user answered") | `ui-user-questions` |
 | Trajectory | Turn-aware ledger (User/Assistant/Tool/Subtool/compaction), turn+step boundaries, record inspector for tokens, duration, input, output, timing, images, attachment summaries, "Drag to resize. Double-click to reset." | `ui-trajectory` |
-| Subagents / workflows | Descendant browsing with running state, token usage, active-turn duration; completed one-shot conversations open read-only; workflow runs render as Chat nodes with phases→members | `ui-subagent`, `ui-workflow-run` (both STRIP for Strata) |
+| Subagents / workflows | Descendant browsing with running state, token usage, active-turn duration; completed one-shot conversations open read-only; workflow runs render as Chat nodes with phases→members | `ui-subagent`, `ui-workflow-run` (both STRIP for Cortex) |
 
 ---
 
@@ -279,26 +279,26 @@ Surfaces: `--dsw-alias-bg-base` = `neutral-bluish-00` (light) / `neutral-bluish-
 
 | Capability | Verdict | Why / replacement |
 |---|---|---|
-| Profile/bundle boot model (`dsh.profile.bundles` + patch layers, `$DSH_HOME/cordis.patch.yml`) | **KEEP** | It is the extension spine; Strata needs one `strata` profile, not a cloud account. Simplify to 2–3 bundles. |
+| Profile/bundle boot model (`dsh.profile.bundles` + patch layers, `$DSH_HOME/cordis.patch.yml`) | **KEEP** | It is the extension spine; Cortex needs one `cortex` profile, not a cloud account. Simplify to 2–3 bundles. |
 | Slot/factory client composition (`ui-slots` + `ui-renderer`) | **KEEP** | Lets Models / Engine / Serving / Monitor be separate panes without touching the shell. This is the single most reusable idea in the codebase. |
-| `dsh.client` + `/plugins` + `__DSH_BOOT__` boot graph | **KEEP** | Free plugin discovery and lazy bundles; Strata can serve one prebuilt graph. |
-| Web-first host (`host-webserver` + `host-frontend-static` + `web-app` flags) | **KEEP** | Exactly Strata's deployment shape; keep `--host/--port/--no-open` and the loopback default, add an explicit LAN opt-in later. |
-| Electron desktop shell | **DEFER** | Large surface (updater, welcome, mandatory-update, platform login, tray). Strata is web-first; ship `strata serve` and let the browser be the app. |
+| `dsh.client` + `/plugins` + `__DSH_BOOT__` boot graph | **KEEP** | Free plugin discovery and lazy bundles; Cortex can serve one prebuilt graph. |
+| Web-first host (`host-webserver` + `host-frontend-static` + `web-app` flags) | **KEEP** | Exactly Cortex's deployment shape; keep `--host/--port/--no-open` and the loopback default, add an explicit LAN opt-in later. |
+| Electron desktop shell | **DEFER** | Large surface (updater, welcome, mandatory-update, platform login, tray). Cortex is web-first; ship `cortex serve` and let the browser be the app. |
 | Sign-in / accounts / DeepSeek cloud API | **STRIP** | Remove `dsh-llm-deepseek*`, `dsh-api-account-controller`, `ui-settings-account`, `dsh-deepseek-account`. Replace with the local engine as the only provider. |
-| Session-log upload + OTel telemetry + product analytics | **STRIP** | Remove `dsh-session-log-deepseek`, `dsh-session-telemetry*`, `dsh-host-product-telemetry-otel`, `dsh-client-product-analytics`, `ui-settings-session-log`. Strata's Monitor dashboard replaces the *visibility* need locally. |
+| Session-log upload + OTel telemetry + product analytics | **STRIP** | Remove `dsh-session-log-deepseek`, `dsh-session-telemetry*`, `dsh-host-product-telemetry-otel`, `dsh-client-product-analytics`, `ui-settings-session-log`. Cortex's Monitor dashboard replaces the *visibility* need locally. |
 | Subagents / workflows / agent teams / schedules | **STRIP** | Remove `dsh-subagent*`, `ui-subagent`, `ui-workflow-run`, `dsh-experimental-agent-team*`, `dsh-schedule`, `ui-schedule`. A single local model cannot serve parallel agents usefully. |
-| Provider abstraction `ctx.llm` + chunk protocol (`finish`, `BlockAssembler`) | **KEEP** | This is the seam Strata plugs the local engine into; keeping it means the loop, titles and compaction all work unchanged. |
-| `dsh-llm-pi-ai` "custom route" config (`api: openai-completions`, `baseURL`, `models[]`) | **KEEP (repurpose)** | It already reaches llama.cpp/MLX-style servers. Strata's Engine/Models tabs should write this config shape. |
+| Provider abstraction `ctx.llm` + chunk protocol (`finish`, `BlockAssembler`) | **KEEP** | This is the seam Cortex plugs the local engine into; keeping it means the loop, titles and compaction all work unchanged. |
+| `dsh-llm-pi-ai` "custom route" config (`api: openai-completions`, `baseURL`, `models[]`) | **KEEP (repurpose)** | It already reaches llama.cpp/MLX-style servers. Cortex's Engine/Models tabs should write this config shape. |
 | Settings model (`ctx.settings` forms + `configForms` handles + revision-checked writes) | **KEEP** | Schema-driven panes, atomic updates, conflict protection — exactly what Engine tuning needs (beginner/expert). |
 | Credentials seam (`dsh-credentials`) | **DEFER** | A local engine needs no API key; keep the seam for remote fallback but ship without a secrets UI. |
 | Permission presets (Read Only / Workspace Write / Full access / Auto review) + approvals | **KEEP** | Local models still write files; the Enter/Escape approval takeover is cheap and high-trust. Drop "Auto review" (it is an LLM call). |
-| Capability gating (`ui-settings.enabled` Coding Tools switch) | **KEEP** | Free simple/expert mode switch for Strata; extend it to gate Engine-expert controls. |
+| Capability gating (`ui-settings.enabled` Coding Tools switch) | **KEEP** | Free simple/expert mode switch for Cortex; extend it to gate Engine-expert controls. |
 | Context metering + session stats + Trajectory | **KEEP (adapt)** | Essential for small local context windows; Trajectory's token/timing inspector becomes the Monitor foundation. |
 | Compaction (`/compact`, `dsh-compaction-basic`) | **KEEP** | Non-negotiable with 8–32 k local contexts; keep `/compact` and the "Compacting context…" affordances. |
 | Artifacts/office skills, `libreoffice-kit`, PTC runtime, MCP, web search/fetch | **DEFER** | Large optional trees; keep the skill *loader* (`dsh-skill-filesystem`, `/skill`) and drop the bundled office/search plugins initially. |
 | HMR of client plugins | **DEFER** | Nice for plugin authors; adds a websocket path. Keep the boot graph, enable HMR behind a dev flag. |
 | Session persistence (JSONL + zstd frames + format migrations + FTS5 search) | **KEEP (simplify)** | Durable sessions are the product; keep append-only JSONL, one format version, and FTS-less listing at first. |
-| Command palette | **ADD (gap)** | DSH has none; Strata should add one — the registry (`ctx.shortcuts` catalog with labels, aliases, keys) already exists to populate it. |
+| Command palette | **ADD (gap)** | DSH has none; Cortex should add one — the registry (`ctx.shortcuts` catalog with labels, aliases, keys) already exists to populate it. |
 | OpenAI-compatible **serving** (Serving tab + request log) | **ADD (net-new)** | Nothing in the packaged code serves `/v1/*` outbound; only pi-ai *consumes* it. Build the server + log. |
 | First-run hardware onboarding wizard | **ADD (net-new)** | The onboarding ledger (`settings.onboarding`, sequential, one step mounted) is the ready-made container. |
 | Engine tuning beginner/expert | **ADD** | Render as a `settings.section` page plus a Start-page card; reuse the staged-draft + Save + "Overridden" pattern from `ui-settings-shell`. |
@@ -351,7 +351,7 @@ Tools are declared with JSON-schema-style `{ name, description, parameters }` (p
 4. The chosen selection enters the session and each request names `provider` + `model` + optional `reasoningEffort`; capability resolution (context window, output cap, modalities, reasoning efforts) happens in `ctx.llm` before I/O.
 5. `dsh-client-ui-settings-models` is where a human declares a route by hand: "Add model provider", "Custom model API", "API protocol", "Base URL", "API key", "Display name", "Context window", "Add model".
 
-### Checklist: what an OpenAI-compatible local server must satisfy for Strata
+### Checklist: what an OpenAI-compatible local server must satisfy for Cortex
 | Requirement | Detail | Why (from DSH code) |
 |---|---|---|
 | `POST {baseURL}/chat/completions` | OpenAI Chat Completions schema; `model`, `messages[]`, `tools[]`, `max_tokens`/`max_completion_tokens`, `stream: true` | `openai-completions.js:557` uses the `openai` SDK with `baseURL` |
@@ -363,11 +363,11 @@ Tools are declared with JSON-schema-style `{ name, description, parameters }` (p
 | Reasoning channel | Emit thinking text in `reasoning_content` (llama.cpp convention) — `reasoning` and `reasoning_text` also accepted, first non-empty wins | 395–399 |
 | Tool-call correlation | Accept `role:"tool"` messages with `tool_call_id`, and tolerate `tools` being present even when only tool history exists | line 22 comment |
 | Error shape | HTTP error + JSON body the adapter can classify into `AUTH` / `RATE_LIMIT` / `CONTEXT_WINDOW_EXCEEDED` / `QUOTA`; never rely on message text | failure-code contract |
-| Capability metadata | Local model must know its own context window; otherwise `defaultContextWindow: 262,144` / `defaultMaxTokens: 32,768` fallbacks apply, which are far too large for local models — Strata must set these per model | `dsh-llm-pi-ai` config table |
+| Capability metadata | Local model must know its own context window; otherwise `defaultContextWindow: 262,144` / `defaultMaxTokens: 32,768` fallbacks apply, which are far too large for local models — Cortex must set these per model | `dsh-llm-pi-ai` config table |
 | Shims likely needed | (a) `reasoning` vs `reasoning_content` choice, (b) effort mapping into chat-template thinking flags, (c) prompt-cache fields (`openai-prompt-cache.js`) are OpenAI-specific, (d) `image` content parts must be plain base64 data URLs, (e) `systemPromptUpdate: 'in-history'` only if the engine honors mid-history system messages | adapter compat switches |
-| Config entry Strata should write | `providers.local: { displayName: "Local", api: "openai-completions", baseURL: "http://127.0.0.1:8080/v1", models: [{ id, name, contextWindow, maxTokens, reasoningEfforts }] }` | `dsh-llm-pi-ai` provider dictionary |
+| Config entry Cortex should write | `providers.local: { displayName: "Local", api: "openai-completions", baseURL: "http://127.0.0.1:8080/v1", models: [{ id, name, contextWindow, maxTokens, reasoningEfforts }] }` | `dsh-llm-pi-ai` provider dictionary |
 
-**Not discoverable in the packaged code:** an outbound OpenAI-compatible *serving* endpoint (nothing registers `/v1/chat/completions` as a route; `dsh-host-webserver` consumers are file/UI routes only), any GPU/hardware detection, any engine-process supervision (llama.cpp/MLX lifecycle), and any request-log store. All four are net-new Strata surfaces.
+**Not discoverable in the packaged code:** an outbound OpenAI-compatible *serving* endpoint (nothing registers `/v1/chat/completions` as a route; `dsh-host-webserver` consumers are file/UI routes only), any GPU/hardware detection, any engine-process supervision (llama.cpp/MLX lifecycle), and any request-log store. All four are net-new Cortex surfaces.
 
 ---
 

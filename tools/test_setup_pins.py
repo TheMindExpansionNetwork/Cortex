@@ -102,8 +102,8 @@ class HuggingFacePins(unittest.TestCase):
             seen.append((req.get_method(), req.full_url))
             raise not_found(req.full_url)
 
-        with tempfile.TemporaryDirectory() as d, mock.patch.object(setup.urllib.request, "urlopen", urlopen),                 mock.patch.dict(setup.os.environ, {"STRATA_SOURCE": "huggingface"}):
-            setup.os.environ.pop("STRATA_ALLOW_UNPINNED", None)
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(setup.urllib.request, "urlopen", urlopen),                 mock.patch.dict(setup.os.environ, {"CORTEX_SOURCE": "huggingface"}):
+            setup.os.environ.pop("CORTEX_ALLOW_UNPINNED", None)
             dst = Path(d) / "m.gguf"
             with self.assertRaises(SystemExit):
                 _, out = quiet(setup.download, setup.FAMILIES["qwen"]["mmproj_hf"] + "m.gguf", dst)
@@ -112,7 +112,7 @@ class HuggingFacePins(unittest.TestCase):
         self.assertTrue(all("/resolve/main/" not in u for _, u in seen))
 
     def test_the_opt_out_downloads_the_current_file(self):
-        """STRATA_ALLOW_UNPINNED=1 (a tester's choice): the repository's current file, announced, off by default."""
+        """CORTEX_ALLOW_UNPINNED=1 (a tester's choice): the repository's current file, announced, off by default."""
         seen = []
 
         def urlopen(req, timeout=None):
@@ -122,11 +122,11 @@ class HuggingFacePins(unittest.TestCase):
             return Response(b"model bytes", status=200)
 
         # the pinned Hugging Face path itself (setup's --source huggingface; auto may pick ModelScope)
-        with tempfile.TemporaryDirectory() as d, mock.patch.object(setup.urllib.request, "urlopen", urlopen),                 mock.patch.dict(setup.os.environ, {"STRATA_SOURCE": "huggingface", "STRATA_ALLOW_UNPINNED": "1"}),                 mock.patch.object(setup, "_unpinned_said", []):
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(setup.urllib.request, "urlopen", urlopen),                 mock.patch.dict(setup.os.environ, {"CORTEX_SOURCE": "huggingface", "CORTEX_ALLOW_UNPINNED": "1"}),                 mock.patch.object(setup, "_unpinned_said", []):
             dst = Path(d) / "m.gguf"
             _, out = quiet(setup.download, setup.FAMILIES["qwen"]["mmproj_hf"] + "m.gguf", dst)
             self.assertEqual(dst.read_bytes(), b"model bytes")
-        self.assertIn("STRATA_ALLOW_UNPINNED=1", out)
+        self.assertIn("CORTEX_ALLOW_UNPINNED=1", out)
         self.assertIn("not at the pinned revision any more", out)
         self.assertEqual([m for m, _ in seen], ["HEAD", "HEAD", "GET"])
         self.assertTrue(all("/resolve/main/" in u for _, u in seen[1:]))
@@ -161,14 +161,14 @@ class HuggingFacePins(unittest.TestCase):
             raise not_found(req.full_url)
 
         try:
-            with mock.patch.object(mtp_fetch.urllib.request, "urlopen", urlopen),                     mock.patch.dict(mtp_fetch.os.environ, {"STRATA_ALLOW_UNPINNED": ""}):
+            with mock.patch.object(mtp_fetch.urllib.request, "urlopen", urlopen),                     mock.patch.dict(mtp_fetch.os.environ, {"CORTEX_ALLOW_UNPINNED": ""}):
                 with self.assertRaises(SystemExit) as stop:
                     mtp_fetch.resolve_repo()
                 self.assertIn("no longer on Hugging Face", str(stop.exception))
                 self.assertEqual(mtp_fetch.REPO, pinned)
-            with mock.patch.object(mtp_fetch.urllib.request, "urlopen", urlopen),                     mock.patch.dict(mtp_fetch.os.environ, {"STRATA_ALLOW_UNPINNED": "1"}),                     contextlib.redirect_stderr(io.StringIO()) as err:
+            with mock.patch.object(mtp_fetch.urllib.request, "urlopen", urlopen),                     mock.patch.dict(mtp_fetch.os.environ, {"CORTEX_ALLOW_UNPINNED": "1"}),                     contextlib.redirect_stderr(io.StringIO()) as err:
                 self.assertEqual(mtp_fetch.resolve_repo(), "https://huggingface.co/Qwen/Qwen3.8-Flash-Next/resolve/main/")
-            self.assertIn("STRATA_ALLOW_UNPINNED=1", err.getvalue())
+            self.assertIn("CORTEX_ALLOW_UNPINNED=1", err.getvalue())
         finally:
             mtp_fetch.REPO = pinned
 
@@ -380,7 +380,7 @@ class Requirements(unittest.TestCase):
                 mock.patch.object(setup, "find_tool", side_effect=find_tool), \
                 mock.patch.object(setup, "pip_install", side_effect=pip_install), \
                 mock.patch.object(setup, "run", side_effect=run):
-            setup.cmake_build(ROOT, ROOT / "build-test", "strata", [], None, "unused.bat")
+            setup.cmake_build(ROOT, ROOT / "build-test", "cortex", [], None, "unused.bat")
         self.assertEqual(requests, [(["ninja==1.13.2"], "CMake and Ninja build tools")])
         self.assertEqual(commands[0][:4], ["/usr/bin/cmake", "-G", "Ninja", "-DCMAKE_MAKE_PROGRAM=/venv/bin/ninja"])
         self.assertEqual(commands[1][:3], ["/usr/bin/cmake", "--build", str(ROOT / "build-test")])
@@ -389,12 +389,12 @@ class Requirements(unittest.TestCase):
         ran = []
         with tempfile.TemporaryDirectory() as d:
             if stamp is not None:
-                (Path(d) / ".strata-pip.json").write_text(json.dumps(stamp))
+                (Path(d) / ".cortex-pip.json").write_text(json.dumps(stamp))
             with mock.patch.object(setup.sys, "prefix", d), \
                     mock.patch.object(setup, "run", lambda cmd, **kw: ran.append(cmd)), \
                     mock.patch.object(setup, "_installed", lambda name: name in installed):
                 quiet(setup.pip_install, packages, "the packages")
-            after = json.loads((Path(d) / ".strata-pip.json").read_text()) if ran else stamp
+            after = json.loads((Path(d) / ".cortex-pip.json").read_text()) if ran else stamp
         return [c for cmd in ran for c in cmd if "==" in c or c in setup.PY_PACKAGES], after
 
     def test_fresh_install_gets_every_pin(self):

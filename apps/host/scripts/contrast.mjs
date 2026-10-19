@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Strata contrast probe.
+ * Cortex contrast probe.
  *
  *   node scripts/contrast.mjs
  *
@@ -20,7 +20,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
-const BASE = process.env.STRATA_URL ?? 'http://localhost:5199';
+const BASE = process.env.CORTEX_URL ?? 'http://localhost:5199';
 
 const executablePath = [
   join(homedir(), 'Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'),

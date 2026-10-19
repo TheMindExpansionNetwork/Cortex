@@ -44,8 +44,8 @@ export function toolStatus(name, args = {}, { bytes = 0 } = {}) {
     case 'job_list': case 'job_output': case 'job_kill': return { key: 'Checking background tasks…', values: [] };
     default:
       if (name.startsWith('mcp__browser__')) return name.endsWith('navigate') ? (args.url ? { key: 'Opening {0}…', values: [String(args.url)] } : { key: 'Opening a page…', values: [] }) : { key: 'Using the browser…', values: [] };
-      if (name.startsWith('mcp__strata-instructions__')) return { key: 'Reading your instructions…', values: [] };
-      if (name.startsWith('mcp__strata-commands__')) return { key: 'Running your tool…', values: [] };
+      if (name.startsWith('mcp__cortex-instructions__')) return { key: 'Reading your instructions…', values: [] };
+      if (name.startsWith('mcp__cortex-commands__')) return { key: 'Running your tool…', values: [] };
       return { key: 'Using a tool…', values: [] };
   }
 }

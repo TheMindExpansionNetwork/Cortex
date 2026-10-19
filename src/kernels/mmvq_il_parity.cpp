@@ -9,8 +9,8 @@
 // The same Q8_1 bytes feed both paths (quantize_q8_1_rows, then native_q8_1_interleave). Weights are random bytes with
 // the block scales rewritten as normal fp16 values, so every output is finite (a NaN would compare equal whatever
 // produced it). The bench cycles through enough copies of the weights to miss the L2 cache, as a layer's call does.
-#include "strata/kernels/iq_kernels.hpp"
-#include "strata/kernels/native_mmvq.hpp"
+#include "cortex/kernels/iq_kernels.hpp"
+#include "cortex/kernels/native_mmvq.hpp"
 
 #include <cuda_runtime.h>
 
@@ -25,7 +25,7 @@
 #include <vector>
 
 namespace {
-using namespace strata::kernels;
+using namespace cortex::kernels;
 
 struct Cell { int type, T, n_out; double ref; double il[5]; };
 std::vector<Cell> g_cells;

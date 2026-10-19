@@ -25,7 +25,7 @@ export function SettingsScreen() {
         aliases?: string;
         control: ReactNode;
     }[] = [
-        { section: 'General', label: 'Language', hint: 'Choose the language used throughout Strata.', control: <Select translateLabels={false} ariaLabel={tr("Language")} value={prefs.language} options={[...LANGUAGES]} onChange={value => setLanguage(value as typeof prefs.language)}/> },
+        { section: 'General', label: 'Language', hint: 'Choose the language used throughout Cortex.', control: <Select translateLabels={false} ariaLabel={tr("Language")} value={prefs.language} options={[...LANGUAGES]} onChange={value => setLanguage(value as typeof prefs.language)}/> },
         { section: 'Reading & focus', label: 'Font', hint: 'Choose an installed font for the interface and conversations.', control: <FontChoice /> },
         { section: 'General', label: 'Keyboard shortcuts', hint: 'Set the key combinations that feel natural to you.', aliases: 'command keys hotkeys', control: <Btn size="sm" onClick={() => setShortcuts(true)}>{tr("Edit shortcuts")}</Btn> },
         { section: 'Reading & focus', label: 'Appearance', hint: 'System follows your computer by default.', aliases: 'theme light dark system automatic', control: <Select value={prefs.theme} ariaLabel={tr("Appearance")} options={[{ value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }, { value: 'system', label: 'System' }]} onChange={setTheme}/> },

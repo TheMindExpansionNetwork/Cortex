@@ -1,4 +1,4 @@
-"""serve/test_slot_alloc.py - which batch slot a request gets (StrataEngine.pick_slot), no engine needed.
+"""serve/test_slot_alloc.py - which batch slot a request gets (CortexEngine.pick_slot), no engine needed.
 
     python -m unittest serve.test_slot_alloc -v
 """
@@ -10,11 +10,11 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from serve.server import StrataEngine  # noqa: E402
+from serve.server import CortexEngine  # noqa: E402
 
 
 def engine(batch, groups, pipelined=True):
-    e = object.__new__(StrataEngine)          # pick_slot reads only the slot tables
+    e = object.__new__(CortexEngine)          # pick_slot reads only the slot tables
     gs = batch // groups
     e.batch = batch
     e.slot_order = [g * gs + t for t in range(gs) for g in range(groups)]
@@ -84,7 +84,7 @@ class OneSlotGroups(unittest.TestCase):
     so no pad row writes an idle slot and each one keeps its chat (#2518): the next turn goes back to it."""
 
     def test_the_slot_of_the_chat(self):
-        T = StrataEngine.TURN_ID
+        T = CortexEngine.TURN_ID
         e = engine(2, 2)
         self.assertEqual(e.slot_gs, 1)
         hist_a, hist_b = list(range(1000, 1700)), list(range(2000, 2700))
@@ -96,7 +96,7 @@ class OneSlotGroups(unittest.TestCase):
         self.assertEqual(e.pick_slot(list(range(5000, 5100))), 0)      # a new chat: the least recently used one
 
     def test_groups_of_several_slots_still_ignore_held_tokens(self):
-        T = StrataEngine.TURN_ID
+        T = CortexEngine.TURN_ID
         e = engine(4, 2)
         self.assertEqual(e.slot_gs, 2)
         hist = list(range(1000, 1700))

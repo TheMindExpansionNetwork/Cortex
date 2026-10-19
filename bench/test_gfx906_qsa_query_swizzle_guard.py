@@ -23,13 +23,13 @@ if dispatch is None or "if (use_query_swizzle) {" not in source:
     raise RuntimeError("production query-swizzle dispatch changed; update the test")
 
 prefix = r'''
-#include "strata/kernels/gfx_arch.hpp"
+#include "cortex/kernels/gfx_arch.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <initializer_list>
 #include <thread>
-using strata::kernels::gfx_arch_is;
+using cortex::kernels::gfx_arch_is;
 constexpr int hipSuccess = 0;
 struct hipDeviceProp_t { char gcnArchName[64]; int warpSize; };
 struct Mock {

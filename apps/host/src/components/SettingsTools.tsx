@@ -133,7 +133,7 @@ export function SettingsTools({ preview }: { preview?: ToolsState }) {
         <Field label={tr('Where results come from')} hint={tr(keyed ? 'Searches use your own account with this service.' : 'Results come from DuckDuckGo, or from Bing when DuckDuckGo is busy. You do not need an account or a key.')}>
           <Select ariaLabel={tr('Where results come from')} value={state.search.provider} options={SEARCH_CHOICES} onChange={value => { setKey(''); void save({ search: { provider: value } }); }} />
         </Field>
-        {keyed ? <Field label={tr('Your key')} hint={tr(state.search.keySet ? 'A key is saved on this computer. Enter a new one to replace it.' : 'Saved on this computer only. Strata never shows it again.')}>
+        {keyed ? <Field label={tr('Your key')} hint={tr(state.search.keySet ? 'A key is saved on this computer. Enter a new one to replace it.' : 'Saved on this computer only. Cortex never shows it again.')}>
           <div className="row">
             <input className="st-input" style={{ width: 190 }} type="password" aria-label={tr('Your key')} autoComplete="new-password" spellCheck={false} placeholder={tr(state.search.keySet ? 'Leave blank to keep the saved key' : 'Paste your key')} value={key} onChange={e => setKey(e.target.value)} />
             <Btn size="sm" disabled={busy || !key.trim()} onClick={() => { void save({ search: { provider: state.search.provider, key: key.trim() } }); setKey(''); pushToast('success', tr('Key saved')); }}>{tr('Save key')}</Btn>
@@ -174,7 +174,7 @@ export function SettingsTools({ preview }: { preview?: ToolsState }) {
         {draft.kind === 'instructions' ? <label className="input-field"><span>{tr('Instructions')}</span><textarea className="st-input" rows={6} aria-label={tr('Instructions')} value={draft.instructions} placeholder={tr('Write what the assistant should do when it uses this tool.')} onChange={e => setDraft({ ...draft, instructions: e.target.value })} /></label> : null}
         {draft.kind === 'command' ? <>
           <label className="input-field"><span>{tr('Command to run')}</span><input className="st-input" aria-label={tr('Command to run')} value={draft.command} placeholder={tr('For example: curl -I https://example.com')} spellCheck={false} onChange={e => setDraft({ ...draft, command: e.target.value })} /></label>
-          <p className="small muted">{tr('The assistant can pass text to the command. The command reads it from the STRATA_INPUT setting. Its printed output goes back to the assistant.')}</p>
+          <p className="small muted">{tr('The assistant can pass text to the command. The command reads it from the CORTEX_INPUT setting. Its printed output goes back to the assistant.')}</p>
         </> : null}
         {draft.kind === 'server' ? <>
           <label className="input-field"><span>{tr('Web address or program')}</span><input className="st-input" aria-label={tr('Web address or program')} value={draft.address} placeholder={tr('https://… or the program that starts the server')} spellCheck={false} onChange={e => setDraft({ ...draft, address: e.target.value })} /></label>

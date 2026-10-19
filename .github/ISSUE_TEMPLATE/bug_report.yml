@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in Strata doesn't work as documented
+description: Something in Cortex doesn't work as documented
 title: "[Area] "
 labels: ["bug"]
 body:
@@ -20,7 +20,7 @@ body:
       options:
         - "[Engine]  (speed, kernels, models, the server and API)"
         - "[GUI]  (the desktop app)"
-        - "[TUI]  (the Terminal: strata launch, connect, monitor)"
+        - "[TUI]  (the Terminal: cortex launch, connect, monitor)"
         - "[Benchmark]  (measurements and reports)"
         - "[Docs]  (documentation)"
         - "[Other]  (anything else, including setup and installation)"
@@ -32,7 +32,7 @@ body:
       label: Desktop app, Terminal or source?
       options:
         - Desktop app (Windows, Linux or Mac)
-        - Terminal (the `strata` command)
+        - Terminal (the `cortex` command)
         - Source (START-HERE.bat, setup.sh or a build)
         - Docker
         - Other
@@ -64,9 +64,9 @@ body:
   - type: input
     id: version
     attributes:
-      label: Strata version
-      description: "In the app: Settings > About. In the Terminal: `strata --version`. From source: the About tab of the web page, or `engine` in `GET /v1/status`, or the git commit."
-      placeholder: "Strata 0.2.0-beta · engine 0.1.45.3"
+      label: Cortex version
+      description: "In the app: Settings > About. In the Terminal: `cortex --version`. From source: the About tab of the web page, or `engine` in `GET /v1/status`, or the git commit."
+      placeholder: "Cortex 0.2.0-beta · engine 0.1.45.3"
     validations:
       required: true
   - type: input
@@ -90,7 +90,7 @@ body:
     attributes:
       label: Logs
       description: |
-        The app: Settings > Engine > Diagnostics > View logs > Save logs, then drag the file in. The Terminal: paste the output of `strata doctor`. From source: drag in `strata-<model>.log` from your Strata folder.
+        The app: Settings > Engine > Diagnostics > View logs > Save logs, then drag the file in. The Terminal: paste the output of `cortex doctor`. From source: drag in `cortex-<model>.log` from your Cortex folder.
         Remove API keys, passwords and private text first.
     validations:
       required: false

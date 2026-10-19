@@ -1,6 +1,6 @@
 """Tests for setup.py's model menu (0.1.44): the family order, NVFP4 hidden on AMD and Intel, the NVFP4 line's card note
 (RTX 50 native FP4, older RTX slower than UD-IQ4_XS), the Unsloth sizes in order with images on, and the prebuilt
-install removing a stale strata_kq library.
+install removing a stale cortex_kq library.
 
     python -m unittest tools.test_setup_menu
 """
@@ -127,22 +127,22 @@ class UnslothDefaultEnv(unittest.TestCase):
 
     def test_q5_and_q6_turn_the_k_quant_prompt_kernels_on_q4_does_not(self):
         f = setup.unsloth_default_env
-        self.assertEqual(f("unsloth", "UD-Q5_K_XL", False, False)["STRATA_MMQ_KQ"], "1")
-        self.assertEqual(f("unsloth", "UD-Q6_K_XL", True, True)["STRATA_MMQ_KQ"], "1")
+        self.assertEqual(f("unsloth", "UD-Q5_K_XL", False, False)["CORTEX_MMQ_KQ"], "1")
+        self.assertEqual(f("unsloth", "UD-Q6_K_XL", True, True)["CORTEX_MMQ_KQ"], "1")
         for m in ("UD-Q4_K_XL", "UD-IQ4_XS", "Q8_0"):
-            self.assertNotIn("STRATA_MMQ_KQ", f("unsloth", m, False, False), m)
+            self.assertNotIn("CORTEX_MMQ_KQ", f("unsloth", m, False, False), m)
 
     def test_hc_q8_on_cuda_for_the_ud_files_only(self):
         f = setup.unsloth_default_env
         for m in ("UD-IQ4_XS", "UD-Q4_K_XL", "UD-Q5_K_XL", "UD-Q6_K_XL"):
-            self.assertEqual(f("unsloth", m, False, True)["STRATA_HC_Q8"], "1", m)
-            self.assertNotIn("STRATA_HC_Q8", f("unsloth", m, True, True), m)          # not on AMD
-        self.assertNotIn("STRATA_HC_Q8", f("unsloth", "Q8_0", False, True))
+            self.assertEqual(f("unsloth", m, False, True)["CORTEX_HC_Q8"], "1", m)
+            self.assertNotIn("CORTEX_HC_Q8", f("unsloth", m, True, True), m)          # not on AMD
+        self.assertNotIn("CORTEX_HC_Q8", f("unsloth", "Q8_0", False, True))
 
     def test_tail_skip_off_only_when_every_expert_is_in_ram(self):
         f = setup.unsloth_default_env
-        self.assertEqual(f("unsloth", "UD-Q4_K_XL", False, False)["STRATA_ROUTE_TAIL_SKIP"], "0")
-        self.assertNotIn("STRATA_ROUTE_TAIL_SKIP", f("unsloth", "UD-Q4_K_XL", False, True))   # budget mode keeps the skip
+        self.assertEqual(f("unsloth", "UD-Q4_K_XL", False, False)["CORTEX_ROUTE_TAIL_SKIP"], "0")
+        self.assertNotIn("CORTEX_ROUTE_TAIL_SKIP", f("unsloth", "UD-Q4_K_XL", False, True))   # budget mode keeps the skip
 
     def test_other_families_are_untouched(self):
         for fam, m in (("qwen", "IQ3_S"), ("swift", "Q2_0"), ("coder", "IQ1_M"), ("nvfp4", "NVFP4")):
@@ -155,11 +155,11 @@ class EnginePlaceholders(unittest.TestCase):
         self.assertEqual(setup.MIN_ENGINE, (0, 1, 45))
         for m in ("UD-Q5_K_XL", "UD-Q6_K_XL", "NVFP4", "NVFP4-NVIDIA"):
             self.assertEqual(setup.MODELS[m]["engine"], (0, 1, 44), m)
-        self.assertIn("0.1.45", (ROOT / "CMakeLists.txt").read_text(encoding="utf-8").split("project(strata VERSION", 1)[1][:12])
+        self.assertIn("0.1.45", (ROOT / "CMakeLists.txt").read_text(encoding="utf-8").split("project(cortex VERSION", 1)[1][:12])
 
 
 class KqLibrary(unittest.TestCase):
-    def test_a_zip_without_strata_kq_does_not_leave_an_old_one(self):
+    def test_a_zip_without_cortex_kq_does_not_leave_an_old_one(self):
         with tempfile.TemporaryDirectory() as d:
             eng, tmp = Path(d) / "engine", Path(d) / "new"
             eng.mkdir()
@@ -172,7 +172,7 @@ class KqLibrary(unittest.TestCase):
             self.assertFalse((eng / setup.KQ_LIB).exists())
             self.assertEqual((eng / setup.PREVIOUS_ENGINE / setup.KQ_LIB).read_bytes(), b"old kq")   # a rollback gets it back
 
-    def test_a_zip_with_strata_kq_replaces_it(self):
+    def test_a_zip_with_cortex_kq_replaces_it(self):
         with tempfile.TemporaryDirectory() as d:
             eng, tmp = Path(d) / "engine", Path(d) / "new"
             eng.mkdir()

@@ -21,12 +21,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from strata_control import tuning  # noqa: E402
+from cortex_control import tuning  # noqa: E402
 
 
 class TuningCase(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="strata-tune-"))
+        self.tmp = Path(tempfile.mkdtemp(prefix="cortex-tune-"))
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -34,7 +34,7 @@ class TuningCase(unittest.TestCase):
     def plan(self, backend="cuda", objective="generation", hold=(), max_trials=16, repeats=3,
              flags=None, dimensions=()):
         return tuning.TuningPlan(
-            id="job1", backend=backend, engine="/nonexistent/strata",
+            id="job1", backend=backend, engine="/nonexistent/cortex",
             engine_flags_known=flags is not None, model="qwen3.8-flash-next",
             profile_revision="abc123", objective=objective,
             workload={"prompt_tokens": 512, "max_new": 200, "seed": 1},
@@ -85,10 +85,10 @@ class TestDimensionValidation(TuningCase):
         self.assertEqual(args["--kv"], "int8")
 
     def test_flag_inventory_returns_none_for_a_missing_engine(self):
-        self.assertIsNone(tuning.engine_flag_inventory(Path("/nonexistent/strata")))
+        self.assertIsNone(tuning.engine_flag_inventory(Path("/nonexistent/cortex")))
 
     def test_flag_inventory_reads_stderr_as_well_as_stdout(self):
-        """The Strata engine writes its usage to stderr.
+        """The Cortex engine writes its usage to stderr.
 
         A stdout-only read reports "no flags" for a working engine, and because every dimension is
         then excluded the sweep silently searches nothing — safe, but useless and very hard to
@@ -443,7 +443,7 @@ class TestPersistenceAndReporting(TuningCase):
         self.assertIn("machine", json.dumps(tuning.machine_identity()))
 
     def test_the_report_names_what_was_excluded_and_why(self):
-        plan = tuning.plan_tuning(Path("/nonexistent/strata"), "metal", "m", "generation",
+        plan = tuning.plan_tuning(Path("/nonexistent/cortex"), "metal", "m", "generation",
                                   {"prompt_tokens": 128})
         self.assertIn("vram_reserve", {e["id"] for e in plan.excluded})
         self.assertFalse(plan.engine_flags_known,

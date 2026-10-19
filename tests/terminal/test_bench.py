@@ -17,12 +17,12 @@ from unittest import mock
 
 from serve.frontend import ChatTemplate
 from serve.server import ByteTokenizer, IM_END, MockEngine, Service, serve
-from strata_cli import bench
-from strata_cli.cli import main
-from strata_cli.client import Endpoint
-from strata_control import benchmarking, journal, management
-from strata_control.private_files import is_unshared
-from strata_control.profiles import ProfileError
+from cortex_cli import bench
+from cortex_cli.cli import main
+from cortex_cli.client import Endpoint
+from cortex_control import benchmarking, journal, management
+from cortex_control.private_files import is_unshared
+from cortex_control.profiles import ProfileError
 
 
 class _NoGpu:
@@ -119,7 +119,7 @@ class BenchTests(unittest.TestCase):
             self.assertEqual(stat.S_IMODE((output / "progress.json").stat().st_mode), 0o600)
 
     def test_saved_profile_benchmark_lease_refuses_overlap(self):
-        with mock.patch.dict(os.environ, {"STRATA_PROFILE_DIR": str(self.root / "profiles")}):
+        with mock.patch.dict(os.environ, {"CORTEX_PROFILE_DIR": str(self.root / "profiles")}):
             output = self.root / "leased-run"
             self.assertEqual(benchmarking.benchmark_activity("local", output), "untracked")
             with benchmarking.benchmark_lease("local", output):
@@ -140,7 +140,7 @@ class BenchTests(unittest.TestCase):
     def test_operator_cancel_stops_live_stream_and_saves_distinct_evidence(self):
         output = self.root / "operator-stopped"
         self.service.engine.delay = 0.15
-        with mock.patch.dict(os.environ, {"STRATA_PROFILE_DIR": str(self.root / "profiles")}), \
+        with mock.patch.dict(os.environ, {"CORTEX_PROFILE_DIR": str(self.root / "profiles")}), \
                 ThreadPoolExecutor(max_workers=1) as pool:
             def execute():
                 with benchmarking.benchmark_lease("local", output):
@@ -163,7 +163,7 @@ class BenchTests(unittest.TestCase):
             linked.symlink_to(output, target_is_directory=True)
             with self.assertRaisesRegex(ProfileError, "owner-only"):
                 benchmarking.request_cancel("local", linked)
-            with mock.patch("strata_control.profiles.load", return_value=({"id": "local"}, "a" * 16)):
+            with mock.patch("cortex_control.profiles.load", return_value=({"id": "local"}, "a" * 16)):
                 request = management.dispatch({"schema_version": 1, "action": "bench.cancel",
                                                "profile": "local",
                                                "params": {"path": str(output / "results.json")}})
@@ -186,8 +186,8 @@ class BenchTests(unittest.TestCase):
             bench.run(self.inference, self.telemetry, output, concurrency=1)
         request = {"schema_version": 1, "action": "bench.progress", "profile": "local",
                    "params": {"path": str(output / "results.json")}}
-        with mock.patch.dict(os.environ, {"STRATA_PROFILE_DIR": str(self.root / "profiles")}), \
-                mock.patch("strata_control.profiles.load", return_value=({"id": "local"}, "a" * 16)):
+        with mock.patch.dict(os.environ, {"CORTEX_PROFILE_DIR": str(self.root / "profiles")}), \
+                mock.patch("cortex_control.profiles.load", return_value=({"id": "local"}, "a" * 16)):
             with benchmarking.benchmark_lease("local", output):
                 active = management.dispatch(request)
                 self.assertEqual(active["activity"], "active")
@@ -208,8 +208,8 @@ class BenchTests(unittest.TestCase):
         planned = {"profile_revision": revision, "source_sha256": source,
                    "owner_id": "d" * 32, "instance_id": instance}
         (self.root / "profiles").mkdir(mode=0o700)
-        with mock.patch.dict(os.environ, {"STRATA_PROFILE_DIR": str(self.root / "profiles")}), \
-                mock.patch("strata_control.profiles.load", return_value=({"id": "local"}, revision)), \
+        with mock.patch.dict(os.environ, {"CORTEX_PROFILE_DIR": str(self.root / "profiles")}), \
+                mock.patch("cortex_control.profiles.load", return_value=({"id": "local"}, revision)), \
                 mock.patch.object(benchmarking, "_settings", return_value=settings), \
                 mock.patch.object(benchmarking, "plan", return_value=planned), \
                 mock.patch.object(bench, "_managed_match", return_value={"matched": True,
@@ -273,9 +273,9 @@ class BenchTests(unittest.TestCase):
     def test_process_death_releases_exact_run_lease(self):
         output = self.root / "child-run"
         ready = self.root / "child-ready"
-        environment = {**os.environ, "STRATA_PROFILE_DIR": str(self.root / "profiles")}
+        environment = {**os.environ, "CORTEX_PROFILE_DIR": str(self.root / "profiles")}
         code = ("from pathlib import Path\n"
-                "from strata_control.benchmarking import benchmark_lease\n"
+                "from cortex_control.benchmarking import benchmark_lease\n"
                 "from time import sleep\n"
                 f"with benchmark_lease('local', Path({str(output)!r})):\n"
                 f"    Path({str(ready)!r}).write_text('ready')\n"
@@ -291,7 +291,7 @@ class BenchTests(unittest.TestCase):
                 self.fail("benchmark lease child did not become ready: " +
                           (process.stderr.read().decode("utf-8", "replace") if process.poll() is not None else
                            "timed out"))
-            with mock.patch.dict(os.environ, {"STRATA_PROFILE_DIR": environment["STRATA_PROFILE_DIR"]}):
+            with mock.patch.dict(os.environ, {"CORTEX_PROFILE_DIR": environment["CORTEX_PROFILE_DIR"]}):
                 self.assertEqual(benchmarking.benchmark_activity("local", output), "active")
                 if os.name == "nt":
                     # a venv's python.exe is a launcher that runs the real interpreter as its child
@@ -380,7 +380,7 @@ class BenchTests(unittest.TestCase):
         out = self.root / "unloaded"
         unloaded = mock.Mock()
         unloaded.snapshot.return_value = {"instance": {"id": "one"}, "model": {"loaded": False}}
-        with self.assertRaisesRegex(ProfileError, "loaded Strata instance"):
+        with self.assertRaisesRegex(ProfileError, "loaded Cortex instance"):
             bench.run(self.inference, unloaded, out)
         self.assertFalse(out.exists())
 
@@ -393,7 +393,7 @@ class BenchTests(unittest.TestCase):
     def test_run_cli_records_an_operator_condition(self):
         out = self.root / "cli-baseline"
         output = io.StringIO()
-        with mock.patch.dict(os.environ, {"STRATA_API_KEY": self.service.api_key}), redirect_stdout(output):
+        with mock.patch.dict(os.environ, {"CORTEX_API_KEY": self.service.api_key}), redirect_stdout(output):
             code = main(["bench", "run", "--url", self.url, "--condition", "baseline",
                          "--concurrency", "1", "--out", str(out), "--output", "json"])
         self.assertEqual(code, 0)
@@ -413,8 +413,8 @@ class BenchTests(unittest.TestCase):
                 "current_profile_revision": identity["revision"],
                 "candidate_profile_revision": identity["revision"]}
         out = self.root / "managed"
-        with mock.patch("strata_control.runtime.status", return_value=owner) as status, \
-                mock.patch("strata_control.runtime.plan_restart", return_value=plan) as preview, \
+        with mock.patch("cortex_control.runtime.status", return_value=owner) as status, \
+                mock.patch("cortex_control.runtime.plan_restart", return_value=plan) as preview, \
                 redirect_stdout(io.StringIO()):
             report = bench.run(self.inference, self.telemetry, out, concurrency=1,
                                profile_identity=identity, require_managed_match=True)
@@ -426,24 +426,24 @@ class BenchTests(unittest.TestCase):
         self.assertEqual(status.call_count, 2)
         self.assertEqual(preview.call_count, 2)
 
-        with mock.patch("strata_control.runtime.status", return_value={**owner, "instance_id": "wrong"}), \
-                mock.patch("strata_control.runtime.plan_restart", return_value=plan):
+        with mock.patch("cortex_control.runtime.status", return_value={**owner, "instance_id": "wrong"}), \
+                mock.patch("cortex_control.runtime.plan_restart", return_value=plan):
             rejected = self.root / "rejected"
             with self.assertRaisesRegex(ProfileError, "managed benchmark preflight failed: instance_mismatch"):
                 bench.run(self.inference, self.telemetry, rejected, concurrency=1,
                           profile_identity=identity, require_managed_match=True)
         self.assertFalse(rejected.exists())
 
-        with mock.patch("strata_control.runtime.status", return_value=owner), \
-                mock.patch("strata_control.runtime.plan_restart", return_value={**plan, "changed": True}):
+        with mock.patch("cortex_control.runtime.status", return_value=owner), \
+                mock.patch("cortex_control.runtime.plan_restart", return_value={**plan, "changed": True}):
             stale = self.root / "stale"
             with self.assertRaisesRegex(ProfileError, "managed benchmark preflight failed: profile_or_source_changed"):
                 bench.run(self.inference, self.telemetry, stale, concurrency=1,
                           profile_identity=identity, require_managed_match=True)
         self.assertFalse(stale.exists())
 
-        with mock.patch("strata_control.runtime.status", side_effect=[owner, {**owner, "instance_id": "wrong"}]), \
-                mock.patch("strata_control.runtime.plan_restart", return_value=plan), \
+        with mock.patch("cortex_control.runtime.status", side_effect=[owner, {**owner, "instance_id": "wrong"}]), \
+                mock.patch("cortex_control.runtime.plan_restart", return_value=plan), \
                 redirect_stdout(io.StringIO()):
             changed = bench.run(self.inference, self.telemetry, self.root / "changed", concurrency=1,
                                 profile_identity=identity, require_managed_match=True)
@@ -478,14 +478,14 @@ class BenchTests(unittest.TestCase):
         def send(action, params):
             return management.dispatch({"schema_version": 1, "action": action,
                                         "profile": "local", "params": params})
-        with mock.patch("strata_control.benchmarking._source", return_value=(
+        with mock.patch("cortex_control.benchmarking._source", return_value=(
                 source, {"id": "local"}, revision, {"model_name": "test", "gpu": "cpu"})), \
-                mock.patch("strata_control.benchmarking._launch_plan", return_value=(launch, [])), \
-                mock.patch("strata_control.runtime.status", side_effect=lambda _: {
+                mock.patch("cortex_control.benchmarking._launch_plan", return_value=(launch, [])), \
+                mock.patch("cortex_control.runtime.status", side_effect=lambda _: {
                     **owner, "owner_id": owner_id[0]}), \
-                mock.patch("strata_control.runtime.plan_restart", return_value=restart), \
-                mock.patch.dict(os.environ, {"STRATA_API_KEY": self.service.api_key,
-                                             "STRATA_TELEMETRY_KEY": self.service.telemetry_key}):
+                mock.patch("cortex_control.runtime.plan_restart", return_value=restart), \
+                mock.patch.dict(os.environ, {"CORTEX_API_KEY": self.service.api_key,
+                                             "CORTEX_TELEMETRY_KEY": self.service.telemetry_key}):
             reviewed = send("bench.run.plan", settings)["plan"]
             self.assertEqual(reviewed["planned_requests"], 5)
             self.assertEqual(reviewed["instance_id"], instance)

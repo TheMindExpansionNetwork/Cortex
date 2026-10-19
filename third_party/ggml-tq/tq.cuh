@@ -1,6 +1,6 @@
 // third_party/ggml-tq/tq.cuh - the trellis expert types (TQ2_T, TQK6, TQK7) for ggml-cuda's MMQ tile loader.
 // Derived from agentionai/llama.cpp ggml/src/ggml-cuda/tq.cuh (MIT, the ggml authors; Laurent Zuijdwijk): only what the
-// MMQ path needs (no mat-vec kernels), reading Strata's copies of the codebook tables (third_party/ggml/ggml-common-tq.h,
+// MMQ path needs (no mat-vec kernels), reading Cortex's copies of the codebook tables (third_party/ggml/ggml-common-tq.h,
 // src/kernels/cuda/tq_lut_i8.cuh) instead of the fork's ggml-common.h.
 //
 // A 128-weight block is 32 trellis steps of 4 weights.  Step t has a 16-bit state s (the codebook index uses its low
@@ -103,6 +103,6 @@ static __device__ __forceinline__ float tq_lane_to_q8(const void * x, const int 
         const uint32_t xh = (s[i] & TQ_STATE_MASK) * 0x9e3779b1u;
         q[i] = (int) ((uint32_t) tq_lut_i8[xh >> 21] | ((uint32_t) tq_lut_i8[(xh >> 10) & 2047u] << 16));
     }
-    // Strata's block structs hold the fp16 scale as uint16_t (the fork's as ggml_half): reinterpret, do not convert
+    // Cortex's block structs hold the fp16 scale as uint16_t (the fork's as ggml_half): reinterpret, do not convert
     return __half2float(__ushort_as_half(b->d)) * TQ_LUT_I8_SCALE;
 }

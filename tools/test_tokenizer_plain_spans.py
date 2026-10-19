@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import strata_tokenizer as ST
+import cortex_tokenizer as ST
 
 
 class ReferenceTokenizer(ST.Tokenizer):

@@ -2,20 +2,20 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/sycl_queue.hpp"
-#include "strata/core/expert_source.hpp"
-#include "strata/core/remote_experts.hpp"
-#include "strata/core/peer_experts.hpp"
-#include "strata/kernels/cpu/expert_layout.hpp"
-#include "strata/artifact/gguf_reader.hpp"
+#include "cortex/sycl_queue.hpp"
+#include "cortex/core/expert_source.hpp"
+#include "cortex/core/remote_experts.hpp"
+#include "cortex/core/peer_experts.hpp"
+#include "cortex/kernels/cpu/expert_layout.hpp"
+#include "cortex/artifact/gguf_reader.hpp"
 
-#include "strata/core/pinned.hpp"
-#include "strata/platform/memory.hpp"
-#include "strata/kernels/elementwise.hpp"
-#include "strata/kernels/quantize_act.hpp"
-#include "strata/kernels/s2_expert_grouped.hpp"
-#include "strata/kernels/cpu/kq_avx1.hpp"
-#include "strata/kernels/cpu/kq_avx2.hpp"
+#include "cortex/core/pinned.hpp"
+#include "cortex/platform/memory.hpp"
+#include "cortex/kernels/elementwise.hpp"
+#include "cortex/kernels/quantize_act.hpp"
+#include "cortex/kernels/s2_expert_grouped.hpp"
+#include "cortex/kernels/cpu/kq_avx1.hpp"
+#include "cortex/kernels/cpu/kq_avx2.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -54,15 +54,15 @@
 #endif
 
 // a 64-bit seek (as in pinned.cu): the 32-bit `fseek` wraps past 4 GiB, and the spelling differs per platform
-#ifndef STRATA_FSEEK64
+#ifndef CORTEX_FSEEK64
 #ifdef _WIN32
-#define STRATA_FSEEK64(f, o) _fseeki64((f), (long long) (o), SEEK_SET)
+#define CORTEX_FSEEK64(f, o) _fseeki64((f), (long long) (o), SEEK_SET)
 #else
-#define STRATA_FSEEK64(f, o) fseeko((f), (off_t) (o), SEEK_SET)
+#define CORTEX_FSEEK64(f, o) fseeko((f), (off_t) (o), SEEK_SET)
 #endif
 #endif
 
-namespace strata::core {
+namespace cortex::core {
 
 namespace detail {
 
@@ -380,15 +380,15 @@ void close_direct(void* h) {
 /// #286/#577: whether the file tier reads its `read_bytes` unbuffered, beside `arena_bytes` of RAM copy still to be
 /// taken.  Windows times probe reads too (experts_unbuffered); on Linux the same rule as its `cache_counts = false`
 /// arm decides: whether the file cache could keep those bytes at all, from MemAvailable and the tightest cgroup
-/// limit (host_available_memory).  STRATA_UNBUFFERED_LOAD=1 / 0 forces it either way, as on Windows.
+/// limit (host_available_memory).  CORTEX_UNBUFFERED_LOAD=1 / 0 forces it either way, as on Windows.
 bool file_tier_unbuffered(const std::vector<std::string>& paths, uint64_t arena_bytes, uint64_t read_bytes,
                           std::string& why) {
 #if defined(_WIN32)
     return experts_unbuffered(paths, arena_bytes, why, /*cache_counts=*/false, read_bytes);
 #elif defined(__linux__)
     (void) paths;
-    if (const char* env = std::getenv("STRATA_UNBUFFERED_LOAD"); env != nullptr && env[0] != '\0') {
-        why = std::string("STRATA_UNBUFFERED_LOAD=") + env;
+    if (const char* env = std::getenv("CORTEX_UNBUFFERED_LOAD"); env != nullptr && env[0] != '\0') {
+        why = std::string("CORTEX_UNBUFFERED_LOAD=") + env;
         return env[0] != '0';
     }
     uint64_t avail = 0;
@@ -396,7 +396,7 @@ bool file_tier_unbuffered(const std::vector<std::string>& paths, uint64_t arena_
         why = "the available RAM is unknown";
         return false;
     }
-    const bool keepable = strata::platform::file_cache_keeps(avail, arena_bytes, read_bytes);
+    const bool keepable = cortex::platform::file_cache_keeps(avail, arena_bytes, read_bytes);
     char msg[256];
     std::snprintf(msg, sizeof msg, "%.1f GiB available, %.1f GiB of it still to be taken by the RAM copy, %.1f GiB "
                   "of experts read from the files: the file cache %s keep them",
@@ -420,7 +420,7 @@ FileExpertSource::~FileExpertSource() { close(); }
 bool FileExpertSource::open(const std::string& pack_dir, int64_t n_layers, int64_t n_expert, std::string& err) {
     close();
     if (n_layers <= 0 || n_expert <= 0) { err = "FileExpertSource: the geometry is empty"; return false; }
-    const auto& layout = strata::kernels::cpu::expert_layout();
+    const auto& layout = cortex::kernels::cpu::expert_layout();
     if (layout.n_layers != n_layers || layout.n_expert != n_expert) {
         err = "FileExpertSource: the requested geometry does not match the loaded expert layout";
         return false;
@@ -443,16 +443,16 @@ bool FileExpertSource::open(const std::string& pack_dir, int64_t n_layers, int64
         return false;
     }
     if (!layout.native) {
-        if (blob_count > std::numeric_limits<uint64_t>::max() / (uint64_t) strata::kernels::cpu::BLOB) {
+        if (blob_count > std::numeric_limits<uint64_t>::max() / (uint64_t) cortex::kernels::cpu::BLOB) {
             err = "FileExpertSource: the canonical expert size overflows";
             return false;
         }
-        const uint64_t canonical_size = blob_count * (uint64_t) strata::kernels::cpu::BLOB;
+        const uint64_t canonical_size = blob_count * (uint64_t) cortex::kernels::cpu::BLOB;
         if (want != canonical_size) {
             err = "FileExpertSource: the canonical expert layout has an inconsistent size";
             return false;
         }
-        const uint64_t bytes = (uint64_t) strata::kernels::cpu::BLOB;
+        const uint64_t bytes = (uint64_t) cortex::kernels::cpu::BLOB;
         const uint64_t layer_bytes = (uint64_t) n_expert * bytes;
         for (int64_t layer = 0; layer < n_layers; ++layer) {
             layer_offsets[(size_t) layer] = (uint64_t) layer * layer_bytes;
@@ -513,7 +513,7 @@ bool FileExpertSource::open(const std::string& pack_dir, int64_t n_layers, int64
     // 64 GB of DDR5 and `L9` measured the CPU path at 44.14 GB/s from DRAM.  `FILE_FLAG_RANDOM_ACCESS` tells
     // the cache manager the opposite: it disables read-ahead AND it lets the manager drop the pages again
     // quickly, on the assumption that a large randomly-accessed file will not be re-read.  Measured, on
-    // `strata generate --max-new 24`: **1.93 GB/s** - disk speed, 344 ms/token, and it never warmed up over 25
+    // `cortex generate --max-new 24`: **1.93 GB/s** - disk speed, 344 ms/token, and it never warmed up over 25
     // tokens, because the pages were being evicted as fast as they were faulted in.
     //
     // The correct flag is NO flag.  The access pattern IS random (10 of 512 experts per layer, a different 10
@@ -603,7 +603,7 @@ void FileExpertSource::close() {
             */
             if (complement_partial_)(void) 0;
             if (complement_locked_ > 0)
-                strata::platform::unlock_resident((uint8_t*) complement_arena_ + complement_lock_off_, complement_locked_);
+                cortex::platform::unlock_resident((uint8_t*) complement_arena_ + complement_lock_off_, complement_locked_);
             std::free(complement_arena_);
         }
     }
@@ -699,7 +699,7 @@ void FileExpertSource::close() {
 bool ExpertSource::copy_blob(int64_t layer, int64_t expert, uint8_t* dst) {
     const uint8_t* b = blob(layer, expert);
     if (b == nullptr || dst == nullptr) return false;
-    std::memcpy(dst, b, (size_t) strata::kernels::cpu::expert_layout().blob_bytes(layer));
+    std::memcpy(dst, b, (size_t) cortex::kernels::cpu::expert_layout().blob_bytes(layer));
     return true;
 }
 
@@ -711,7 +711,7 @@ bool ExpertSource::copy_blob(int64_t layer, int64_t expert, uint8_t* dst) {
 // blob is assembled when it is asked for (`blob`, into a small pool of buffers) or copied where it is needed
 // (`copy_blob`: the RAM copy, the prompt path's pinned stager buffers).
 bool FileExpertSource::open_gguf(std::string& err) {
-    const auto& lay = strata::kernels::cpu::expert_layout();
+    const auto& lay = cortex::kernels::cpu::expert_layout();
     if (!check_experts_gguf(gguf_, lay, err)) { err = "FileExpertSource: " + err; return false; }
     const size_t cut = gguf_.find_last_of("/\\");
     const std::string dir = cut == std::string::npos ? std::string() : gguf_.substr(0, cut + 1);
@@ -949,17 +949,17 @@ void FileExpertSource::prefetch_pairs(const std::pair<int32_t, int32_t>* pairs, 
 }
 
 bool FileExpertSource::advise_pairs(const std::pair<int32_t, int32_t>* pairs, int64_t n) const {
-    if (base_ == nullptr || !direct_.empty() || !strata::platform::read_ahead_enabled()) return false;
+    if (base_ == nullptr || !direct_.empty() || !cortex::platform::read_ahead_enabled()) return false;
     for (int64_t i = 0; pairs != nullptr && i < n; ++i) {
         const int64_t l = pairs[i].first, e = pairs[i].second;
         if (l < 0 || e < 0 || l >= n_layers_ || e >= n_expert_) continue;
         if (role_ptr_.empty()) {   // experts.bin: the blob is one contiguous range
-            if (const uint8_t* b = mapped_blob(l, e)) strata::platform::advise_willneed(b, layer_blob_bytes_[(size_t) l]);
+            if (const uint8_t* b = mapped_blob(l, e)) cortex::platform::advise_willneed(b, layer_blob_bytes_[(size_t) l]);
             continue;
         }
         for (int r = 0; r < 3; ++r) {
             const size_t k = (size_t) (3 * l + r);
-            strata::platform::advise_willneed(role_ptr_[k] + (size_t) ((uint64_t) e * role_bytes_[k]), role_bytes_[k]);
+            cortex::platform::advise_willneed(role_ptr_[k] + (size_t) ((uint64_t) e * role_bytes_[k]), role_bytes_[k]);
         }
     }
     return true;
@@ -995,11 +995,11 @@ void FileExpertSource::fill_many(const std::vector<Fill>& todo) {
 #if defined(_WIN32)
     // One PrefetchVirtualMemory call for every slice about to be copied: the memory manager reads them in large
     // requests, all queued at once, where the copies' page faults would read a few clusters each.  The copies below
-    // then find the pages resident (or in flight).  STRATA_FETCH_PVM=0 is the A/B arm.
+    // then find the pages resident (or in flight).  CORTEX_FETCH_PVM=0 is the A/B arm.
     {
         using Pvm = BOOL(WINAPI*)(HANDLE, ULONG_PTR, PWIN32_MEMORY_RANGE_ENTRY, ULONG);
         static const Pvm pvm = [] {
-            const char* v = std::getenv("STRATA_FETCH_PVM");
+            const char* v = std::getenv("CORTEX_FETCH_PVM");
             if (v != nullptr && std::atoi(v) == 0) return (Pvm) nullptr;
             return (Pvm) (void*) GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "PrefetchVirtualMemory");
         }();
@@ -1101,8 +1101,8 @@ bool FileExpertSource::set_unbuffered(uint64_t ram_bytes, std::string& why) {
 
 bool FileExpertSource::recheck_unbuffered(std::string& why) {
 #if defined(_WIN32) || defined(__linux__)
-    if (const char* env = std::getenv("STRATA_UNBUFFERED_LOAD"); env != nullptr && env[0] != '\0') {
-        why = std::string("STRATA_UNBUFFERED_LOAD=") + env;
+    if (const char* env = std::getenv("CORTEX_UNBUFFERED_LOAD"); env != nullptr && env[0] != '\0') {
+        why = std::string("CORTEX_UNBUFFERED_LOAD=") + env;
         return !direct_.empty();
     }
     if (base_ == nullptr || paths_.empty()) {
@@ -1489,14 +1489,14 @@ void RouterLookahead::run() {
         const auto t0 = std::chrono::steady_clock::now();
         want.clear();
         // The router dot is AVX2 (kq_avx2.cpp); a CPU without AVX2 (the experimental older-CPU builds) takes the AVX1
-        // one (kq_avx1.cpp) or, without AVX, the same sums in plain C++.  From the Strata_Dirigo fork (rwkeyes): an
+        // one (kq_avx1.cpp) or, without AVX, the same sums in plain C++.  From the Cortex_Dirigo fork (rwkeyes): an
         // AVX-only Xeon E5-2687W died here (vpmovzxwd) on its first request.  An estimate only (which experts to
         // prefetch); the order of the additions differs between the three, the output does not depend on it.
-        if (strata::kernels::cpu::cpu_avx2_ok()) {
-            strata::kernels::cpu::bf16_rows_dot_multi(routers_[(size_t) layer].data(), (int) n_expert_, (int) n_embd_,
+        if (cortex::kernels::cpu::cpu_avx2_ok()) {
+            cortex::kernels::cpu::bf16_rows_dot_multi(routers_[(size_t) layer].data(), (int) n_expert_, (int) n_embd_,
                                                       x_.data(), (int) nt, logits.data());
-        } else if (strata::kernels::cpu::cpu_avx1_ok()) {
-            strata::kernels::cpu::bf16_rows_dot_multi_avx1(routers_[(size_t) layer].data(), (int) n_expert_,
+        } else if (cortex::kernels::cpu::cpu_avx1_ok()) {
+            cortex::kernels::cpu::bf16_rows_dot_multi_avx1(routers_[(size_t) layer].data(), (int) n_expert_,
                                                            (int) n_embd_, x_.data(), (int) nt, logits.data());
         } else {
             // a mul and an add, not std::fma: without an FMA instruction that is a libm call per element (74x
@@ -1598,7 +1598,7 @@ const uint8_t* FileExpertSource::mapped_blob(int64_t layer, int64_t expert) cons
 uint64_t FileExpertSource::release(int64_t layer, int64_t expert) {
 #if defined(_WIN32)
     static const bool enabled = [] {
-        const char* v = std::getenv("STRATA_FILE_RELEASE");
+        const char* v = std::getenv("CORTEX_FILE_RELEASE");
         return v != nullptr && std::strcmp(v, "1") == 0;
     }();
     if (!enabled || base_ == nullptr || layer < 0 || expert < 0 || layer >= n_layers_ || expert >= n_expert_)
@@ -1841,7 +1841,7 @@ bool FileExpertSource::pin_cache_complement(
             and device.
             */
             if (partial_pin > 0)(void) 0;
-            if (locked > 0) strata::platform::unlock_resident((uint8_t*) arena + lock_off, locked);
+            if (locked > 0) cortex::platform::unlock_resident((uint8_t*) arena + lock_off, locked);
             std::free(arena);
         }
         arena = nullptr;
@@ -1930,17 +1930,17 @@ bool FileExpertSource::pin_cache_complement(
                 // read by the GPU over PCIe (--pcie-frac) and copied by DMA; only the rest is locked in the working
                 // set (the registered prefix is page-locked by the driver already - locking it twice made the next
                 // device allocation fail).
-                // opt-in (STRATA_PARTIAL_PIN=1): on the RTX 5070 PC the GPU's PCIe share of the misses measured no
+                // opt-in (CORTEX_PARTIAL_PIN=1): on the RTX 5070 PC the GPU's PCIe share of the misses measured no
                 // faster than the CPU computing them (7.30 / 7.44 tok/s with 24 / 16 GiB registered against 7.05-7.74
                 // unpinned at a 40 GiB budget), and registering adds startup time and driver memory pressure
                 static const bool partial_on = [] {
-                    const char* v = std::getenv("STRATA_PARTIAL_PIN");
+                    const char* v = std::getenv("CORTEX_PARTIAL_PIN");
                     return v != nullptr && std::atoi(v) != 0;
                 }();
-                // at most STRATA_PARTIAL_PIN_GIB (default 24): registering 30 GiB of a 40 GiB arena left the driver
+                // at most CORTEX_PARTIAL_PIN_GIB (default 24): registering 30 GiB of a 40 GiB arena left the driver
                 // unable to page-lock the prompt path's small buffers afterwards (RTX 5070, WDDM)
                 static const uint64_t pin_cap = [] {
-                    const char* v = std::getenv("STRATA_PARTIAL_PIN_GIB");
+                    const char* v = std::getenv("CORTEX_PARTIAL_PIN_GIB");
                     return (uint64_t) ((v != nullptr && std::atof(v) > 0 ? std::atof(v) : 24.0) * 1073741824.0);
                 }();
                 if (budget_bytes > 0 && partial_on) {
@@ -2001,8 +2001,8 @@ bool FileExpertSource::pin_cache_complement(
                     note += std::string("; ") + msg;
                 }
                 lock_off = partial_pin;
-                const strata::platform::LockResult lr =
-                    strata::platform::lock_resident((uint8_t*) arena + lock_off, bytes - lock_off);
+                const cortex::platform::LockResult lr =
+                    cortex::platform::lock_resident((uint8_t*) arena + lock_off, bytes - lock_off);
                 locked = lr.locked_bytes;
                 note += (note.empty() ? "" : "; ") + lr.note;
             }
@@ -2157,7 +2157,7 @@ bool FileExpertSource::pin_cache_complement(
         const long long missing = lendable - (long long) complement_lent_slots_;
         std::fprintf(stderr, "FileExpertSource: WARNING: %lld of %lld lendable slots (%.0f%%) will read their experts from the pack "
                              "during a long prompt; expect a slower prompt read on 50K+ token prompts (one measurement: 18%% uncovered "
-                             "cost 26%%). Free RAM or lower STRATA_RESIDENT_HEADROOM_GIB (now the RAM left free at start) and restart; "
+                             "cost 26%%). Free RAM or lower CORTEX_RESIDENT_HEADROOM_GIB (now the RAM left free at start) and restart; "
                              "the line above should read N of N.\n", missing, lendable, 100.0 * (double) missing / (double) std::max<long long>(1, lendable));
     }
     if (!additional_gpu_pairs.empty()) {
@@ -2205,7 +2205,7 @@ bool FileExpertSource::reserve_exchanges(int64_t n, std::string& err) {
     if ((uint64_t)n > std::numeric_limits<size_t>::max() / blob) {
         err = "FileExpertSource: exchange allocation size overflow"; return false;
     }
-    const char* rotate_env = std::getenv("STRATA_EXCHANGE_ROTATE");
+    const char* rotate_env = std::getenv("CORTEX_EXCHANGE_ROTATE");
     const bool requested = rotate_env && std::strcmp(rotate_env, "1") == 0;
     const bool uniform = std::all_of(layer_blob_bytes_.begin(), layer_blob_bytes_.end(),
                                     [blob](uint64_t b) { return b == blob; });
@@ -2316,7 +2316,7 @@ int64_t FileExpertSource::commit_exchanges() {
 }
 
 void FileExpertSource::commit_copies() {
-    if (exchange_storage_.active()) return;   // STRATA_EXCHANGE_ROTATE: ownership moves in commit_flip, nothing to copy
+    if (exchange_storage_.active()) return;   // CORTEX_EXCHANGE_ROTATE: ownership moves in commit_flip, nothing to copy
     for (const Exchange& x : staged_) {
         const uint8_t* src = override_.empty() ? nullptr : override_[x.out];
         const uint64_t at = complement_offsets_[x.in];
@@ -2330,7 +2330,7 @@ int64_t FileExpertSource::commit_flip() {
     int64_t n = 0;
     for (const Exchange& x : staged_) {
         const uint8_t* src = override_[x.out];
-        if (exchange_storage_.active()) {   // STRATA_EXCHANGE_ROTATE: the same ownership transfer as commit_exchanges
+        if (exchange_storage_.active()) {   // CORTEX_EXCHANGE_ROTATE: the same ownership transfer as commit_exchanges
             if (!exchange_storage_.commit(x.in, x.out, (size_t) x.q, src, (size_t) x.bytes)) {
                 std::fprintf(stderr, "FileExpertSource: invalid exchange rotation commit; refusing corrupt residency\n");
                 std::abort();
@@ -2356,7 +2356,7 @@ const uint8_t* FileExpertSource::resident_blob(int64_t layer, int64_t expert) co
         expert >= n_expert_) return nullptr;
     const size_t index = (size_t) layer * (size_t) n_expert_ + (size_t) expert;
     if (index >= complement_offsets_.size()) return nullptr;
-    return resident_blob(index);   // through the rotation's ownership table when STRATA_EXCHANGE_ROTATE is on
+    return resident_blob(index);   // through the rotation's ownership table when CORTEX_EXCHANGE_ROTATE is on
 }
 
 const uint8_t* FileExpertSource::blob(int64_t layer, int64_t expert) {
@@ -2420,7 +2420,7 @@ void expert_pool_dispatch(void* user, const float* x_f, const int32_t* ids, cons
     ExpertDispatch& d = *(ExpertDispatch*) user;
     if (d.failed) return;   // a previous layer already failed; do not make it worse
 
-    using namespace strata::kernels::cpu;
+    using namespace cortex::kernels::cpu;
     // Clause 3: the blob's internal offsets are compile-time constants, so a mismatched geometry does not
     // produce a wrong answer - it produces a walk off the end of the blob into the next expert's bytes, which
     // is finite and plausible.  Refuse, name the number, and let the driver report it.
@@ -2541,12 +2541,12 @@ namespace {
 // are fixed arrays of this many entries: MAXT tokens of the model's 10 routed experts must fit, and a larger k is
 // refused at run time rather than written past them.
 constexpr int64_t kMaxWindowEntries = 128;
-static_assert(strata::kernels::cpu::MAXT * 10 <= kMaxWindowEntries, "a verify window's entries overflow the tables");
+static_assert(cortex::kernels::cpu::MAXT * 10 <= kMaxWindowEntries, "a verify window's entries overflow the tables");
 }  // namespace
 
 void expert_pool_dispatch_multi(ExpertDispatch& d, const float* x_f, const int32_t* ids, int64_t n_tok, int64_t k,
                                 float* out) {
-    using namespace strata::kernels::cpu;
+    using namespace cortex::kernels::cpu;
     if (d.failed) return;
     if (n_tok < 1 || n_tok > MAXT) {
         d.failed = true;
@@ -2567,7 +2567,7 @@ void expert_pool_dispatch_multi(ExpertDispatch& d, const float* x_f, const int32
     if (native && d.nact_multi.size() < (size_t) MAXT * kNativeActBytes) d.nact_multi.resize((size_t) MAXT * kNativeActBytes);
     if (d.job_of.size() != (size_t) d.n_expert) d.job_of.assign((size_t) d.n_expert, (int16_t) -1);
     if (d.jobs_multi.size() < (size_t) (n_tok * k)) d.jobs_multi.resize((size_t) (MAXT * k));
-    static const bool ptrace = std::getenv("STRATA_POOL_TRACE") != nullptr;
+    static const bool ptrace = std::getenv("CORTEX_POOL_TRACE") != nullptr;
     auto pt = [&](const char* what, long long a = -1) {
         if (ptrace) { std::fprintf(stderr, "pool trace: layer %lld %s %lld\n", (long long) d.layers, what, a); std::fflush(stderr); }
     };
@@ -2687,7 +2687,7 @@ void expert_pool_dispatch_multi(ExpertDispatch& d, const float* x_f, const int32
     if (d.peer != nullptr) {                 // multi-GPU: start the second GPU's share before the CPU's own work
         std::string perr;
         if (!d.peer->launch(d.layers, x_f, ids, n_tok, k, kind, perr, out)) {
-            std::fprintf(stderr, "strata: %s (layer %lld)\n", perr.c_str(), (long long) d.layers);
+            std::fprintf(stderr, "cortex: %s (layer %lld)\n", perr.c_str(), (long long) d.layers);
             d.failed = true;
             d.fail = "the peer GPU's experts could not be launched";
             d.fail_layer = d.layers;
@@ -2703,10 +2703,10 @@ void expert_pool_dispatch_multi(ExpertDispatch& d, const float* x_f, const int32
             for (int64_t i = 0; i < n; ++i) if (d.remote[r]->owns(i)) kind[i] = 2;
         }
     }
-    static const bool dec_batch = [] { const char* v = std::getenv("STRATA_DEC_BATCH"); return v == nullptr || std::atoi(v) != 0; }();
-    // the GPU's copy_rows_from_mapped zeroes the rows it computed itself (dec_batch); STRATA_VERIFY_DEVICE_PLAN's
+    static const bool dec_batch = [] { const char* v = std::getenv("CORTEX_DEC_BATCH"); return v == nullptr || std::atoi(v) != 0; }();
+    // the GPU's copy_rows_from_mapped zeroes the rows it computed itself (dec_batch); CORTEX_VERIFY_DEVICE_PLAN's
     // copy_or_zero_from_mapped copies every row, so there the host still zeroes them
-    static const bool device_plan = [] { const char* v = std::getenv("STRATA_VERIFY_DEVICE_PLAN"); return v != nullptr && std::atoi(v) != 0; }();
+    static const bool device_plan = [] { const char* v = std::getenv("CORTEX_VERIFY_DEVICE_PLAN"); return v != nullptr && std::atoi(v) != 0; }();
     const bool gpu_zeroes_hits = (d.plan != nullptr && n <= kMaxWindowEntries && n <= d.plan->cap && dec_batch && !device_plan);
     bool any_cpu = false;
     for (int64_t i = 0; i < n; ++i)
@@ -2717,7 +2717,7 @@ void expert_pool_dispatch_multi(ExpertDispatch& d, const float* x_f, const int32
         const bool ep = d.remote_count > 0 && d.remote[0]->optimized_decode();
         for (int64_t t = 0; t < n_tok; ++t) {
             if (ep && std::all_of(kind + t * k, kind + (t + 1) * k, [](int32_t v) { return v >= 0; })) continue;
-            if (native && strata::kernels::cpu::q2_native_kernels(lay.fmt[(size_t) d.layers].gu_type))   // a native Q2_0 pack: the Q2_0 kernels' activations
+            if (native && cortex::kernels::cpu::q2_native_kernels(lay.fmt[(size_t) d.layers].gu_type))   // a native Q2_0 pack: the Q2_0 kernels' activations
                 act_quant_any(x_f + (size_t) t * H, H, d.act_multi[(size_t) t]);
             else if (native)
                 native_quant_act(lay.fmt[(size_t) d.layers], x_f + (size_t) t * H, d.nact_multi.data() + (size_t) t * kNativeActBytes);
@@ -2799,7 +2799,7 @@ void expert_pool_dispatch_multi(ExpertDispatch& d, const float* x_f, const int32
     if (d.peer != nullptr) {                 // multi-GPU: the second GPU's rows, into the same mapped rows
         std::string perr;
         if (!d.peer->finish(out, perr)) {
-            std::fprintf(stderr, "strata: %s (layer %lld)\n", perr.c_str(), (long long) d.layers);
+            std::fprintf(stderr, "cortex: %s (layer %lld)\n", perr.c_str(), (long long) d.layers);
             d.failed = true;
             d.fail = "the peer GPU's experts failed";
             d.fail_layer = d.layers;
@@ -2826,7 +2826,7 @@ void expert_hit_run(void *user, void *stream, HitPhase phase,
                     const int32_t *ids, int64_t k) try {
     ExpertDispatch& d = *(ExpertDispatch*) user;
     if (d.failed) return;
-    dpct::queue_ptr cs = strata::q_of(stream);
+    dpct::queue_ptr cs = cortex::q_of(stream);
 
     if (phase == HitPhase::Launch) {
         d.decided = false;
@@ -2855,7 +2855,7 @@ void expert_hit_run(void *user, void *stream, HitPhase phase,
                 // count of distinct experts moved rather than of looks.
                 const uint8_t* b = d.src->blob(d.layers, e);
                 std::string ferr;
-                if (b == nullptr || !d.cache->fill_slot(cand, b, cs, ferr, (int64_t) strata::kernels::cpu::expert_layout().blob_bytes(d.layers))) {
+                if (b == nullptr || !d.cache->fill_slot(cand, b, cs, ferr, (int64_t) cortex::kernels::cpu::expert_layout().blob_bytes(d.layers))) {
                     d.failed = true;
                     d.fail = "the expert cache could not fill a slot";
                     d.fail_layer = d.layers;
@@ -2916,13 +2916,13 @@ void expert_hit_run(void *user, void *stream, HitPhase phase,
             d.fail = "the hit path has no fp32 activation scales (R4.2h)";
             return;
         }
-        strata::kernels::quantize_q8_0_scaled(d.mixed, d.x_q8_0_hit, d.x_q8_0_hit_scale, strata::kernels::cpu::H,
+        cortex::kernels::quantize_q8_0_scaled(d.mixed, d.x_q8_0_hit, d.x_q8_0_hit_scale, cortex::kernels::cpu::H,
                                               cs);
         if (d.hit_cpu_order)
-            strata::kernels::moe_hit_grouped_s2_cpu_order(d.cache_base, d.d_slot, d.d_dst, d.n_hits,
+            cortex::kernels::moe_hit_grouped_s2_cpu_order(d.cache_base, d.d_slot, d.d_dst, d.n_hits,
                 d.cache_blob, d.x_q8_0_hit, d.hit_scratch, d.hit_out, cs, d.x_q8_0_hit_scale);
         else
-            strata::kernels::moe_hit_grouped_s2(d.cache_base, d.d_slot, d.d_dst, d.n_hits, d.cache_blob,
+            cortex::kernels::moe_hit_grouped_s2(d.cache_base, d.d_slot, d.d_dst, d.n_hits, d.cache_blob,
                 d.x_q8_0_hit, d.hit_scratch, d.hit_out, cs, d.x_q8_0_hit_scale);
         d.hit_pending = true;
         if (d.hit_done != nullptr)
@@ -2946,7 +2946,7 @@ void expert_hit_run(void *user, void *stream, HitPhase phase,
             sycl::info::event_command_status::complete)++ d.hit_ready;
         else ++d.hit_late;
     }
-    strata::kernels::add_inplace(d.parts_out, d.hit_out, d.parts_elems, cs);
+    cortex::kernels::add_inplace(d.parts_out, d.hit_out, d.parts_elems, cs);
 }
 catch (sycl::exception const &exc) {
   std::cerr << exc.what() << "Exception caught at file:" << __FILE__
@@ -3022,10 +3022,10 @@ bool hash_sampled_file(const std::filesystem::path& path, uint64_t& h, std::stri
 }
 
 bool shared_arena_pack_hash(const std::string& pack_dir, const std::string& experts_path,
-                            const std::string& gguf, const strata::kernels::cpu::ExpertLayout& lay,
+                            const std::string& gguf, const cortex::kernels::cpu::ExpertLayout& lay,
                             uint64_t& out, std::string& err) {
     uint64_t h = 1469598103934665603ull;
-    hash_text(h, "strata-shared-expert-arena-pack-v1");
+    hash_text(h, "cortex-shared-expert-arena-pack-v1");
     hash_u64(h, (uint64_t) lay.n_layers);
     hash_u64(h, (uint64_t) lay.n_expert);
     hash_u64(h, lay.total);
@@ -3064,7 +3064,7 @@ bool shared_arena_pack_hash(const std::string& pack_dir, const std::string& expe
 namespace {
 /// The GGUF file that holds role `r` (0 gate, 1 up, 2 down) of layer `l`: a name beside the --native shard
 /// (native_experts.txt v3 per layer, v4 per role), or the --native shard itself.
-std::string expert_gguf_file(const std::string& gguf, const strata::kernels::cpu::ExpertLayout& lay, int64_t l, int r) {
+std::string expert_gguf_file(const std::string& gguf, const cortex::kernels::cpu::ExpertLayout& lay, int64_t l, int r) {
     const size_t i = (size_t) (3 * l + r);
     if (lay.gguf_file.size() <= i || lay.gguf_file[i].empty()) return gguf;
     const size_t cut = gguf.find_last_of("/\\");
@@ -3073,7 +3073,7 @@ std::string expert_gguf_file(const std::string& gguf, const strata::kernels::cpu
 }  // namespace
 
 void ExpertSource::record_inputs(const std::string& pack_experts, const std::string& gguf,
-                                 const strata::kernels::cpu::ExpertLayout& lay, bool from_gguf) {
+                                 const cortex::kernels::cpu::ExpertLayout& lay, bool from_gguf) {
     static const char* roles[3] = {"gate", "up", "down"};
     inputs_.clear();
     if (!from_gguf) { inputs_.push_back({"pack experts.bin", pack_experts}); return; }
@@ -3083,14 +3083,14 @@ void ExpertSource::record_inputs(const std::string& pack_experts, const std::str
             inputs_.push_back({"expert blk." + std::to_string(l) + ".ffn_" + roles[r], expert_gguf_file(gguf, lay, l, r)});
 }
 
-bool check_experts_gguf(const std::string& gguf, const strata::kernels::cpu::ExpertLayout& lay, std::string& err) {
+bool check_experts_gguf(const std::string& gguf, const cortex::kernels::cpu::ExpertLayout& lay, std::string& err) {
     static const char* roles[3] = {"gate", "up", "down"};
     if (lay.gguf_off.size() != (size_t) (3 * lay.n_layers)) {
         err = "native_experts.txt has no GGUF offsets (a pack older than v2): repack it with tools/iq_pack.py";
         return false;
     }
     try {
-        std::map<std::string, std::unique_ptr<strata::GgufFile>> files;
+        std::map<std::string, std::unique_ptr<cortex::GgufFile>> files;
         for (int64_t l = 0; l < lay.n_layers; ++l) {
             const auto& fm = lay.fmt[(size_t) l];
             const uint64_t blob = lay.bytes[(size_t) l];
@@ -3098,9 +3098,9 @@ bool check_experts_gguf(const std::string& gguf, const strata::kernels::cpu::Exp
             for (int r = 0; r < 3; ++r) {
                 const std::string path = expert_gguf_file(gguf, lay, l, r);
                 auto& f = files[path];
-                if (!f) f = std::make_unique<strata::GgufFile>(path);
+                if (!f) f = std::make_unique<cortex::GgufFile>(path);
                 const std::string name = "blk." + std::to_string(l) + ".ffn_" + roles[r] + "_exps.weight";
-                const strata::TensorInfo* t = f->find(name);
+                const cortex::TensorInfo* t = f->find(name);
                 const uint64_t want_type = (uint64_t) (r < 2 ? fm.gu_type : fm.d_type);
                 // GGUF order: dim 0 is the row (the input), dim 1 the rows, dim 2 the experts
                 const uint64_t cols = (uint64_t) (r < 2 ? fm.n_embd : fm.n_ff);
@@ -3115,7 +3115,7 @@ bool check_experts_gguf(const std::string& gguf, const strata::kernels::cpu::Exp
                          t->shape[2] != (uint64_t) lay.n_expert)
                     why = "is not [" + std::to_string(cols) + ", " + std::to_string(rows) + ", " +
                           std::to_string(lay.n_expert) + "]";
-                else if (strata::tensor_payload_bytes(*t) != bytes)
+                else if (cortex::tensor_payload_bytes(*t) != bytes)
                     why = "is not " + std::to_string(per[r]) + " B per expert";
                 else if (f->data_start() + t->offset != lay.gguf_off[(size_t) (3 * l + r)])
                     why = "starts at byte " + std::to_string(f->data_start() + t->offset) + ", the pack says " +
@@ -3143,7 +3143,7 @@ bool check_experts_gguf(const std::string& gguf, const strata::kernels::cpu::Exp
 // #255, gopinath87607).  The caller checks the spans first (check_experts_gguf).
 // `unbuffered` (Windows, experts_unbuffered): each chunk's 4 KiB-aligned window is read with FILE_FLAG_NO_BUFFERING into
 // an aligned buffer and scattered into the blobs - no copy through the file cache when the drive is read anyway.
-LoadStats load_experts_gguf(const std::string& gguf, uint8_t* dst, const strata::kernels::cpu::ExpertLayout& lay,
+LoadStats load_experts_gguf(const std::string& gguf, uint8_t* dst, const cortex::kernels::cpu::ExpertLayout& lay,
                             int threads, bool unbuffered, const std::atomic<int>* ready) {
     // `ready`: layer l is written only once *ready > l + 1 (a PinnedArena registering its slices meanwhile; the next
     // slice too, since its registration starts on the page that may hold this layer's tail)
@@ -3281,7 +3281,7 @@ LoadStats load_experts_gguf(const std::string& gguf, uint8_t* dst, const strata:
                 for (uint64_t done = 0; done < total; done += chunk) {
                     const uint64_t n = std::min<uint64_t>(chunk, total - done);
                     // 64-bit seek: a shard is tens of GB
-                    if (STRATA_FSEEK64(f, src + done) != 0) { bad = true; return; }
+                    if (CORTEX_FSEEK64(f, src + done) != 0) { bad = true; return; }
                     if (std::fread(buf.data(), 1, (size_t) n, f) != (size_t) n) { bad = true; return; }
                     for (uint64_t k = 0; k < n / per[r]; ++k) {
                         const uint64_t e = done / per[r] + k;
@@ -3314,7 +3314,7 @@ bool ArenaExpertSource::open(const std::string& pack_dir, int64_t n_layers, int6
     close();
     const std::string path = pack_dir + "/experts.bin";
     // plan v0.3 P6: the layout (canonical, or a native pack's per-layer blobs) was loaded by the driver
-    const strata::kernels::cpu::ExpertLayout& lay = strata::kernels::cpu::expert_layout();
+    const cortex::kernels::cpu::ExpertLayout& lay = cortex::kernels::cpu::expert_layout();
     if (lay.n_layers != n_layers || lay.n_expert != n_expert) {
         err = "ArenaExpertSource: the expert layout was loaded for a different geometry";
         return false;
@@ -3335,7 +3335,7 @@ bool ArenaExpertSource::open(const std::string& pack_dir, int64_t n_layers, int6
         std::ifstream f(path, std::ios::binary | std::ios::ate);
         if (!f) { err = "ArenaExpertSource: cannot open " + path; return false; }
         const uint64_t got = (uint64_t) f.tellg();
-        if (got != want && got != want + (uint64_t) blob) {   // + one blob: STRATA_ARENA_MMAP's padded file
+        if (got != want && got != want + (uint64_t) blob) {   // + one blob: CORTEX_ARENA_MMAP's padded file
             char buf[400];
             std::snprintf(buf, sizeof buf,
                           "ArenaExpertSource: %s is %llu B but %lld layers x %lld experts (blobs up to %lld B) "
@@ -3347,7 +3347,7 @@ bool ArenaExpertSource::open(const std::string& pack_dir, int64_t n_layers, int6
         }
     }
 
-    // STRATA_ARENA_MMAP=1 (a small-RAM machine whose GPUs hold most experts): the arena is the pack's experts.bin
+    // CORTEX_ARENA_MMAP=1 (a small-RAM machine whose GPUs hold most experts): the arena is the pack's experts.bin
     // mapped READ-ONLY - not locked, not pinned.  The page cache keeps what the CPU pool and the prompt path
     // actually read (the experts no VRAM cache holds) and gives back the rest under memory pressure; a page
     // dropped is re-read from the file, so a result never depends on what is resident.  The GPUs then get no
@@ -3356,7 +3356,7 @@ bool ArenaExpertSource::open(const std::string& pack_dir, int64_t n_layers, int6
 #if defined(_WIN32)
     static const bool arena_mmap = false;   // POSIX mmap/madvise: Linux only for now
 #else
-    static const bool arena_mmap = [] { const char* v = std::getenv("STRATA_ARENA_MMAP"); return v && v[0] == '1'; }();
+    static const bool arena_mmap = [] { const char* v = std::getenv("CORTEX_ARENA_MMAP"); return v && v[0] == '1'; }();
     if (arena_mmap) {
         const uint64_t file_bytes = want + (uint64_t) blob;
         uint64_t have = 0;
@@ -3378,7 +3378,7 @@ bool ArenaExpertSource::open(const std::string& pack_dir, int64_t n_layers, int6
             blobs_ = n_layers * n_expert;
             n_expert_ = n_expert;
             reads_ = 0;
-            note_ = "mapped read-only from " + path + " (STRATA_ARENA_MMAP: not locked, not pinned)";
+            note_ = "mapped read-only from " + path + " (CORTEX_ARENA_MMAP: not locked, not pinned)";
             gib_per_s_ = 0.0;
             load_seconds_ = load_read_s_ = load_copy_s_ = 0.0;
             record_inputs(path, gguf_, lay, from_gguf);   // session files: the mapped experts.bin is a model input
@@ -3433,12 +3433,12 @@ bool ArenaExpertSource::open(const std::string& pack_dir, int64_t n_layers, int6
     bounds.push_back(want);
     // #285: on Windows the per-layer registration runs on a thread ahead of the readers, which wait for their
     // layer's slice (the whole arena registered before the load cost ~2.5 s at 33 GiB of 4 KB pages, not hidden).
-    // Only where the whole arena would be registered: no cap (STRATA_ARENA_PIN_GIB, multi-GPU), no shared arena.
-    // Linux keeps the whole-arena pin (#253). OPT-IN (STRATA_DEFERRED_REGISTER=1): on the RTX 5070 / Windows the
+    // Only where the whole arena would be registered: no cap (CORTEX_ARENA_PIN_GIB, multi-GPU), no shared arena.
+    // Linux keeps the whole-arena pin (#253). OPT-IN (CORTEX_DEFERRED_REGISTER=1): on the RTX 5070 / Windows the
     // arena registered per layer before it is filled decoded ~10% slower than the old order (whole-arena try, sliced
     // fallback after the load) with identical output; the start-time gain does not pay for that.
 #ifdef _WIN32
-    const char* defer_env = std::getenv("STRATA_DEFERRED_REGISTER");
+    const char* defer_env = std::getenv("CORTEX_DEFERRED_REGISTER");
     const bool deferred = max_pinned_bytes == 0 && arena_pin_cap_gib() == -1 && shared_arena_file.empty() &&
                           (defer_env != nullptr && defer_env[0] != 0 && defer_env[0] != '0');
 #else
@@ -3494,7 +3494,7 @@ bool ArenaExpertSource::open(const std::string& pack_dir, int64_t n_layers, int6
             st = load_experts_ranges(path, a->data(), loff, lbytes, threads, /*chunk=*/8u << 20, rp);
     }
     if (reg.joinable()) reg.join();
-    std::fprintf(stderr, "strata generate: expert arena read %s (%s)\n", unbuffered ? "unbuffered" : "through the file cache",
+    std::fprintf(stderr, "cortex generate: expert arena read %s (%s)\n", unbuffered ? "unbuffered" : "through the file cache",
                  why.c_str());
     if (!st.ok) {
         delete a;
@@ -3506,8 +3506,8 @@ bool ArenaExpertSource::open(const std::string& pack_dir, int64_t n_layers, int6
         err = "ArenaExpertSource: the load read " + std::to_string(st.bytes) + " B of " + std::to_string(want);
         return false;
     }
-    if (std::getenv("STRATA_VERIFY_ARENA") != nullptr) {   // tests: the loaded arena's checksum, any loader
-        std::fprintf(stderr, "strata generate: expert arena checksum %016llx (%.2f GiB)\n",
+    if (std::getenv("CORTEX_VERIFY_ARENA") != nullptr) {   // tests: the loaded arena's checksum, any loader
+        std::fprintf(stderr, "cortex generate: expert arena checksum %016llx (%.2f GiB)\n",
                      (unsigned long long) fnv1a64(a->data(), want), (double) want / (1ull << 30));
     }
     // the first start: write experts.bin for the mapped starts after this one - only when the drive has room for it
@@ -3517,7 +3517,7 @@ bool ArenaExpertSource::open(const std::string& pack_dir, int64_t n_layers, int6
         std::filesystem::path(path).parent_path(), space_ec).available : 0;
     const bool room = !space_ec && free_disk >= want + (uint64_t) blob + (2ull << 30);
     if (arena_mmap && from_gguf && !room)
-        std::fprintf(stderr, "strata generate: STRATA_ARENA_MMAP: NOT writing %s - %.1f GiB free on that drive, it needs "
+        std::fprintf(stderr, "cortex generate: CORTEX_ARENA_MMAP: NOT writing %s - %.1f GiB free on that drive, it needs "
                              "%.1f GiB plus 2 GiB to spare; this start keeps the arena in RAM\n", path.c_str(),
                      (double) free_disk / 1073741824.0, (double) (want + (uint64_t) blob) / 1073741824.0);
     if (arena_mmap && from_gguf && room) {
@@ -3531,7 +3531,7 @@ bool ArenaExpertSource::open(const std::string& pack_dir, int64_t n_layers, int6
         if (f) ok = std::fclose(f) == 0 && ok;
         if (ok) ok = std::rename(tmp.c_str(), path.c_str()) == 0;
         if (!ok) std::remove(tmp.c_str());
-        std::fprintf(stderr, "strata generate: STRATA_ARENA_MMAP: %s %s (the next start maps it)\n",
+        std::fprintf(stderr, "cortex generate: CORTEX_ARENA_MMAP: %s %s (the next start maps it)\n",
                      ok ? "wrote" : "could NOT write", path.c_str());
     }
     arena_ = a;
@@ -3590,7 +3590,7 @@ void ArenaExpertSource::prefetch(int64_t layer, int64_t expert) {
     (void) layer; (void) expert;
 #else
     if (map_ == nullptr || layer < 0 || expert < 0 || expert >= n_expert_) return;
-    const auto& lay = strata::kernels::cpu::expert_layout();
+    const auto& lay = cortex::kernels::cpu::expert_layout();
     const uint64_t off = lay.blob_offset(layer, expert) & ~(uint64_t) 4095;
     const uint64_t end = lay.blob_offset(layer, expert) + lay.blob_bytes(layer);
     madvise((uint8_t*) map_ + off, (size_t) (end - off), MADV_WILLNEED);
@@ -3609,7 +3609,7 @@ uint64_t ArenaExpertSource::release(int64_t layer, int64_t expert) {
     return 0;
 #else
     if (map_ == nullptr || layer < 0 || expert < 0 || expert >= n_expert_) return 0;
-    const auto& lay = strata::kernels::cpu::expert_layout();
+    const auto& lay = cortex::kernels::cpu::expert_layout();
     const uint64_t off = (lay.blob_offset(layer, expert) + 4095) & ~(uint64_t) 4095;
     const uint64_t end = (lay.blob_offset(layer, expert) + lay.blob_bytes(layer)) & ~(uint64_t) 4095;
     if (end <= off) return 0;
@@ -3620,13 +3620,13 @@ uint64_t ArenaExpertSource::release(int64_t layer, int64_t expert) {
 
 bool ArenaExpertSource::pinned(int64_t layer, int64_t expert) const {
     if (base_ == nullptr || layer < 0 || expert < 0 || expert >= n_expert_) return false;
-    const auto& lay = strata::kernels::cpu::expert_layout();
+    const auto& lay = cortex::kernels::cpu::expert_layout();
     return lay.blob_offset(layer, expert) + lay.blob_bytes(layer) <= pinned_bytes_;
 }
 
 const uint8_t* ArenaExpertSource::device_alias(int64_t layer, int64_t expert) const {
     if (dev_slice_.empty() || !pinned(layer, expert)) return nullptr;
-    const auto& lay = strata::kernels::cpu::expert_layout();
+    const auto& lay = cortex::kernels::cpu::expert_layout();
     if (slice_bytes_ == 0) return dev_slice_[0] + lay.blob_offset(layer, expert);
     // one registration slice per layer
     if ((size_t) layer >= dev_slice_.size()) return nullptr;
@@ -3641,7 +3641,7 @@ const uint8_t* ArenaExpertSource::blob(int64_t layer, int64_t expert) {
     ++reads_;
     // Pointer arithmetic into resident memory.  No fault, no copy, no mapping - which is the entire point of
     // this class over `FileExpertSource`.
-    return base_ + strata::kernels::cpu::expert_layout().blob_offset(layer, expert);
+    return base_ + cortex::kernels::cpu::expert_layout().blob_offset(layer, expert);
 }
 
-}  // namespace strata::core
+}  // namespace cortex::core

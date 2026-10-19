@@ -1,11 +1,11 @@
-# Installing Strata for a user (instructions for AI agents)
+# Installing Cortex for a user (instructions for AI agents)
 
 This page is written for an AI coding assistant (Claude Code, Cursor, Codex, GitHub Copilot, ...) that a user asked to
-set up Strata on their PC. Strata runs the Qwen3.8-Flash-Next model locally on one NVIDIA or AMD graphics card plus
+set up Cortex on their PC. Cortex runs the Qwen3.8-Flash-Next model locally on one NVIDIA or AMD graphics card plus
 system RAM (or on an Apple Silicon Mac), and serves an OpenAI- and Anthropic-compatible API on `http://127.0.0.1:8080`.
 The human-oriented version of everything below is [INSTALL.md](INSTALL.md).
 
-You use the **Terminal**: the `strata` command. Install it with one line, then `strata launch` downloads the engine
+You use the **Terminal**: the `cortex` command. Install it with one line, then `cortex launch` downloads the engine
 for the card and the model, and starts the server. If the Terminal cannot run on this PC, step 9 has the older route
 from source.
 
@@ -14,14 +14,14 @@ Work through the steps in order. Tell the user what you are doing in plain words
 ## 0. Ground rules
 
 - **Never expose the server without an API key.** Keep the default (`--access local`, the server listens on
-  `127.0.0.1` only). Only if the user asks for access from other devices, use `--access lan`. Strata makes a long
+  `127.0.0.1` only). Only if the user asks for access from other devices, use `--access lan`. Cortex makes a long
   random key for you then and will not start on a network without one. Give the user the key
-  (`strata launch --show-key`). Never put a tunnel or port forward in front of a server without a key.
-- Do not change the user's system beyond what Strata does. The Terminal installs into the user's home folder and needs
+  (`cortex launch --show-key`). Never put a tunnel or port forward in front of a server without a key.
+- Do not change the user's system beyond what Cortex does. The Terminal installs into the user's home folder and needs
   no administrator rights. It does not install drivers, Python packages or compilers. Ask before installing drivers.
 - The model download is ~70 GB (94 GB for Unsloth's UD-IQ4_XS, 111 GB for UD-Q4_K_XL). Confirm the user is fine with
   that before you start, especially on a metered connection.
-- The first `strata launch` is long-running (an hour or more on a slow connection). Run it in the background or with a
+- The first `cortex launch` is long-running (an hour or more on a slow connection). Run it in the background or with a
   long timeout and poll its output; do not kill it because it is quiet for a while. It is resumable: running the same
   command again continues where it stopped.
 - Piping a script from the internet into a shell runs code you have not read. Tell the user what the line does (step 2).
@@ -60,7 +60,7 @@ If the PC does not meet them, say which part is missing and stop.
 ## 2. Install the Terminal
 
 One line. It needs no administrator rights. It checks what kind of PC this is, downloads the Terminal archive, checks
-its SHA-256, unpacks it into the user's home folder, checks the release's signed update feed, and puts `strata` on the
+its SHA-256, unpacks it into the user's home folder, checks the release's signed update feed, and puts `cortex` on the
 PATH.
 
 ```
@@ -68,18 +68,18 @@ Linux, Mac:           curl -fsSL https://github.com/Niko1221/Strata/releases/lat
 Windows (PowerShell): irm https://github.com/Niko1221/Strata/releases/latest/download/install.ps1 | iex
 ```
 
-On Windows, open a new terminal window afterwards (the PATH changed). Check it: `strata --version`.
+On Windows, open a new terminal window afterwards (the PATH changed). Check it: `cortex --version`.
 
 ## 3. Pick the model
 
-`strata launch --plan` shows what Strata would do and changes nothing. With no `--model` it picks the model for this
-PC's RAM and prints the exact command line (`same as strata launch --model ...`). Use it as the default, or pick
+`cortex launch --plan` shows what Cortex would do and changes nothing. With no `--model` it picks the model for this
+PC's RAM and prints the exact command line (`same as cortex launch --model ...`). Use it as the default, or pick
 yourself by the PC's RAM (ask the user whether they mainly want it for code - then the Coder is a good pick at any RAM
 size):
 
 | RAM | `--model` (and `--family`) | Notes |
 | --- | --- | --- |
-| 32 GB | `--family coder --model iq1_m` | for code; with a 24 GB card Q2_0 and IQ2_XS also run (Strata picks the low-RAM mode) |
+| 32 GB | `--family coder --model iq1_m` | for code; with a 24 GB card Q2_0 and IQ2_XS also run (Cortex picks the low-RAM mode) |
 | 48 GB | `--model iq2_xs` | or `q2_0` (fastest) |
 | 64 GB | `--model iq2_xs` (recommended) | `iq3_xxs` / `iq3_s` are slower and a bit better |
 | 96 GB+ | `--model iq3_s` | `--family unsloth --model ud-iq4_xs` (~4-bit, 94 GB, part of the experts read from the SSD under ~80 GB of RAM); `ud-q4_k_xl` is experimental: NVIDIA only, NVMe SSD, 7-8.5 tokens/s on 64 GB |
@@ -90,15 +90,15 @@ alternative to `qwen`. A model name is not case sensitive. More: [MODELS.md](MOD
 ## 4. Set up and serve, without questions
 
 ```
-strata launch --plan --model iq2_xs            # what would happen; nothing is changed
-strata launch --model iq2_xs --yes --no-tui    # do it: download the engine and the model, start the server
+cortex launch --plan --model iq2_xs            # what would happen; nothing is changed
+cortex launch --model iq2_xs --yes --no-tui    # do it: download the engine and the model, start the server
 ```
 
 With `--no-tui` and `--yes` it asks nothing, prints the addresses when the server is ready, and returns. The server
-keeps running in the background. `strata launch` with no `--model`, `--preset` or other choice needs a terminal for
+keeps running in the background. `cortex launch` with no `--model`, `--preset` or other choice needs a terminal for
 its screens, so an agent always names the model. Add `--output json` for output a script can read.
 
-The flags (all of them, with examples: `strata launch --help`):
+The flags (all of them, with examples: `cortex launch --help`):
 
 | Flag | Meaning |
 | --- | --- |
@@ -114,20 +114,20 @@ The flags (all of them, with examples: `strata launch --help`):
 | `--access local\|lan\|cloudflare\|tailscale` | who can connect; beyond `local` a key is made for you |
 | `--port N` | the server port (default 8080) |
 | `--api-key KEY`, `--api-key-env NAME`, `--new-key` | the key clients must send |
-| `--save-preset NAME` | keep these choices; `strata launch --preset NAME` starts them again |
+| `--save-preset NAME` | keep these choices; `cortex launch --preset NAME` starts them again |
 | `--plan` | show what would happen and exit |
 | `--yes`, `--no-tui` | no questions, no screens |
 | `--status`, `--stop`, `--show-key` | what is serving, stop it, print the key |
 
 Notes:
-- **No engine for this PC.** `strata launch` does not refuse. It says "Strata couldn't find an engine for this computer",
+- **No engine for this PC.** `cortex launch` does not refuse. It says "Cortex couldn't find an engine for this computer",
   goes on to download the model (with `--yes` it does not ask), and ends without starting anything (exit code 0; with `--output json` the answer
   has `"serving": false` and an `engine_problem`). Tell the user which card was not recognised and stop. Updating the
-  engine later with `strata update` can fix it.
+  engine later with `cortex update` can fix it.
 - **Exit codes:** 0 done, 2 a flag or name is wrong, 5 the Terminal or the engine cannot do it, 6 an install or the
   server start failed (the engine log is named in the message), 130 stopped.
 - **Linux:** nothing needs `sudo`: the Terminal does not install packages. **Windows:** the first start may ask once
-  whether to allow Strata on the network if you used `--access lan`.
+  whether to allow Cortex on the network if you used `--access lan`.
 - **AMD on Windows:** only the AMD driver is needed. The AMD engine is a ready-made download. It has not been run with a
   model on a real AMD card on Windows by us: ask the user to report how it runs ([AMD_HIP.md](AMD_HIP.md)).
 - **Mac:** the Metal engine is fetched like any other. There is no picture reader on the Mac yet.
@@ -137,21 +137,21 @@ Notes:
 - It downloads about 70 GB from Hugging Face; how long depends on their connection (at 100 Mbit/s roughly 1.5-2
   hours). It can be stopped and continues where it left off.
 - Then it prepares the model for their PC (a few minutes).
-- **When the model starts, the PC can be slow or stop responding for 1-3 minutes** (longest the first time): Strata
+- **When the model starts, the PC can be slow or stop responding for 1-3 minutes** (longest the first time): Cortex
   loads 35-55 GB into RAM and locks part of it for the graphics card. That is normal; they should not close the window.
 - Nothing leaves their PC: the model runs locally.
 
 ## 6. Check that it is serving
 
-`strata launch` prints `Strata is serving.` with the addresses when it is done. Later:
+`cortex launch` prints `Cortex is serving.` with the addresses when it is done. Later:
 
 ```
-strata launch --status          # lists what is serving, with its address
-strata launch --stop            # stops it and frees the graphics memory
-strata launch --preset NAME     # starts a saved preset again (after --save-preset NAME)
+cortex launch --status          # lists what is serving, with its address
+cortex launch --stop            # stops it and frees the graphics memory
+cortex launch --preset NAME     # starts a saved preset again (after --save-preset NAME)
 ```
 
-No browser opens by itself. Add `--open` to `strata launch` if the user wants the web page.
+No browser opens by itself. Add `--open` to `cortex launch` if the user wants the web page.
 
 ## 7. Verify
 
@@ -166,7 +166,7 @@ Then:
 
 ```
 curl http://127.0.0.1:8080/v1/models
-curl http://127.0.0.1:8080/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"strata\", \"messages\": [{\"role\": \"user\", \"content\": \"Say hello in five words.\"}], \"max_tokens\": 64, \"reasoning_effort\": \"none\"}"
+curl http://127.0.0.1:8080/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"cortex\", \"messages\": [{\"role\": \"user\", \"content\": \"Say hello in five words.\"}], \"max_tokens\": 64, \"reasoning_effort\": \"none\"}"
 ```
 
 With an API key, add `-H "Authorization: Bearer <key>"`.
@@ -181,13 +181,13 @@ With an API key, add `-H "Authorization: Bearer <key>"`.
 - **Codex CLI and other Responses API apps:** `http://127.0.0.1:8080/v1/responses` (stateless; Codex's
   `config.toml`: [DETAILS.md](DETAILS.md#the-responses-api-and-codex-cli)).
 - **Claude Code:** `ANTHROPIC_BASE_URL=http://127.0.0.1:8080`, `ANTHROPIC_MODEL` set to a Claude model name it knows
-  (Strata ignores the name), and any `ANTHROPIC_AUTH_TOKEN` (or the configured key).
-- **The easy way for a coding app:** `strata connect` lists them (OpenCode, Codex CLI, Claude Code, oh-my-pi, pi,
-  Hermes Agent, OpenClaw). `strata connect <app>` prints the file and environment for the running server,
-  `strata connect <app> --write` writes it after asking (and keeps a backup), `strata connect <app> --check` sends
+  (Cortex ignores the name), and any `ANTHROPIC_AUTH_TOKEN` (or the configured key).
+- **The easy way for a coding app:** `cortex connect` lists them (OpenCode, Codex CLI, Claude Code, oh-my-pi, pi,
+  Hermes Agent, OpenClaw). `cortex connect <app>` prints the file and environment for the running server,
+  `cortex connect <app> --write` writes it after asking (and keeps a backup), `cortex connect <app> --check` sends
   one prompt and one tool call the way that app does and says whether each worked.
 - **Thinking level:** `"reasoning_effort": "none" | "low" | "medium" | "high"` (default high).
-- Strata answers one request at a time; `--parallel N` in `strata launch` decodes up to N together
+- Cortex answers one request at a time; `--parallel N` in `cortex launch` decodes up to N together
   ([BATCHING.md](BATCHING.md)). API details: [DETAILS.md](DETAILS.md#using-it).
 
 ## 9. If the Terminal cannot run: install from source
@@ -200,16 +200,16 @@ git clone https://github.com/Niko1221/Strata.git
 ```
 
 Without git: download https://github.com/Niko1221/Strata/archive/refs/heads/main.zip and unzip it. Pick a drive with
-enough free space: the model files go to a `Strata-data` folder next to the Strata folder (or `--data-dir <path>`
+enough free space: the model files go to a `Cortex-data` folder next to the Cortex folder (or `--data-dir <path>`
 on another drive). Setup's own check prints the GPU(s), driver, RAM, CPU, free disk and whether this PC can run
-Strata, and installs nothing except Python and the `.venv` it needs to run:
+Cortex, and installs nothing except Python and the `.venv` it needs to run:
 
 ```
 Windows:  START-HERE.bat --check
 Linux:    ./setup.sh --check
 ```
 
-Run setup without questions, from the Strata folder (Windows: in `cmd`, or `cmd /c START-HERE.bat ...` from PowerShell).
+Run setup without questions, from the Cortex folder (Windows: in `cmd`, or `cmd /c START-HERE.bat ...` from PowerShell).
 The model is picked as in step 3, with setup's flag names (`--family qwen|swift|coder|unsloth --model Q2_0|IQ2_XS|...`):
 
 ```
@@ -240,12 +240,12 @@ block your shell. Start it separately:
 
 ```
 Windows (PowerShell):  Start-Process -FilePath ".\run-iq2_xs.bat"            (opens its own window)
-Linux:                 nohup ./run-iq2_xs.sh > strata-server.out 2>&1 &
+Linux:                 nohup ./run-iq2_xs.sh > cortex-server.out 2>&1 &
 ```
 
 Setup prints the start script it wrote (`start script: run-<model>.bat`). The name is the family tag plus the size,
 lower case: `run-iq2_xs`, `run-swift-iq2_xs`, `run-coder-iq1_m`, `run-unsloth-ud-iq4_xs`. The engine log is
-`strata-<model>.log` in the Strata folder. Then continue with step 7.
+`cortex-<model>.log` in the Cortex folder. Then continue with step 7.
 
 Notes:
 - **Linux:** setup uses `sudo apt` (or dnf/pacman) to install Python with venv if it is missing, and on AMD may need
@@ -254,7 +254,7 @@ Notes:
 - **AMD on Linux:** setup installs ROCm into `.venv` (~10 GB, no sudo) unless a system ROCm 7 exists, and compiles the
   engine for the card (10-20 minutes, once).
 - **AMD on Windows:** setup downloads the ready-made AMD engine (~550 MB, ROCm included) - nothing is compiled and only
-  the AMD driver is needed. Before the model download it runs `engine\strata-device.exe --list-devices`; if that does
+  the AMD driver is needed. Before the model download it runs `engine\cortex-device.exe --list-devices`; if that does
   not list the card, the driver is the problem (tell the user to update AMD Software). One card per model. Pictures use
   the 24 GB rule like everywhere else.
 - **NVIDIA with no ready-made engine for the card:** setup offers to install build tools and compile (20-40 minutes);
@@ -267,8 +267,8 @@ Notes:
 | --- | --- |
 | `the NVIDIA driver is too old` | The user updates the driver (NVIDIA App or nvidia.com/drivers) and restarts; run the command again. |
 | Download or install stopped | Run the same command again; it continues. |
-| `Strata couldn't find an engine for this computer` | The card is not one the engine packages cover, or the update feed was not reachable. Check the card against the list in step 1, check the internet, run `strata doctor`, then `strata update`. |
-| `port 8080 is already in use` | Strata is already running (check `/health` and `strata launch --status`), or use `--port 8081`. |
+| `Cortex couldn't find an engine for this computer` | The card is not one the engine packages cover, or the update feed was not reachable. Check the card against the list in step 1, check the internet, run `cortex doctor`, then `cortex update`. |
+| `port 8080 is already in use` | Cortex is already running (check `/health` and `cortex launch --status`), or use `--port 8081`. |
 | Very slow, disk busy, or "the engine stopped unexpectedly" | Not enough free RAM: close programs, or choose a smaller size (`q2_0` or `iq2_xs`). |
 | `ExpertCache: cudaMalloc(...) failed: out of memory` with free VRAM (Windows) | The page file is off or tiny: set a fixed size (Custom size, the same initial and maximum size, e.g. 65536 MB) and restart; a page file Windows grows on demand ("System managed") may not grow in time (#60). |
 | `prompt ... exceeds the context` | Start again with a bigger `--context`. |
@@ -276,11 +276,11 @@ Notes:
 | A Mac says the app is "damaged" (the app, not the Terminal) | The file is fine: [MAC.md](MAC.md) has the one command. |
 
 More: [TROUBLESHOOTING.md](TROUBLESHOOTING.md) and the [full table](DETAILS.md#troubleshooting). If it still fails,
-run `strata doctor`, collect its output and the engine log named in the error message, and suggest an issue at
+run `cortex doctor`, collect its output and the engine log named in the error message, and suggest an issue at
 https://github.com/Niko1221/Strata/issues.
 
 ## Alternative: the MCP server
 
-Strata also has an MCP server, so an AI tool can check, install, start and stop Strata through tool calls
-(`strata_status`, `strata_models`, `strata_install`, `strata_start`, `strata_stop`, `strata_logs`) instead of the
+Cortex also has an MCP server, so an AI tool can check, install, start and stop Cortex through tool calls
+(`cortex_status`, `cortex_models`, `cortex_install`, `cortex_start`, `cortex_stop`, `cortex_logs`) instead of the
 shell commands above. See [MCP_SERVER.md](MCP_SERVER.md).

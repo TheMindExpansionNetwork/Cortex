@@ -90,9 +90,9 @@ class ExactArch(unittest.TestCase):
         self.assertFalse(setup.is_strix_halo({}))
 
     def test_matches_the_engines_header(self):
-        """include/strata/kernels/gfx_arch.hpp is the reference: gfx1151 has the WMMA kernels and the gfx1151 defaults;
+        """include/cortex/kernels/gfx_arch.hpp is the reference: gfx1151 has the WMMA kernels and the gfx1151 defaults;
         gfx1103 (Radeon 780M/760M, 0.1.44) shares the gfx11 WMMA kernels; gfx1152 is outside the list."""
-        hpp = (ROOT / "include/strata/kernels/gfx_arch.hpp").read_text(encoding="utf-8")
+        hpp = (ROOT / "include/cortex/kernels/gfx_arch.hpp").read_text(encoding="utf-8")
         wmma = re.search(r"gfx_arch_is_gfx11_wmma.*?\n}", hpp, re.S).group(0)
         listed = set(re.findall(r'"(gfx\d+)"', wmma))
         self.assertIn("gfx1151", listed)
@@ -112,40 +112,40 @@ class ExactArch(unittest.TestCase):
 # gfx1151 arch defaults that setup does not copy to gfx1103 / gfx1150: HCD_EXACT copies the gfx1151 hipBLASLt table's
 # solutions, TOPK_REG_MIN_BLOCKS (#1943: the top-k register-kernel line at 4096 blocks, the crossover with the
 # cooperative scan) was measured on gfx1151 only
-_NOT_COPIED = ("STRATA_HCD_EXACT", "STRATA_TOPK_REG_MIN_BLOCKS")
+_NOT_COPIED = ("CORTEX_HCD_EXACT", "CORTEX_TOPK_REG_MIN_BLOCKS")
 
 
 
 class Gfx1103Switches(unittest.TestCase):
     def test_is_the_gfx1151_defaults_less_hcd_exact(self):
-        """GFX1103_SWITCHES is the gfx1151 arch-default set (src/core/arch_defaults.cpp) minus STRATA_HCD_EXACT, which
+        """GFX1103_SWITCHES is the gfx1151 arch-default set (src/core/arch_defaults.cpp) minus CORTEX_HCD_EXACT, which
         copies the gfx1151 hipBLASLt table's solutions 1176 / 1177 and so does not apply beside a gfx1103 table.  The
         engine keeps gfx1103 out of its own arch defaults, so setup writes this set."""
         src = (ROOT / "src/core/arch_defaults.cpp").read_text(encoding="utf-8")
         tail = src.split("gfx_arch_is_gfx1151(gcn_arch)) return t;", 1)[1]
         block = tail.rsplit("t = {", 1)[1].split("};", 1)[0]              # the gfx1151 switch table
-        gfx1151 = dict(re.findall(r'\{"(STRATA_[A-Z0-9_]+)",\s*"([^"]+)"\}', block))
-        self.assertIn("STRATA_HCD_EXACT", gfx1151)                       # the parse found the gfx1151 block
+        gfx1151 = dict(re.findall(r'\{"(CORTEX_[A-Z0-9_]+)",\s*"([^"]+)"\}', block))
+        self.assertIn("CORTEX_HCD_EXACT", gfx1151)                       # the parse found the gfx1151 block
         self.assertEqual(setup.GFX1103_SWITCHES,
                          {k: v for k, v in gfx1151.items() if k not in _NOT_COPIED})
-        self.assertNotIn("STRATA_HCD_EXACT", setup.GFX1103_SWITCHES)
+        self.assertNotIn("CORTEX_HCD_EXACT", setup.GFX1103_SWITCHES)
         for k in setup.GFX1103_SWITCHES:                                 # setup's own: a re-run refreshes them
             self.assertIn(k, setup.SETUP_ENV)
 
 
 class Gfx1150Switches(unittest.TestCase):
     def test_is_the_gfx1151_defaults_less_hcd_exact(self):
-        """GFX1150_SWITCHES is the gfx1151 arch-default set (src/core/arch_defaults.cpp) minus STRATA_HCD_EXACT, which
+        """GFX1150_SWITCHES is the gfx1151 arch-default set (src/core/arch_defaults.cpp) minus CORTEX_HCD_EXACT, which
         copies the gfx1151 hipBLASLt table's solutions 1176 / 1177 and so does not apply beside a gfx1150 table.  The
         engine keeps gfx1150 out of its own arch defaults (src/core/arch_defaults_test.cpp), so setup writes this set."""
         src = (ROOT / "src/core/arch_defaults.cpp").read_text(encoding="utf-8")
         tail = src.split("gfx_arch_is_gfx1151(gcn_arch)) return t;", 1)[1]
         block = tail.rsplit("t = {", 1)[1].split("};", 1)[0]              # the gfx1151 switch table
-        gfx1151 = dict(re.findall(r'\{"(STRATA_[A-Z0-9_]+)",\s*"([^"]+)"\}', block))
-        self.assertIn("STRATA_HCD_EXACT", gfx1151)                       # the parse found the gfx1151 block
+        gfx1151 = dict(re.findall(r'\{"(CORTEX_[A-Z0-9_]+)",\s*"([^"]+)"\}', block))
+        self.assertIn("CORTEX_HCD_EXACT", gfx1151)                       # the parse found the gfx1151 block
         self.assertEqual(setup.GFX1150_SWITCHES,
                          {k: v for k, v in gfx1151.items() if k not in _NOT_COPIED})
-        self.assertNotIn("STRATA_HCD_EXACT", setup.GFX1150_SWITCHES)
+        self.assertNotIn("CORTEX_HCD_EXACT", setup.GFX1150_SWITCHES)
         for k in setup.GFX1150_SWITCHES:                                 # setup's own: a re-run refreshes them
             self.assertIn(k, setup.SETUP_ENV)
         self.assertIn('arch_default_env("gfx1150").empty()',
@@ -439,7 +439,7 @@ class WindowsZip(unittest.TestCase):
         self.assertIn("no gfx1151 code", msg)
         self.assertIn("docs/STRIX_HALO.md", msg)
         self.assertIn("build_windows.bat", msg)
-        self.assertFalse((self.root / "engine" / "strata-windows-x64-hip.zip").exists())   # dropped
+        self.assertFalse((self.root / "engine" / "cortex-windows-x64-hip.zip").exists())   # dropped
         self.assertFalse((self.root / "engine" / setup.EXE).exists())                      # nothing installed
 
     def test_zip_with_gfx1151_is_installed(self):
@@ -456,7 +456,7 @@ class WindowsZip(unittest.TestCase):
 
     def test_windows_build_script_lists_gfx1151(self):
         bat = (ROOT / "tools/hip/build_windows.bat").read_text(encoding="utf-8")
-        m = re.search(r'if not defined STRATA_HIP_ARCHS set "STRATA_HIP_ARCHS=([^"]+)"', bat)
+        m = re.search(r'if not defined CORTEX_HIP_ARCHS set "CORTEX_HIP_ARCHS=([^"]+)"', bat)
         self.assertIn("gfx1151", m.group(1).split(";"))
         self.assertTrue({"gfx1100", "gfx1101", "gfx1102", "gfx1200", "gfx1201", "gfx1030"} <= set(m.group(1).split(";")))
 
@@ -527,7 +527,7 @@ class IgpuTextIsArchExact(unittest.TestCase):
             with mock.patch.object(setup, "WIN", win):
                 text = chr(10).join(setup.igpu_notes(self.gpu("gfx1103", "AMD Radeon 780M Graphics"), 61.0))
             self.assertIn("gfx1103", text)
-            self.assertIn("STRATA_EXPERIMENTAL_GFX1103=1", text)
+            self.assertIn("CORTEX_EXPERIMENTAL_GFX1103=1", text)
             self.assertIn("RADEON_780M.md", text)
             for bad in ("gfx1151", "Ryzen AI Max", "STRIX_HALO", "Recommended model"):
                 self.assertNotIn(bad, text)

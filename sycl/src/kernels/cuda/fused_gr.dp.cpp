@@ -1,17 +1,17 @@
-// src/kernels/cuda/fused_gr.cu - see include/strata/kernels/fused_gr.hpp.
+// src/kernels/cuda/fused_gr.cu - see include/cortex/kernels/fused_gr.hpp.
 #define DPCT_PROFILING_ENABLED
 #include <mutex>
-#include "strata/core/geometry.hpp"
+#include "cortex/core/geometry.hpp"
 #include <unordered_map>
 #include <sycl/sycl.hpp>
 #include <utility>
 #include <sycl/ext/intel/experimental/grf_size_properties.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/sycl_queue.hpp"
-#include "strata/core/emulate.hpp"
-#include "strata/kernels/fused_gr.hpp"
-#include "strata/kernels/bf16_bits.hpp"
-#include "strata/kernels/verify_kernels.hpp"
+#include "cortex/sycl_queue.hpp"
+#include "cortex/core/emulate.hpp"
+#include "cortex/kernels/fused_gr.hpp"
+#include "cortex/kernels/bf16_bits.hpp"
+#include "cortex/kernels/verify_kernels.hpp"
 
 #include <atomic>
 #include <cstdio>
@@ -21,14 +21,14 @@
 #include <string>
 #include <vector>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
 constexpr int N = 2560;         // n_embd
 constexpr int HC = 4;           // streams
 constexpr int D = N * HC;       // 10240
 constexpr int LR = 320;         // hc_lr
-static_assert(N == strata::core::kCompiledGeometry.n_embd && HC == strata::core::kCompiledGeometry.hc && LR == strata::core::kCompiledGeometry.hc_lr, "fused_gr is compiled for core/geometry.hpp");
+static_assert(N == cortex::core::kCompiledGeometry.n_embd && HC == cortex::core::kCompiledGeometry.hc && LR == cortex::core::kCompiledGeometry.hc_lr, "fused_gr is compiled for core/geometry.hpp");
 constexpr int THREADS = 256;
 constexpr int WARPS = THREADS / 32;
 #if defined(__HIPCC__)
@@ -40,10 +40,10 @@ constexpr int TQ = TILE / 8 / 32;      // uint4 weight chunks per lane per tile
 // SYCL port: the down kernel's 41 work-groups filled 15% of the B70's threads (metrics 2026-09-30); each row's
 // D = 4 tiles are split over DOWN_SPLIT work-groups that write partial sums, summed in a fixed order by the up
 // kernel (deterministic, unlike atomics) before the row's nonlinearity.
-#ifndef STRATA_GR_DOWN_SPLIT
-#define STRATA_GR_DOWN_SPLIT (D / TILE)   // 4: one tile per split (1: the unsplit order, for A/B)
+#ifndef CORTEX_GR_DOWN_SPLIT
+#define CORTEX_GR_DOWN_SPLIT (D / TILE)   // 4: one tile per split (1: the unsplit order, for A/B)
 #endif
-constexpr int DOWN_SPLIT = STRATA_GR_DOWN_SPLIT;
+constexpr int DOWN_SPLIT = CORTEX_GR_DOWN_SPLIT;
 constexpr int DOWN_BLOCKS = LR / WARPS;          // 40 blocks of 8 rows; one more for the inject rows
 constexpr int UP_COLS = 32;                      // columns d per `up` block (x 4 streams = 128 rows)
 constexpr int UP_BLOCKS = N / UP_COLS;           // 80
@@ -395,8 +395,8 @@ __dpct_inline__ void gr_norm_split_port_kernel(GrMulti m) {
         *reinterpret_cast<sycl::float4*>(xn + i) = sycl::float4(x.x() * rs, x.y() * rs, x.z() * rs, x.w() * rs);
     }
 }
-bool gr_norm_split() {   // default; STRATA_GR_NORM_SPLIT=0: one work-group per token
-    static const bool v = std::getenv("STRATA_GR_NORM_SPLIT") == nullptr || std::atoi(std::getenv("STRATA_GR_NORM_SPLIT")) != 0;
+bool gr_norm_split() {   // default; CORTEX_GR_NORM_SPLIT=0: one work-group per token
+    static const bool v = std::getenv("CORTEX_GR_NORM_SPLIT") == nullptr || std::atoi(std::getenv("CORTEX_GR_NORM_SPLIT")) != 0;
     return v;
 }
 
@@ -625,12 +625,12 @@ __dpct_inline__ void gr_down_reduce_kernel(GrMulti m) {
 // Large-GRF mode (256 registers per thread instead of 128) for the sliced down kernel and the multi-token up kernel.
 // On the A770 the up kernel spills ~3.4 KB per thread at 128 (unitrace). Large GRF halves the threads an Xe core keeps
 // resident, so it is the default on Arc A-series (Alchemist) only, where it was measured; Battlemage and anything else
-// keep the compiler's default GRF and the same kernels as before. STRATA_GR_LARGE_GRF=1 forces it on, =0 off.
+// keep the compiler's default GRF and the same kernels as before. CORTEX_GR_LARGE_GRF=1 forces it on, =0 off.
 bool gr_large_grf(sycl::queue* q) {
     static const bool v = [q] {
-        const char* e = std::getenv("STRATA_GR_LARGE_GRF");
+        const char* e = std::getenv("CORTEX_GR_LARGE_GRF");
         if (e != nullptr) return std::atoi(e) != 0;
-        return strata::intel_gpu_gen(q->get_device()) == strata::IntelGpuGen::Alchemist;
+        return cortex::intel_gpu_gen(q->get_device()) == cortex::IntelGpuGen::Alchemist;
     }();
     return v;
 }
@@ -639,17 +639,17 @@ bool gr_large_grf(sycl::queue* q) {
 // groups instead of 160), where only group 0 writes the per-token lo values (every group computes the same ones). Every
 // output is the same float sum in the same order (gr_bench checksums unchanged). A770, gr_bench 1-6 tokens:
 // 117-180 -> 87-149 us; decode 28.04-28.54 -> 29.99-30.00 tok/s. Default on Alchemist only, where it was measured;
-// elsewhere the 80 / 160-group kernels as before. STRATA_GR_MORE_GROUPS=1 forces it on, =0 off.
+// elsewhere the 80 / 160-group kernels as before. CORTEX_GR_MORE_GROUPS=1 forces it on, =0 off.
 bool gr_more_groups(sycl::queue* q) {
     static const bool v = [q] {
-        const char* e = std::getenv("STRATA_GR_MORE_GROUPS");
+        const char* e = std::getenv("CORTEX_GR_MORE_GROUPS");
         if (e != nullptr) return std::atoi(e) != 0;
-        return strata::intel_gpu_gen(q->get_device()) == strata::IntelGpuGen::Alchemist;
+        return cortex::intel_gpu_gen(q->get_device()) == cortex::IntelGpuGen::Alchemist;
     }();
     return v;
 }
-bool gr_down_sliced() {   // default (gr_bench: GR read 108.6 -> 76.5 us at 6 tokens); STRATA_GR_DOWN_SLICED=0: direct
-    static const bool v = std::getenv("STRATA_GR_DOWN_SLICED") == nullptr || std::atoi(std::getenv("STRATA_GR_DOWN_SLICED")) != 0;
+bool gr_down_sliced() {   // default (gr_bench: GR read 108.6 -> 76.5 us at 6 tokens); CORTEX_GR_DOWN_SLICED=0: direct
+    static const bool v = std::getenv("CORTEX_GR_DOWN_SLICED") == nullptr || std::atoi(std::getenv("CORTEX_GR_DOWN_SLICED")) != 0;
     return v;
 }
 float* slice_partials(sycl::queue* q) {
@@ -662,8 +662,8 @@ float* slice_partials(sycl::queue* q) {
     bufs[q] = p;
     return p;
 }
-bool gr_down_direct() {   // default; STRATA_GR_DOWN_DIRECT=0: the tiled kernel (gr_bench: 13-19% slower at 3-6 tokens)
-    static const bool v = std::getenv("STRATA_GR_DOWN_DIRECT") == nullptr || std::atoi(std::getenv("STRATA_GR_DOWN_DIRECT")) != 0;
+bool gr_down_direct() {   // default; CORTEX_GR_DOWN_DIRECT=0: the tiled kernel (gr_bench: 13-19% slower at 3-6 tokens)
+    static const bool v = std::getenv("CORTEX_GR_DOWN_DIRECT") == nullptr || std::atoi(std::getenv("CORTEX_GR_DOWN_DIRECT")) != 0;
     return v;
 }
 
@@ -747,7 +747,7 @@ auto &lo = *sycl::ext::oneapi::group_local_memory_for_overwrite<
             if (apply) { bo = pBo[d0 + dd]; ip = pIp[c]; }
         }
         float mine = 0.0f;
-        if constexpr (ILP) {   // STRATA_GR_UP_ILP: the T dots first, then their butterflies interleaved step by step -
+        if constexpr (ILP) {   // CORTEX_GR_UP_ILP: the T dots first, then their butterflies interleaved step by step -
             float accs[kFusedGrMaxT];   // each value sees warp_sum's shuffles in warp_sum's order: the same bits
 #pragma unroll
             for (int k = 0; k < kFusedGrMaxT; ++k) {
@@ -835,15 +835,15 @@ void launch_gr_up_more(dpct::queue_ptr st, const GrMulti& m) {
 
 
 // SYCL port: the up step with COLS columns per block. 16 (160 blocks, 8 rows per warp one after another) was
-// latency-bound on Xe2 (B70: 23.7 us for 6.55 MB of BF16, 46% of the bandwidth). STRATA_GR_UP_COLS=8 / 4 run 320 /
+// latency-bound on Xe2 (B70: 23.7 us for 6.55 MB of BF16, 46% of the bandwidth). CORTEX_GR_UP_COLS=8 / 4 run 320 /
 // 640 blocks with 4 / 2 rows per warp; every row's dot and butterfly and every column's stream sum are the same.
 inline int gr_up_cols() {
-    static const int v = [] { const char* e = std::getenv("STRATA_GR_UP_COLS"); const int c = e ? std::atoi(e) : UPM_COLS;
+    static const int v = [] { const char* e = std::getenv("CORTEX_GR_UP_COLS"); const int c = e ? std::atoi(e) : UPM_COLS;
                               return c == 4 || c == 8 || c == 32 || c == 64 ? c : UPM_COLS; }();
     return v;
 }
 inline bool gr_up_ilp() {
-    static const bool v = [] { const char* e = std::getenv("STRATA_GR_UP_ILP"); return e && e[0] == '1'; }();
+    static const bool v = [] { const char* e = std::getenv("CORTEX_GR_UP_ILP"); return e && e[0] == '1'; }();
     return v;
 }
 template <int C>
@@ -874,7 +874,7 @@ inline void launch_gr_up_multi(dpct::queue_ptr st, const GrMulti& m, bool grf = 
     }
 }
 
-// ================================ hc read v3 (opt-in: STRATA_GR_V3=1) - two kernels, stream-split ================
+// ================================ hc read v3 (opt-in: CORTEX_GR_V3=1) - two kernels, stream-split ================
 // The norm kernel runs on only T blocks (~16 us of pure latency per call) and `down` on 41 blocks (~280 GB/s).
 // v3: `down` is split over (row group, stream[, column half]) = 164 or 328 blocks; each block stages its slice of
 // R' * w_norm for the T tokens, reduces that slice's sum of squares itself, and writes UNSCALED partial dots.  The
@@ -1134,10 +1134,10 @@ auto &lo = *sycl::ext::oneapi::group_local_memory_for_overwrite<
     }
 }
 // ================================ #315: split / staged - the same arithmetic, split differently ==================
-// The multi read's variants beside the plain read (0.1.31's default; not main's opt-in STRATA_GR_V3 read, which sums
+// The multi read's variants beside the plain read (0.1.31's default; not main's opt-in CORTEX_GR_V3 read, which sums
 // in another order).  Every variant computes each output with exactly the plain read's operations in its order (so
 // bitwise the plain read and the single-token read); only who does what, and when, changes.  `fused_gr_check`
-// compares them on the card before a verify window uses them (STRATA_HC_SPLIT below).
+// compares them on the card before a verify window uses them (CORTEX_HC_SPLIT below).
 //  - the norm (split and staged): one block per token AND stream instead of one per token.  Each thread visits
 //    exactly the elements, in the order, it visited for that stream in the plain read, so every sum of squares and rs
 //    is the same; then it recomputes its R' * w_norm and writes it times rs (the plain read stored the product and
@@ -1236,10 +1236,10 @@ auto &part = *sycl::ext::oneapi::group_local_memory_for_overwrite<float[WARPS]>(
 
 #if defined(DPCT_COMPATIBILITY_TEMP) && DPCT_COMPATIBILITY_TEMP >= 800 &&      \
     !defined(__HIPCC__)
-#define STRATA_GR_CP_ASYNC 1
+#define CORTEX_GR_CP_ASYNC 1
 #endif
 __dpct_inline__ void cp_async16(void *smem, const void *gmem) {
-#if defined(STRATA_GR_CP_ASYNC)
+#if defined(CORTEX_GR_CP_ASYNC)
     auto sa = smem;
 #if defined(__SYCL_DEVICE_ONLY__) && defined(__NVPTX__)
     asm volatile("cp.async.cg.shared.global [%0], [%1], 16;\n" ::"r"(sa),
@@ -1262,7 +1262,7 @@ __dpct_inline__ void cp_async16(void *smem, const void *gmem) {
 #endif
 }
 __dpct_inline__ void cp_async_commit() {
-#if defined(STRATA_GR_CP_ASYNC)
+#if defined(CORTEX_GR_CP_ASYNC)
 #if defined(__SYCL_DEVICE_ONLY__) && defined(__NVPTX__)
     asm volatile("cp.async.commit_group;\n" ::: "memory");
 #else
@@ -1271,7 +1271,7 @@ __dpct_inline__ void cp_async_commit() {
 #endif
 }
 __dpct_inline__ void cp_async_wait1() {
-#if defined(STRATA_GR_CP_ASYNC)
+#if defined(CORTEX_GR_CP_ASYNC)
 #if defined(__SYCL_DEVICE_ONLY__) && defined(__NVPTX__)
     asm volatile("cp.async.wait_group 1;\n" ::: "memory");
 #else
@@ -1280,7 +1280,7 @@ __dpct_inline__ void cp_async_wait1() {
 #endif
 }
 __dpct_inline__ void cp_async_wait0() {
-#if defined(STRATA_GR_CP_ASYNC)
+#if defined(CORTEX_GR_CP_ASYNC)
 #if defined(__SYCL_DEVICE_ONLY__) && defined(__NVPTX__)
     asm volatile("cp.async.wait_group 0;\n" ::: "memory");
 #else
@@ -1448,7 +1448,7 @@ int down_chunk(bool staged, int* tile_out) {
         the code.
         */
         optin = dpct::get_device(dev).get_local_mem_size();
-        optin = strata::smem_optin_of(optin);   // STRATA_EMULATE_CC (tests only)
+        optin = cortex::smem_optin_of(optin);   // CORTEX_EMULATE_CC (tests only)
         // the down kernel stages n_tok*TILEV floats of dynamic shared memory - 80 KB at the full 8 tokens of the
         // CUDA tile.  sm_75 gets the smaller tile: all eight tokens fit one 40 KiB launch there (no more slicing),
         // the TQ-5 prefetch holds half the registers, and the smaller blocks raise how many of the 41-block grid
@@ -1461,7 +1461,7 @@ int down_chunk(bool staged, int* tile_out) {
         int cc_maj = 0, cc_min = 0;
         cc_maj = dpct::get_device(dev).get_major_version();
         cc_min = dpct::get_device(dev).get_minor_version();
-        const bool small_tile = strata::cc_major_of(cc_maj) * 10 + strata::cc_minor_of(cc_min) == 75;
+        const bool small_tile = cortex::cc_major_of(cc_maj) * 10 + cortex::cc_minor_of(cc_min) == 75;
 #endif
         const int tv = small_tile ? 1280 : 2560;
         tile[dev] = tv;
@@ -1501,7 +1501,7 @@ int down_chunk(bool staged, int* tile_out) {
         int cc = 0, per_block = 0;
         cc = dpct::get_device(dev).get_major_version();
         per_block = (int) dpct::get_device(dev).get_local_mem_size();   // SYCL: the work-group local memory
-        cc = strata::cc_major_of(cc);
+        cc = cortex::cc_major_of(cc);
         const int usable = (cc >= 7 && optin > 0) ? optin : per_block;
 #endif
         const int capacity = usable / (int) (tv * sizeof(float));
@@ -1516,7 +1516,7 @@ int down_chunk(bool staged, int* tile_out) {
 
 // The multi read as `variant` (kHcPlain, kHcSplit or kHcStaged): the norm, the down projection in launches of as
 // many tokens as fit the card, the up projection; the profile's stamps after the norm and after the down projection.
-// kHcPlain is the default read exactly as before (never main's opt-in STRATA_GR_V3 path, which fused_gr_read_multi
+// kHcPlain is the default read exactly as before (never main's opt-in CORTEX_GR_V3 path, which fused_gr_read_multi
 // takes first).
 void launch_multi(const GrMulti &m, int variant, dpct::queue_ptr st,
                   unsigned long long *stamp_buf, int stamp_i0) {
@@ -1568,10 +1568,10 @@ void launch_multi(const GrMulti &m, int variant, dpct::queue_ptr st,
             for (int k = 0; k < ct; ++k) c.a[k] = m.a[c0 + k];
         }
         const size_t smem = (size_t) ct * per_tok;
-        // #443, opt-in STRATA_GR_DOWN_MAX4=1: launches of up to 4 tokens hold 4 tokens' sums per thread instead of
+        // #443, opt-in CORTEX_GR_DOWN_MAX4=1: launches of up to 4 tokens hold 4 tokens' sums per thread instead of
         // kFusedGrMaxT - the same tile, block size, accumulation order and plain/split/staged path, so the same bits
         // (read once: this runs per layer when decode is not captured)
-        static const bool max4_on = [] { const char* v = std::getenv("STRATA_GR_DOWN_MAX4"); return v && std::atoi(v) != 0; }();
+        static const bool max4_on = [] { const char* v = std::getenv("CORTEX_GR_DOWN_MAX4"); return v && std::atoi(v) != 0; }();
         const bool max4 = max4_on && ct <= 4;
         if (staged) {
             if (max4) {
@@ -1737,12 +1737,12 @@ void launch_multi(const GrMulti &m, int variant, dpct::queue_ptr st,
         }
     }
     if (stamp_buf) gpu_stamp(stamp_buf, stamp_i0 + 1, (void*) st);
-    launch_gr_up_multi(st, m);   // STRATA_GR_UP_COLS (16 default, 8, 4): the same bits
+    launch_gr_up_multi(st, m);   // CORTEX_GR_UP_COLS (16 default, 8, 4): the same bits
 }
 
-/// STRATA_HC_SPLIT: unset or 2 = the newest the check accepts (staged), 1 = at most split, 0 = the plain read
+/// CORTEX_HC_SPLIT: unset or 2 = the newest the check accepts (staged), 1 = at most split, 0 = the plain read
 int env_variant() {
-    const char* e = std::getenv("STRATA_HC_SPLIT");
+    const char* e = std::getenv("CORTEX_HC_SPLIT");
     if (e == nullptr || e[0] == '\0') return kHcStaged;
     if (e[0] == '0') return kHcPlain;
     if (e[0] == '1') return kHcSplit;
@@ -1786,9 +1786,9 @@ bool fused_gr_read_multi(const FusedGrArgs* a, int n_tok, float* xn_scratch, voi
     }
     m.xn = xn_scratch;
     m.T = n_tok;
-    dpct::queue_ptr st = strata::q_of(stream);
-    // STRATA_GR_V3=1: the two-kernel read above (another summation order - opt-in)
-    static const bool v3 = [] { const char* v = std::getenv("STRATA_GR_V3"); return v != nullptr && std::atoi(v) != 0; }();
+    dpct::queue_ptr st = cortex::q_of(stream);
+    // CORTEX_GR_V3=1: the two-kernel read above (another summation order - opt-in)
+    static const bool v3 = [] { const char* v = std::getenv("CORTEX_GR_V3"); return v != nullptr && std::atoi(v) != 0; }();
     static int split3[64] = {};   // per device: 0 = not decided yet, 1 / 2 = column halves S, -1 = does not fit
     int dev3 = 0;
     if (v3) {
@@ -1810,7 +1810,7 @@ bool fused_gr_read_multi(const FusedGrArgs* a, int n_tok, float* xn_scratch, voi
             else if (need2 <= limit)
                 // #375 (kenh0u): the S = 2 split (a 64 KB opt-in card: Turing) disagrees with itself in gr_parity
                 // (graph replay vs direct call) - such a card keeps the default read until that split is fixed
-                std::fprintf(stderr, "strata: STRATA_GR_V3=1 needs the two-half split on this card, which fails its "
+                std::fprintf(stderr, "cortex: CORTEX_GR_V3=1 needs the two-half split on this card, which fails its "
                                      "checks (#375): the default read is used\n");
             /*
             DPCT1026: The call to cudaGetLastError was removed because this
@@ -1915,7 +1915,7 @@ bool fused_gr_read_multi(const FusedGrArgs* a, int n_tok, float* xn_scratch, voi
         */
         const dpct::err0 e3 = 0;
 
-        return false;   // SYCL port: never writes the q8_1 images (STRATA_QFUSE is not supported here)
+        return false;   // SYCL port: never writes the q8_1 images (CORTEX_QFUSE is not supported here)
     }
     m.part = down_partials(st);
     {
@@ -1940,7 +1940,7 @@ bool fused_gr_read_multi(const FusedGrArgs* a, int n_tok, float* xn_scratch, voi
     // the local-memory capacity is a per-DEVICE property: once per device (a layer split runs this on two cards).
     // SYCL port: upstream picks TILEV 1280 on sm_75 and takes the per-block limit below sm_70 (CUDA compute
     // capabilities, cudaFuncSetAttribute opt-ins); here the tile is the port's TILE and the device's local memory is
-    // the only limit. The tiled kernel is the fallback (STRATA_GR_DOWN_SLICED=0 STRATA_GR_DOWN_DIRECT=0); the
+    // the only limit. The tiled kernel is the fallback (CORTEX_GR_DOWN_SLICED=0 CORTEX_GR_DOWN_DIRECT=0); the
     // default is the sliced kernel below.
     static bool attr[64] = {};
     static int chunk[64] = {};   // tokens the tiled down kernel may carry in one launch on this card
@@ -2040,7 +2040,7 @@ bool fused_gr_read_multi(const FusedGrArgs* a, int n_tok, float* xn_scratch, voi
         if (gr_large_grf(st)) launch_gr_up_more<true>(st, m);
         else launch_gr_up_more<false>(st, m);
     } else {
-        launch_gr_up_multi(st, m, gr_large_grf(st));   // STRATA_GR_UP_COLS (16 default, 8, 4): the same bits; Arc A-series: large GRF
+        launch_gr_up_multi(st, m, gr_large_grf(st));   // CORTEX_GR_UP_COLS (16 default, 8, 4): the same bits; Arc A-series: large GRF
     }
     /*
     DPCT1010: SYCL uses exceptions to report errors and does not use the
@@ -2048,7 +2048,7 @@ bool fused_gr_read_multi(const FusedGrArgs* a, int n_tok, float* xn_scratch, voi
     need to rewrite this code.
     */
     const dpct::err0 e = 0;
-    return false;   // SYCL port: the q8_1 images (S26 STRATA_QFUSE) and the Q8_0 reads (S23 STRATA_HC_Q8) are not built; the caller quantizes
+    return false;   // SYCL port: the q8_1 images (S26 CORTEX_QFUSE) and the Q8_0 reads (S23 CORTEX_HC_Q8) are not built; the caller quantizes
 }
 
 // the bench only (AMD latency-hidden kernels): nothing to switch on the SYCL port
@@ -2065,7 +2065,7 @@ void fused_gr_read(const FusedGrArgs& a, void* stream) {
         std::fprintf(stderr, "fused_gr_read: invalid arguments\n");
         std::exit(1);
     }
-    dpct::queue_ptr st = strata::q_of(stream);
+    dpct::queue_ptr st = cortex::q_of(stream);
     // SYCL port: the multi-token read's sliced down kernel and per-(token, stream) norm sum in their own orders, so a
     // window's token would differ in its last bits from this kernel's. The header promises "every token's outputs
     // are bitwise fused_gr_read(a[t])" (gr_parity checks it): with those paths on, the single read IS the multi read
@@ -2347,8 +2347,8 @@ int fused_gr_variant() {
     dev = dpct::get_current_device_id();
     const int v = dev >= 0 && dev < 64 ? g_variant[dev].load() : 0;
     if (v > 0) return v;
-    // not checked on this card: the plain read, unless STRATA_HC_SPLIT names a variant (a test such as gr_parity)
-    const char* e = std::getenv("STRATA_HC_SPLIT");
+    // not checked on this card: the plain read, unless CORTEX_HC_SPLIT names a variant (a test such as gr_parity)
+    const char* e = std::getenv("CORTEX_HC_SPLIT");
     return e != nullptr && (e[0] == '1' || e[0] == '2') ? env_variant() : kHcPlain;
 }
 
@@ -2356,16 +2356,16 @@ void fused_gr_check() {
     int dev = 0;
     dev = dpct::get_current_device_id();
     if (dev < 0 || dev >= 64 || g_variant[dev].load() > 0) return;
-    // SYCL port: the port's own read (sliced down / split norm, STRATA_GR_DOWN_SLICED etc.) does not use upstream's
+    // SYCL port: the port's own read (sliced down / split norm, CORTEX_GR_DOWN_SLICED etc.) does not use upstream's
     // variants, and their self-test crashes on the B70 (0.1.32 merge, under investigation): opt-in only.
-    if (std::getenv("STRATA_HC_CHECK") == nullptr) {
+    if (std::getenv("CORTEX_HC_CHECK") == nullptr) {
         g_variant[dev].store(kHcPlain);
         return;
     }
     const int want = env_variant();
     if (want == kHcPlain) {
         g_variant[dev].store(kHcPlain);
-        std::fprintf(stderr, "strata hc: CUDA%d: the hyper-connection read runs as the plain one (STRATA_HC_SPLIT=0)\n",
+        std::fprintf(stderr, "cortex hc: CUDA%d: the hyper-connection read runs as the plain one (CORTEX_HC_SPLIT=0)\n",
                      dev);
         return;
     }
@@ -2377,20 +2377,20 @@ void fused_gr_check() {
     else if (okv[kHcSplit]) use = kHcSplit;
     g_variant[dev].store(use);
     if (!ran)
-        std::fprintf(stderr, "strata hc: CUDA%d: the check of split/staged could not run (%s)\n", dev, why[0].c_str());
+        std::fprintf(stderr, "cortex hc: CUDA%d: the check of split/staged could not run (%s)\n", dev, why[0].c_str());
     static const char* const name[4] = {"", "plain", "split", "staged"};
     for (int v = kHcStaged; v >= kHcSplit; --v)
         if (v <= want && !okv[v] && ran)
-            std::fprintf(stderr, "strata hc: CUDA%d: the %s read differs from the plain read on this card - not used: "
+            std::fprintf(stderr, "cortex hc: CUDA%d: the %s read differs from the plain read on this card - not used: "
                                  "%s\n", dev, name[v], why[v].c_str());
     static const char* const what[4] = {
         "", "the plain read (the norm per token, the down projection on 41 blocks)",
         "split (the norm per token and stream, then the plain read's down projection)",
         "staged (the norm per token and stream, the down projection's activations staged ahead by cp.async)"};
-    std::fprintf(stderr, "strata hc: CUDA%d: the hyper-connection read runs as %s%s\n", dev, what[use],
-                 use >= kHcSplit ? "; checked bit for bit against the plain read on this card (STRATA_HC_SPLIT=1 or 0 "
+    std::fprintf(stderr, "cortex hc: CUDA%d: the hyper-connection read runs as %s%s\n", dev, what[use],
+                 use >= kHcSplit ? "; checked bit for bit against the plain read on this card (CORTEX_HC_SPLIT=1 or 0 "
                                    "for the earlier ones)" : "");
 }
 
 
-}  // namespace strata::kernels
+}  // namespace cortex::kernels

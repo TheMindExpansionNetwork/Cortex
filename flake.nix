@@ -1,5 +1,5 @@
 {
-  description = "Nix environment for Strata";
+  description = "Nix environment for Cortex";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";

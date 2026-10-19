@@ -1,19 +1,19 @@
-// src/kernels/cuda/fused_gdn.cu - see include/strata/kernels/fused_gdn.hpp.
+// src/kernels/cuda/fused_gdn.cu - see include/cortex/kernels/fused_gdn.hpp.
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
-#include "strata/core/geometry.hpp"
+#include "cortex/core/geometry.hpp"
 #include <dpct/dpct.hpp>
-#include "strata/sycl_queue.hpp"
-#include "strata/kernels/fused_gdn.hpp"
+#include "cortex/sycl_queue.hpp"
+#include "cortex/kernels/fused_gdn.hpp"
 
 #include <cstdio>
 #include <cstdlib>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
 constexpr int S = 128;          // state size (rows = cols = 128)
-static_assert(S == strata::core::kCompiledGeometry.ssm_state_size, "fused_gdn is compiled for core/geometry.hpp");
+static_assert(S == cortex::core::kCompiledGeometry.ssm_state_size, "fused_gdn is compiled for core/geometry.hpp");
 constexpr int RG = 4;           // row groups
 constexpr int RPG = S / RG;     // 32 rows per thread
 
@@ -240,7 +240,7 @@ void fused_gdn_conv_l2(float* history, const float* qkv, const float* conv_w, fl
         auto exp_props = sycl::ext::oneapi::experimental::properties{
             sycl::ext::oneapi::experimental::use_root_sync};
 
-        strata::q_of(stream)
+        cortex::q_of(stream)
             ->parallel_for<dpct_kernel_name<class gdn_conv_l2_kernel_44cd0c>>(
                 sycl::nd_range<3>(sycl::range(1, 1, (unsigned)(channels / S)) *
                                       sycl::range(1, 1, S),
@@ -275,7 +275,7 @@ void fused_gdn_ab(const float* x, const uint16_t* w_alpha, const uint16_t* w_bet
         auto exp_props = sycl::ext::oneapi::experimental::properties{
             sycl::ext::oneapi::experimental::use_root_sync};
 
-        strata::q_of(stream)
+        cortex::q_of(stream)
             ->parallel_for<dpct_kernel_name<class gdn_ab_kernel_c211b9>>(
                 sycl::nd_range<3>(
                     sycl::range(1, 1, (unsigned)((2 * h_v + 7) / 8)) *
@@ -317,7 +317,7 @@ void fused_gdn_step_norm(float* state, const float* q, const float* k, const flo
         auto exp_props = sycl::ext::oneapi::experimental::properties{
             sycl::ext::oneapi::experimental::use_root_sync};
 
-        strata::q_of(stream)
+        cortex::q_of(stream)
             ->parallel_for<dpct_kernel_name<class gdn_step_norm_kernel_51bed3>>(
                 sycl::nd_range<3>(sycl::range(1, 1, (unsigned)h_v) *
                                       sycl::range(1, RG, S),
@@ -337,4 +337,4 @@ void fused_gdn_step_norm(float* state, const float* q, const float* k, const flo
     const dpct::err0 e = 0;
 }
 
-}  // namespace strata::kernels
+}  // namespace cortex::kernels

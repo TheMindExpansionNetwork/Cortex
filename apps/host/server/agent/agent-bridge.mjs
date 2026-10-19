@@ -1,9 +1,9 @@
 /**
- * The agent bridge: Strata chats as Harness sessions.
+ * The agent bridge: Cortex chats as Harness sessions.
  *
  * What it owns
  *   - the pinned Harness process (one, lazily started, restarted only when a route it needs changed);
- *   - the stable Strata-chat -> Harness-session map, persisted next to the host's other state;
+ *   - the stable Cortex-chat -> Harness-session map, persisted next to the host's other state;
  *   - one `session/follow` stream per live turn, projected into the NDJSON frames the chat UI renders;
  *   - approvals: the Harness `approval/request` waterfall in, the user's Approve/Deny back out;
  *   - Stop: `session/cancel` for exactly one session, resolved only once the turn has really ended.
@@ -42,7 +42,7 @@ export class AgentUnavailable extends Error {
 /** The plain sentence for a raw agent failure text, whatever produced it. */
 export function plainAgentFailure(raw) {
   const text = String(raw ?? '');
-  if (/did not print its address|exited during start|could not start|ECONNREFUSED.*127\.0\.0\.1|refused the launch token|socket/i.test(text)) return 'The coding assistant could not start. Try again. If it keeps happening, close and reopen Strata.';
+  if (/did not print its address|exited during start|could not start|ECONNREFUSED.*127\.0\.0\.1|refused the launch token|socket/i.test(text)) return 'The coding assistant could not start. Try again. If it keeps happening, close and reopen Cortex.';
   if (/process stopped|lost the session stream|stream did not open|session stream/i.test(text)) return 'The coding assistant stopped unexpectedly, so this answer is incomplete. Send your message again.';
   if (/did not accept the message/i.test(text)) return 'The coding assistant did not take this message. Send it again in a moment.';
   return text;
@@ -58,10 +58,10 @@ export function plainTurnFailure(err) {
   const details = typeof err?.details === 'string' && err.details ? err.details : raw;
   if (err instanceof AgentUnavailable) return { message: err.message, details, code: err.code ?? 'AGENT_ERROR' };
   if (err?.code === 'agent-preset/invalid' || /waiting for (shell|subprocess|ptcRuntime|workflowEngine|sandbox)|failed to import|did not activate/i.test(raw)) {
-    return { message: 'The coding assistant is missing a part it needs, so it cannot work on files yet. Close and reopen Strata. If it keeps happening, reinstall Strata. Chatting without tools still works.', details, code: 'AGENT_INCOMPLETE' };
+    return { message: 'The coding assistant is missing a part it needs, so it cannot work on files yet. Close and reopen Cortex. If it keeps happening, reinstall Cortex. Chatting without tools still works.', details, code: 'AGENT_INCOMPLETE' };
   }
   if (/^[a-z][a-z-]*\/[a-z][a-z-]*: /i.test(raw) || /^(gateway|rpc)/i.test(raw)) {
-    return { message: 'The coding assistant could not start this message. Try again. If it keeps happening, close and reopen Strata.', details, code: err?.code ?? 'AGENT_ERROR' };
+    return { message: 'The coding assistant could not start this message. Try again. If it keeps happening, close and reopen Cortex.', details, code: err?.code ?? 'AGENT_ERROR' };
   }
   return { message: plainAgentFailure(raw), details, code: err?.code ?? 'AGENT_ERROR' };
 }
@@ -121,7 +121,7 @@ export function createAgentBridge({ dataDir, componentsDir = null, bundledDir = 
   mkdirSync(root, { recursive: true });
 
   /**
-   * Where the turn's file tracker must never look (deliverables.mjs): the app, the engine and its components, Strata's own data, AppData
+   * Where the turn's file tracker must never look (deliverables.mjs): the app, the engine and its components, Cortex's own data, AppData
    * and temp. `forbid` ones also switch tracking off when the chat's folder is one of them or inside one.
    */
   function trackerFolders() {
@@ -249,7 +249,7 @@ export function createAgentBridge({ dataDir, componentsDir = null, bundledDir = 
         }
         try { return await startRuntime(profile); } catch (e) {
           lastError = redact(String(e.message ?? e), Object.values(profile.env));
-          throw e instanceof AgentUnavailable ? e : new AgentUnavailable(plainAgentFailure(lastError) === lastError ? 'The coding assistant could not start. Try again. If it keeps happening, close and reopen Strata.' : plainAgentFailure(lastError), 'agent-start-failed', lastError);
+          throw e instanceof AgentUnavailable ? e : new AgentUnavailable(plainAgentFailure(lastError) === lastError ? 'The coding assistant could not start. Try again. If it keeps happening, close and reopen Cortex.' : plainAgentFailure(lastError), 'agent-start-failed', lastError);
         }
       })();
       try { await starting; } finally { starting = null; }
@@ -303,22 +303,22 @@ export function createAgentBridge({ dataDir, componentsDir = null, bundledDir = 
         if (now !== want) throw new Error(`the session reports "${now}" instead of "${want}"`);
       }
     } catch (e) {
-      throw new AgentUnavailable(`Strata could not set this chat to ${MODE_PRESETS[mode].name} mode, so nothing ran. Try again.`, 'mode-unavailable', e.message);
+      throw new AgentUnavailable(`Cortex could not set this chat to ${MODE_PRESETS[mode].name} mode, so nothing ran. Try again.`, 'mode-unavailable', e.message);
     }
-    // Manual leaves the sandbox open and relies on the Strata gate to ask first. Without the gate it must not start.
+    // Manual leaves the sandbox open and relies on the Cortex gate to ask first. Without the gate it must not start.
     if (mode === 'manual' && !runtime.gateChecked) {
       try {
-        const probe = await runtime.gw.rpc('commands/execute', { agentId: sessionId, line: '/strata-gate', submittedAttachments: [] });
-        if (probe?.result?.kind !== 'success' || !String(probe.result.text ?? '').includes('strata-gate active')) throw new Error('the approval gate is not loaded');
+        const probe = await runtime.gw.rpc('commands/execute', { agentId: sessionId, line: '/cortex-gate', submittedAttachments: [] });
+        if (probe?.result?.kind !== 'success' || !String(probe.result.text ?? '').includes('cortex-gate active')) throw new Error('the approval gate is not loaded');
         runtime.gateChecked = true;
       } catch (e) {
-        throw new AgentUnavailable('Strata could not make sure the coding assistant asks before changing anything, so nothing ran. Close and reopen Strata, then try again.', 'mode-unavailable', e.message);
+        throw new AgentUnavailable('Cortex could not make sure the coding assistant asks before changing anything, so nothing ran. Close and reopen Cortex, then try again.', 'mode-unavailable', e.message);
       }
     }
   }
 
   /**
-   * Run one agent turn for a Strata chat and stream it as frames.
+   * Run one agent turn for a Cortex chat and stream it as frames.
    * `signal` means the client went away: the turn keeps running (that is not Stop).
    */
   async function runTurn(options) {

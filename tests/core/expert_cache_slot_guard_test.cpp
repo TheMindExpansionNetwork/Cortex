@@ -1,7 +1,7 @@
-// STRATA_MMQ_DIRECT: the expert cache's slot guard (set_slot_guard), slot_room and slot_tail on the uniform cache
+// CORTEX_MMQ_DIRECT: the expert cache's slot guard (set_slot_guard), slot_room and slot_tail on the uniform cache
 // (open: off_ empty, the stride is the largest blob) and on the sized one (open_sized: off_ holds each slot's start).
 // No guard asked (the default) must give today's sized layout byte for byte.  Needs a CUDA device (exits 77 without).
-#include "strata/core/expert_cache.hpp"
+#include "cortex/core/expert_cache.hpp"
 
 #include <cuda_runtime.h>
 
@@ -28,7 +28,7 @@ int main() {
         std::puts("no CUDA device: skipped");
         return 77;
     }
-    using strata::core::ExpertCache;
+    using cortex::core::ExpertCache;
     std::string err;
 
     // slot_stride: the blob plus the guard, 256-byte aligned; guard 0 is the old (b + 255) / 256 * 256

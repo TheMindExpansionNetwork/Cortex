@@ -6,7 +6,7 @@
 #include <cstdio>
 #include <vector>
 
-using namespace strata::metal_engine;
+using namespace cortex::metal_engine;
 
 static int failures = 0;
 static void check(bool ok, const char* what, double got) {
@@ -34,9 +34,9 @@ int main() {
     // the overrides
     ArenaMem o = m4;
     o.keep_gb = 12.0;
-    check(std::fabs(arena_budget(o) - (17.8 - 12.0 - 0.5) * kGB) < 1e6, "STRATA_METAL_KEEP_FREE_GB=12", arena_budget(o));
+    check(std::fabs(arena_budget(o) - (17.8 - 12.0 - 0.5) * kGB) < 1e6, "CORTEX_METAL_KEEP_FREE_GB=12", arena_budget(o));
     o.arena_gb = 10.0;
-    check(std::fabs(arena_budget(o) - 10.0 * kGB) < 1e6, "STRATA_METAL_ARENA_GB=10 wins", arena_budget(o));
+    check(std::fabs(arena_budget(o) - 10.0 * kGB) < 1e6, "CORTEX_METAL_ARENA_GB=10 wins", arena_budget(o));
     check(std::fabs(arena_shrink(o, 10.0 * kGB, 1.0 * kGB) - 10.0 * kGB) < 1e6, "an explicit arena is not shrunk", 10.0 * kGB);
     // never below 1 GB; the GPU working set bounds it too
     ArenaMem tiny{16 * kGB, 10 * kGB, 9.5 * kGB, 8 * kGB};
@@ -79,12 +79,12 @@ int main() {
     ArenaMem ex = q6;
     ex.arena_gb = 90.0;
     fp = footprint_plan(ex, arena_budget(ex));
-    check(std::fabs(fp.arena - 90.0 * kGB) < 1e6 && fp.over(), "STRATA_METAL_ARENA_GB=90 on the M5: kept, and flagged over the cap", fp.total);
+    check(std::fabs(fp.arena - 90.0 * kGB) < 1e6 && fp.over(), "CORTEX_METAL_ARENA_GB=90 on the M5: kept, and flagged over the cap", fp.total);
     ex.arena_gb = 60.0;
-    check(!footprint_plan(ex, arena_budget(ex)).over(), "STRATA_METAL_ARENA_GB=60: under the cap", footprint_plan(ex, arena_budget(ex)).total);
-    ArenaMem sh = q6;   // STRATA_METAL_LEAVE_SHARE (for measuring)
+    check(!footprint_plan(ex, arena_budget(ex)).over(), "CORTEX_METAL_ARENA_GB=60: under the cap", footprint_plan(ex, arena_budget(ex)).total);
+    ArenaMem sh = q6;   // CORTEX_METAL_LEAVE_SHARE (for measuring)
     sh.leave_share = 0.30;
-    check(std::fabs(footprint_cap(sh) - 0.70 * 137.4 * kGB) < 1e6, "STRATA_METAL_LEAVE_SHARE=0.30: the old 30% (96.2 GB)", footprint_cap(sh));
+    check(std::fabs(footprint_cap(sh) - 0.70 * 137.4 * kGB) < 1e6, "CORTEX_METAL_LEAVE_SHARE=0.30: the old 30% (96.2 GB)", footprint_cap(sh));
     // the working set still binds where it is tighter than the RAM share
     ArenaMem m64{68.7 * kGB, 48.0 * kGB, 5.0 * kGB, 55.0 * kGB};
     check(std::fabs(footprint_cap(m64) - 41.2 * kGB) < 0.1 * kGB, "64 GB Mac: 60% of the RAM (41.2 GB), under the 48 GB working set", footprint_cap(m64));
@@ -110,7 +110,7 @@ int main() {
     check(arena_grow(s4, 9.0 * kGB, 1.5 * kGB), "a step that leaves exactly 7.5 GB: it fills", 9.0 * kGB);
     ArenaMem pin = s4;
     pin.arena_gb = 12.0;
-    check(arena_grow(pin, 1.0 * kGB, 1.5 * kGB), "STRATA_METAL_ARENA_GB: always fills", 1.0 * kGB);
+    check(arena_grow(pin, 1.0 * kGB, 1.5 * kGB), "CORTEX_METAL_ARENA_GB: always fills", 1.0 * kGB);
     std::vector<double> cost(6000, 1.75e6);   // 10.5 GB of experts planned
     // macOS gives exactly what is filled: the plan fills all of it while free stays >= 7.5 GB
     const size_t all = arena_fill_plan(s4, cost.data(), cost.size(), 1.5 * kGB, [](double f) { return 18.5 * kGB - f; });

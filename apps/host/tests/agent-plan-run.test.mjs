@@ -8,14 +8,14 @@ import { startScriptedWorker } from './helpers/scripted-worker.mjs';
 import { createAgentBridge } from '../server/agent/agent-bridge.mjs';
 import { resolveHarness } from '../server/agent/harness-runtime.mjs';
 
-const HARNESS = process.env.STRATA_HARNESS_DIR;
-const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'STRATA_HARNESS_DIR is not set to a built Harness' : false;
+const HARNESS = process.env.CORTEX_HARNESS_DIR;
+const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'CORTEX_HARNESS_DIR is not set to a built Harness' : false;
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const words = frames => frames.filter(f => f.type === 'delta').map(f => f.text).join('');
 
 async function rig(t) {
   const worker = await startScriptedWorker({});
-  const dir = mkdtempSync(join(tmpdir(), 'strata-planrun-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-planrun-'));
   const ws = join(dir, 'ws'); mkdirSync(ws, { recursive: true });
   const events = { plan: [], queue: [], goal: [] };
   const local = [{ id: 'inst-1', label: 'Scripted', baseUrl: worker.url, modelId: 'scripted-model', context: 32768, slots: 2 }];

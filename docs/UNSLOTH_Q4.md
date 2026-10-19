@@ -79,8 +79,8 @@ Hugging Face snapshot symlinks work if you pass the snapshot's file name, not th
 
 ## The pack (by hand)
 
-Build Strata (or install 0.1.31+), then, from the repository root, with gguf-py from the pinned llama.cpp
-(setup installs it; `STRATA_GGUF_PY` can point to its `gguf-py` folder):
+Build Cortex (or install 0.1.31+), then, from the repository root, with gguf-py from the pinned llama.cpp
+(setup installs it; `CORTEX_GGUF_PY` can point to its `gguf-py` folder):
 
 ```sh
 .venv/bin/python tools/iq_pack.py \
@@ -108,20 +108,20 @@ not the original BF16 checkpoint. The output matches llama.cpp's on the same fil
 
 ## The MTP draft layer
 
-The draft layer is the base model's, the same one the other packs use. If setup installed Strata, you have it
-(`mtp/rt` in `Strata-data`). Otherwise build it as [docs/ORCA.md](ORCA.md#preparation) shows (`tools/mtp_fetch.py`,
+The draft layer is the base model's, the same one the other packs use. If setup installed Cortex, you have it
+(`mtp/rt` in `Cortex-data`). Otherwise build it as [docs/ORCA.md](ORCA.md#preparation) shows (`tools/mtp_fetch.py`,
 `tools/mtp_pack.py`, `tools/mtp_rt.py`, then copy `data/draft_vocab.bin` to `mtp/rt/`).
 
 ## The server
 
-Save as `strata-ud-q4_k_xl.json` at the repository root (or next to setup's other `strata-*.json`), with `/path/to/`
+Save as `cortex-ud-q4_k_xl.json` at the repository root (or next to setup's other `cortex-*.json`), with `/path/to/`
 pointing at **shard 1**. `--ple-gguf` is not needed: the engine finds the shard that holds the PLE table
 (`per_layer_token_embd.weight`, shard 2) by name. `--resident-budget-gib` turns on the mapped mode with a RAM budget
 (it implies `--mmap-experts`).
 
 ```json
 {
-  "exe": "engine/strata.exe",
+  "exe": "engine/cortex.exe",
   "args": [
     "--pack", "packs/ud-q4_k_xl",
     "--native", "/path/to/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf",
@@ -133,17 +133,17 @@ pointing at **shard 1**. `--ple-gguf` is not needed: the engine finds the shard 
   "cwd": ".",
   "tokenizer": "packs/ud-q4_k_xl/tokenizer",
   "model_name": "qwen3.8-flash-next-ud-q4_k_xl",
-  "log": "strata-ud-q4_k_xl.log",
+  "log": "cortex-ud-q4_k_xl.log",
   "host": "127.0.0.1",
   "port": 8080
 }
 ```
 
 ```sh
-.venv/bin/python -m serve.server --engine strata --config strata-ud-q4_k_xl.json --port 8080
+.venv/bin/python -m serve.server --engine cortex --config cortex-ud-q4_k_xl.json --port 8080
 ```
 
-(`engine/strata.exe` is setup's engine on Windows; a self-built one is `build/strata`.) The expert profile is the base
+(`engine/cortex.exe` is setup's engine on Windows; a self-built one is `build/cortex`.) The expert profile is the base
 model's (`data/expert-profile.bin`); it ranks the same 48 x 512 experts and decides which ones the GPU cache and the RAM
 budget take first.
 
@@ -154,7 +154,7 @@ margin and reports which limit applies. Before #403's fix a clamped budget could
 Everything above N comes from the SSD for every token, so N is the setting that matters
 most; a bigger budget was faster in every measurement (24 / 32 / 40 GiB). When the driver page-locks the whole budget
 (24 GiB did on this PC, 32 and 40 did not), the GPU also computes a share of the misses over PCIe, as in the resident
-low-RAM mode; `STRATA_RESIDENT_PIN=0` uses ordinary pageable memory (the CPU then computes every miss).
+low-RAM mode; `CORTEX_RESIDENT_PIN=0` uses ordinary pageable memory (the CPU then computes every miss).
 
 On Windows, the allocation log reports available physical RAM and commit capacity before allocation and after a
 failure. Free RAM alone does not guarantee that Windows can commit the requested memory. If the pageable fallback
@@ -175,15 +175,15 @@ also fails, the warning preserves both the GPU allocation or mapping error and t
 - Long prompts (engine 0.1.32): a 16K prompt is read at **160 tokens/s** (15,873 tokens in 99 s; 0.1.31: 57 tokens/s,
   273-282 s). Reading a prompt streams every expert once per 4K chunk, and the third of them outside the RAM budget
   come from the SSD (~35 GB per chunk), so the prompt path now reads them with 32 threads and up to 128 blobs in
-  flight when the experts are read from the GGUF in place (`STRATA_STAGER_THREADS` / `STRATA_STAGER_RING` override
+  flight when the experts are read from the GGUF in place (`CORTEX_STAGER_THREADS` / `CORTEX_STAGER_RING` override
   it; 4 and 16 before, still the default for every other model). Between the chunks, the 28.8 GB PLE table's rows
   take ~5 s per chunk.
-- With `STRATA_MMQ_KQ=1` the engine multiplies the Q4_K / Q5_K / Q5_1 experts of a prompt with llama.cpp's MMQ
+- With `CORTEX_MMQ_KQ=1` the engine multiplies the Q4_K / Q5_K / Q5_1 experts of a prompt with llama.cpp's MMQ
   kernels (as the other models' formats always are) instead of dequantizing them to FP16: 4x less GPU time for those
   products, but on this PC the prompt waits for the SSD either way (29 s per 4K chunk with or without). Opt-in: it
-  rounds differently from the FP16 path. On CUDA these kernels are a library next to the engine (`libstrata_kq.so` /
-  `strata_kq.dll`), opened only then, so they take no VRAM from other models ([QUANTS.md](QUANTS.md)); before, they were
-  the build option `-DSTRATA_MMQ_KQUANTS=ON` and took 1-3 expert slots from every model.
+  rounds differently from the FP16 path. On CUDA these kernels are a library next to the engine (`libcortex_kq.so` /
+  `cortex_kq.dll`), opened only then, so they take no VRAM from other models ([QUANTS.md](QUANTS.md)); before, they were
+  the build option `-DCORTEX_MMQ_KQUANTS=ON` and took 1-3 expert slots from every model.
 - The speed varies from run to run (6.7-8.6 tok/s at 40 GiB for the same prompt), with what the OS file cache holds.
 - For comparison, IQ3_S (all its experts in RAM) writes ~53 tok/s on the same PC ([the speed tables](DETAILS.md#speed-measured)).
 - Where the time goes (`--stats` on the command line): at 40 GiB about 550-750 ms of each verify round (3.5 tokens) is
@@ -191,39 +191,39 @@ also fails, the warning preserves both the GPU allocation or mapping error and t
 
 ## Quality: against llama.cpp on the same file
 
-Strata and llama.cpp (the pinned commit `3cf0325`, a CPU build reading the GGUF memory-mapped) were given the same
-token sequences, and at every position each wrote its 20 most likely next tokens with their log-probabilities: Strata
-through its verify windows (`STRATA_LOGPOS` with `STRATA_LOGPOS_TOPK=20`), llama.cpp from `llama_get_logits_ith` over
-one batch. Strata ran with the recommended settings (RAM budget 40 GiB, the MTP draft layer on, greedy,
+Cortex and llama.cpp (the pinned commit `3cf0325`, a CPU build reading the GGUF memory-mapped) were given the same
+token sequences, and at every position each wrote its 20 most likely next tokens with their log-probabilities: Cortex
+through its verify windows (`CORTEX_LOGPOS` with `CORTEX_LOGPOS_TOPK=20`), llama.cpp from `llama_get_logits_ith` over
+one batch. Cortex ran with the recommended settings (RAM budget 40 GiB, the MTP draft layer on, greedy,
 `--adapt-every 100000` so the expert cache does not move during the run). Per position: whether the most likely token is the same (argmax
 agreement), how many of the 5 / 10 most likely tokens both have, the KL divergence (llama.cpp's distribution against
-Strata's, over llama.cpp's top 20 plus one bucket for the rest), and the perplexity of the sequence under each.
+Cortex's, over llama.cpp's top 20 plus one bucket for the rest), and the perplexity of the sequence under each.
 
-| Token set | Positions | Argmax agreement | Top-5 / top-10 overlap | KL | Perplexity Strata / llama.cpp |
+| Token set | Positions | Argmax agreement | Top-5 / top-10 overlap | KL | Perplexity Cortex / llama.cpp |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Code: Strata's greedy answer to a coding prompt (an LRU cache in Python, 56-token prompt) | 400 | **99.0%** | 95.6% / 95.3% | 0.0008 | 1.067 / 1.070 |
-| Thinking: Strata's greedy answer to a reasoning puzzle (with thinking, 55-token prompt) | 324 | **97.5%** | 96.2% / 96.4% | 0.0016 | 1.107 / 1.106 |
-| After a 16K prompt: Strata's greedy continuation (256 tokens) of the 16,384 real-text tokens below | 256 | 90.2% | 88.1% / 89.3% | 0.039 | 1.619 / 1.623 |
+| Code: Cortex's greedy answer to a coding prompt (an LRU cache in Python, 56-token prompt) | 400 | **99.0%** | 95.6% / 95.3% | 0.0008 | 1.067 / 1.070 |
+| Thinking: Cortex's greedy answer to a reasoning puzzle (with thinking, 55-token prompt) | 324 | **97.5%** | 96.2% / 96.4% | 0.0016 | 1.107 / 1.106 |
+| After a 16K prompt: Cortex's greedy continuation (256 tokens) of the 16,384 real-text tokens below | 256 | 90.2% | 88.1% / 89.3% | 0.039 | 1.619 / 1.623 |
 | Real text after a 16K prompt: the last 510 tokens of 16,384 tokens of this repository's docs and code | 510 | 91.2% | 88.3% / 89.9% | 0.035 | 4.27 / 4.29 |
 | The same 511 positions with only 512 tokens before them | 511 | 89.2% | 86.0% / 86.3% | 0.061 | 8.99 / 8.87 |
 
 For comparison, [eddoursul/Strata](https://github.com/eddoursul/Strata) reported 98.2-99.3% (code), 95.6-95.8%
 (thinking) and 97.7% (after a 16K prompt) for the same file against llama.cpp on an RTX 3090.
 
-**Where they differ:** at near-ties. Grouped by llama.cpp's own gap between its two most likely tokens, Strata picks
+**Where they differ:** at near-ties. Grouped by llama.cpp's own gap between its two most likely tokens, Cortex picks
 the same token at every position of the code and thinking answers where that gap is 0.2 or more (695 of 695) and at
 every position after the 16K prompt where it is 0.5 or more (144 of 144 in the continuation, 254 of 254 in the real
 text; 50 of 54 and 117 of 121 between 0.2 and 0.5). Text after a long document has many more near-ties than a short
 answer (58 of the continuation's 256 positions and 135 of the real text's 510 have a gap under 0.2, against 13 of the
 code answer's 400), which is why its agreement is lower. It is not the long context itself: the same real-text
 positions after only 512 tokens agree a little less (89.2%), and the perplexities match within 3% in every set. For
-scale, Strata's own greedy run and its teacher-forced rerun of the continuation pick different tokens at 6% of the
+scale, Cortex's own greedy run and its teacher-forced rerun of the continuation pick different tokens at 6% of the
 positions (93.8% the same: other window sizes, other experts in VRAM), the same kind of near-tie flips. The 16K
-prompts were read by Strata's batched prompt path (15,872 tokens), the rest through the verify windows. These numbers
-are the FP16 prompt path's (the released engine's); with the MMQ prompt path (`-DSTRATA_MMQ_KQUANTS=ON`, above) the
+prompts were read by Cortex's batched prompt path (15,872 tokens), the rest through the verify windows. These numbers
+are the FP16 prompt path's (the released engine's); with the MMQ prompt path (`-DCORTEX_MMQ_KQUANTS=ON`, above) the
 continuation after the 16K prompt agrees at 92.2% (KL 0.029, three runs, identical).
 
-To repeat it: Strata's side is `STRATA_LOGPOS=<file>` with `STRATA_LOGPOS_TOPK=20` (engine 0.1.32) on a serve
+To repeat it: Cortex's side is `CORTEX_LOGPOS=<file>` with `CORTEX_LOGPOS_TOPK=20` (engine 0.1.32) on a serve
 engine with `--short-read` covering the positions to compare; llama.cpp's side was a short program over
 `llama_decode` / `llama_get_logits_ith` writing the same top 20 per position.
 
@@ -231,10 +231,10 @@ engine with `--short-read` covering the positions to compare; llama.cpp's side w
 
 | | |
 | --- | --- |
-| `STRATA_LOOKAHEAD=0` | Turns off the routing-aware prefetch (on by default in this mode): while the CPU works on a layer, a thread applies the next layer's router to this layer's input and asks the OS to read the predicted experts' pages. Pages only, the answers are the same. About half of the SSD reads were predicted; mean +14% (6.9 -> 7.9 tok/s). `STRATA_LOOKAHEAD_K` sets the experts per token (default 10). |
-| `STRATA_KQ256=1` | Multi-token AVX2 kernels for the Q4_K / Q5_1 / Q8_0 experts. Bit-exact with ggml's, but measured no faster, so off. |
-| `STRATA_PARTIAL_PIN=1` | Registers the hottest part of the RAM budget (up to `STRATA_PARTIAL_PIN_GIB`, default 24) with the GPU driver, so the GPU computes a share of the misses over PCIe (`--pcie-frac`). Measured no faster on this PC, and it changes the numerics of those experts (GPU kernels instead of the CPU's), so off. |
-| `STRATA_FETCH_THREADS=N` | Threads that read the experts from the GGUF while it answers (default 8; 16 was no faster). The prompt path has its own: `STRATA_STAGER_THREADS` (default 32 here) and `STRATA_STAGER_RING` (128). |
+| `CORTEX_LOOKAHEAD=0` | Turns off the routing-aware prefetch (on by default in this mode): while the CPU works on a layer, a thread applies the next layer's router to this layer's input and asks the OS to read the predicted experts' pages. Pages only, the answers are the same. About half of the SSD reads were predicted; mean +14% (6.9 -> 7.9 tok/s). `CORTEX_LOOKAHEAD_K` sets the experts per token (default 10). |
+| `CORTEX_KQ256=1` | Multi-token AVX2 kernels for the Q4_K / Q5_1 / Q8_0 experts. Bit-exact with ggml's, but measured no faster, so off. |
+| `CORTEX_PARTIAL_PIN=1` | Registers the hottest part of the RAM budget (up to `CORTEX_PARTIAL_PIN_GIB`, default 24) with the GPU driver, so the GPU computes a share of the misses over PCIe (`--pcie-frac`). Measured no faster on this PC, and it changes the numerics of those experts (GPU kernels instead of the CPU's), so off. |
+| `CORTEX_FETCH_THREADS=N` | Threads that read the experts from the GGUF while it answers (default 8; 16 was no faster). The prompt path has its own: `CORTEX_STAGER_THREADS` (default 32 here) and `CORTEX_STAGER_RING` (128). |
 
 ## UD-IQ4_XS (setup from 0.1.39, #621)
 
@@ -300,7 +300,7 @@ whose header shows the same formats.
   and refuses an unsupported one by name.
 - Tests: the packer's synthetic 4-shard and conversion tests (`.venv/bin/python -m unittest discover -s tools -p
   test_iq_pack.py`); CTests `gguf_split_test`, `expert_layout_test`, `native_expert_parity_*` (the three real expert
-  format pairs against ggml-cpu, the Q5_1 min term, Q8_0 rows, Q4_0/Q4_0 and Q4_0/Q4_1), `prefill_mmq_kquant_test` (with `-DSTRATA_MMQ_KQUANTS=ON`: the
+  format pairs against ggml-cpu, the Q5_1 min term, Q8_0 rows, Q4_0/Q4_0 and Q4_0/Q4_1), `prefill_mmq_kquant_test` (with `-DCORTEX_MMQ_KQUANTS=ON`: the
   prompt path's MMQ products for Q4_K / Q5_K / Q5_1 / Q8_0 against ggml's dequantized weights); the in-place mode against `experts.bin` on the Coder
   (identical tokens and logits).
 - Real runs: greedy answers to a coding prompt (correct) at every budget and setting above, identical across them;

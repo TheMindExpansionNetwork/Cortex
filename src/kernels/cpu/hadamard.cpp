@@ -1,12 +1,12 @@
-// src/kernels/cpu/hadamard.cpp - see include/strata/kernels/cpu/hadamard.hpp.
-#include "strata/kernels/cpu/hadamard.hpp"
+// src/kernels/cpu/hadamard.cpp - see include/cortex/kernels/cpu/hadamard.hpp.
+#include "cortex/kernels/cpu/hadamard.hpp"
 
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
 
-namespace strata::kernels::cpu {
+namespace cortex::kernels::cpu {
 namespace {
 HadamardSpec g_spec;
 }
@@ -30,7 +30,7 @@ bool hadamard_parse(const std::string& path, int64_t n_layers, HadamardSpec& h, 
     while (std::getline(in, line)) {
         if (line.empty()) continue;
         if (line[0] == '#') {
-            static const char tag[] = "# strata hadamard v";
+            static const char tag[] = "# cortex hadamard v";
             if (line.compare(0, sizeof tag - 1, tag) == 0) {
                 if (std::atoi(line.c_str() + sizeof tag - 1) != 1) {
                     err = path + ": an unknown hadamard.txt version (this engine reads v1)";
@@ -107,4 +107,4 @@ void hadamard_rotate(float* x, int n, int block, const float* signs) {
     }
 }
 
-}  // namespace strata::kernels::cpu
+}  // namespace cortex::kernels::cpu

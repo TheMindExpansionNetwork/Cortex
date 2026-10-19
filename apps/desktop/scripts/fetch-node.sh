@@ -18,7 +18,7 @@
 # The Node version must satisfy the App Host's own `engines.node` (>= 24.12.0).
 set -euo pipefail
 
-NODE_VERSION="${STRATA_NODE_VERSION:-24.12.0}"
+NODE_VERSION="${CORTEX_NODE_VERSION:-24.12.0}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEST="$HERE/../src-tauri/resources/node"
 
@@ -72,7 +72,7 @@ esac
 URL="https://nodejs.org/dist/v$NODE_VERSION/$ARCHIVE"
 
 EXPECTED="$(digest_for "$TARGET")"
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/strata-node.XXXXXX")"     # GNU mktemp needs the X template; BSD accepts it too
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/cortex-node.XXXXXX")"     # GNU mktemp needs the X template; BSD accepts it too
 trap 'rm -rf "$WORK"' EXIT
 
 echo "fetch-node: $URL"

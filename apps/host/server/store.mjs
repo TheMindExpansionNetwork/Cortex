@@ -1,17 +1,17 @@
 import { migrateSetup } from './setup.mjs';
-/** Tiny persisted state for the host: one JSON file under STRATA_HOME. */
+/** Tiny persisted state for the host: one JSON file under CORTEX_HOME. */
 import { accessSync, constants, mkdirSync, readFileSync, writeFileSync, existsSync, realpathSync, readdirSync, statSync, statfsSync, symlinkSync } from 'node:fs';
 import { dirname, isAbsolute, join, parse, relative, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { defaultModelDirectory } from './model-directory-default.mjs';
 
 /**
- * Prefer ~/.strata, the way the packaged app stores its data. Sandboxes and
+ * Prefer ~/.cortex, the way the packaged app stores its data. Sandboxes and
  * locked-down accounts cannot write to the home directory, so fall back to a
  * folder next to the checkout rather than failing to boot.
  */
 function resolveHome() {
-  const candidates = [process.env.STRATA_HOME, join(homedir(), '.strata'), join(process.cwd(), '.strata')].filter(
+  const candidates = [process.env.CORTEX_HOME, join(homedir(), '.cortex'), join(process.cwd(), '.cortex')].filter(
     Boolean,
   );
   for (const dir of candidates) {
@@ -23,7 +23,7 @@ function resolveHome() {
       /* try the next candidate */
     }
   }
-  throw new Error('No writable data directory found — set STRATA_HOME to a writable path');
+  throw new Error('No writable data directory found — set CORTEX_HOME to a writable path');
 }
 
 export const HOME = resolveHome();
@@ -61,9 +61,9 @@ const DEFAULT_MODELS_DIRECTORY=defaultModelDirectory();
 function initialModelsDirectory() {
  if(state.modelsDir)return state.modelsDir;
  const legacy=realpathSync(join(HOME,'models'));
- // Keep an existing library in place. A new install uses Documents/Strata/Models.
+ // Keep an existing library in place. A new install uses Documents/Cortex/Models.
  function hasWeights(folder,depth=0){try{return readdirSync(folder,{withFileTypes:true}).some(entry=>entry.isFile()&&/\.gguf(?:\.part|\.partial)?$/i.test(entry.name)||entry.isDirectory()&&depth<4&&hasWeights(join(folder,entry.name),depth+1));}catch{return false;}}
- if(!process.env.STRATA_MODELS_DIR&&hasWeights(legacy))return legacy;
+ if(!process.env.CORTEX_MODELS_DIR&&hasWeights(legacy))return legacy;
  const directory=DEFAULT_MODELS_DIRECTORY;
  mkdirSync(directory,{recursive:true});
  return realpathSync(directory);
@@ -72,7 +72,7 @@ export let MODELS_DIR = initialModelsDirectory();
 
 /** Native setup writes weights to data_dir/models. Keep its data root one level up. */
 export function nativeDataDirectory(input) {
- if(!input||process.env.STRATA_MODELS_DIR||!existsSync(DEFAULT_MODELS_DIRECTORY))return input;
+ if(!input||process.env.CORTEX_MODELS_DIR||!existsSync(DEFAULT_MODELS_DIRECTORY))return input;
  const root=realpathSync(DEFAULT_MODELS_DIRECTORY);
  if(resolve(input)!==resolve(DEFAULT_MODELS_DIRECTORY)&&realpathSync(input)!==root)return input;
  const data=dirname(root),nativeModels=join(data,'models');
@@ -97,7 +97,7 @@ export function validateModelsDirectory(input) {
   } catch { throw new Error('This folder is unavailable or not writable. Check the path and folder permissions.'); }
   const data = realpathSync(DATA_DIR);
   const contains = (parent, child) => { const r = relative(parent, child); return !r || !r.startsWith('..') && !isAbsolute(r); };
-  if (directory === parse(directory).root || contains(directory, data) || contains(data, directory)) throw new Error('Choose a separate folder for models, outside Strata’s app data.');
+  if (directory === parse(directory).root || contains(directory, data) || contains(data, directory)) throw new Error('Choose a separate folder for models, outside Cortex’s app data.');
   return resolve(directory);
 }
 
@@ -120,7 +120,7 @@ export function save() {
   try {
     writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
   } catch (err) {
-    console.error('[strata] could not persist state:', err.message);
+    console.error('[cortex] could not persist state:', err.message);
   }
 }
 

@@ -1,12 +1,12 @@
-#include "strata/core/vmm.hpp"
+#include "cortex/core/vmm.hpp"
 
-#if !defined(STRATA_USE_HIP) && !defined(STRATA_HIP_GFX906) && !defined(STRATA_GPU_METAL)
+#if !defined(CORTEX_USE_HIP) && !defined(CORTEX_HIP_GFX906) && !defined(CORTEX_GPU_METAL)
 #include <cuda.h>
 #include <cuda_runtime.h>
 
 #include <mutex>
 
-namespace strata::core {
+namespace cortex::core {
 namespace {
 
 struct Api {
@@ -149,13 +149,13 @@ VmmChunk VmmRange::unmap(int64_t i) {
     return h;
 }
 
-}  // namespace strata::core
+}  // namespace cortex::core
 
 #else  // not CUDA
 // HIP (ROCm 6+): the same elastic range through hipMemAddressReserve / hipMemCreate / hipMemMap / hipMemSetAccess.  Available
-// only where the device reports virtual memory management support (STRATA_HIP_VMM=0 turns it off): --kv-grow stays off
+// only where the device reports virtual memory management support (CORTEX_HIP_VMM=0 turns it off): --kv-grow stays off
 // otherwise, as before.  Everything else (Metal, gfx906, ROCm older than 6): no virtual memory, the elastic K/V stays off.
-#if defined(STRATA_USE_HIP) && !defined(STRATA_HIP_GFX906)
+#if defined(CORTEX_USE_HIP) && !defined(CORTEX_HIP_GFX906)
 #include <hip/hip_runtime.h>
 #include <hip/hip_version.h>
 
@@ -164,8 +164,8 @@ VmmChunk VmmRange::unmap(int64_t i) {
 #include <mutex>
 #endif
 
-#if defined(STRATA_USE_HIP) && !defined(STRATA_HIP_GFX906) && defined(HIP_VERSION_MAJOR) && HIP_VERSION_MAJOR >= 6
-namespace strata::core {
+#if defined(CORTEX_USE_HIP) && !defined(CORTEX_HIP_GFX906) && defined(HIP_VERSION_MAJOR) && HIP_VERSION_MAJOR >= 6
+namespace cortex::core {
 namespace {
 struct Api {
     bool ok = false;
@@ -174,7 +174,7 @@ struct Api {
 };
 void fail(const char* what, hipError_t e) {
     static int n = 0;
-    if (n++ < 8) std::fprintf(stderr, "strata: HIP virtual memory: %s failed: %s\n", what, hipGetErrorString(e));
+    if (n++ < 8) std::fprintf(stderr, "cortex: HIP virtual memory: %s failed: %s\n", what, hipGetErrorString(e));
     (void) hipGetLastError();
 }
 hipMemAllocationProp alloc_prop(int dev) {
@@ -189,7 +189,7 @@ const Api& api() {
     static Api& a = *new Api;   // never destroyed: the K/V pools and the cache release their chunks from static destructors
     static std::once_flag once;
     std::call_once(once, [] {
-        const char* off = std::getenv("STRATA_HIP_VMM");
+        const char* off = std::getenv("CORTEX_HIP_VMM");
         if (off != nullptr && off[0] == '0') return;
         if (hipGetDevice(&a.dev) != hipSuccess) { (void) hipGetLastError(); return; }
         int vmm = 0;
@@ -295,11 +295,11 @@ VmmChunk VmmRange::unmap(int64_t i) {
     h_[(size_t) i] = 0;
     return h;
 }
-}  // namespace strata::core
+}  // namespace cortex::core
 #else
 
 
-namespace strata::core {
+namespace cortex::core {
 bool vmm_available() { return false; }
 uint64_t vmm_granularity() { return 0; }
 VmmChunk vmm_chunk_new() { return 0; }
@@ -311,7 +311,7 @@ bool VmmRange::map_one(int64_t, VmmChunk) { return false; }
 bool VmmRange::set_access(int64_t, int64_t) { return false; }
 bool VmmRange::commit_run(int64_t, int64_t) { return false; }
 VmmChunk VmmRange::unmap(int64_t) { return 0; }
-}  // namespace strata::core
+}  // namespace cortex::core
 
 #endif
 #endif

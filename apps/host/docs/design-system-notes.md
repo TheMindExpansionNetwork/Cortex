@@ -1,6 +1,6 @@
 # Design-system notes
 
-How the app maps onto the Strata UI kit (`../ui`), plus the places where the kit
+How the app maps onto the Cortex UI kit (`../ui`), plus the places where the kit
 and the app still disagree. Measurements here are computed, not eyeballed —
 contrast ratios use the WCAG 2.1 relative-luminance formula, with translucent
 tints composited over `--st-surface` first.
@@ -86,7 +86,7 @@ exactly as before. Delete that block to return to the kit verbatim.
 ```
 
 Both were rendered on real screens for comparison —
-`strata/.shots/cmp-accent-options.png`. A keeps the bright green that the rest of
+`cortex/.shots/cmp-accent-options.png`. A keeps the bright green that the rest of
 the app is built on and changes the label; B keeps white labels and deepens every
 green surface in the app. A is what is currently in place, because it changes the
 fewest things; B is two lines away.
@@ -241,7 +241,7 @@ The interaction layer added on top of the kit — see
 
 The evidence for this document is the running app, not the source:
 
-- `strata/.shots/design-system-index.png` — every screen in both themes, side by
+- `cortex/.shots/design-system-index.png` — every screen in both themes, side by
   side, captured at 1512×1110. Light is the default. (Split for reading as
   `index-1.png` / `index-2.png`.)
 - Overlay surfaces: `120-palette`, `121-palette-filtered`, `122-shortcuts`,

@@ -5,8 +5,8 @@
 // launch - one read of the activation for both rows - and never materialises `up`.
 //
 // BITWISE against the unfused pipeline: each row is accumulated by the SAME row function the standalone
-// kernel uses (`strata/kernels/s_rowdev.cuh`, shared with nothing else), and the SwiGLU expression is the
-// shared one (`strata/kernels/swiglu.cuh`).  A float store/load is lossless, so computing the product from
+// kernel uses (`cortex/kernels/s_rowdev.cuh`, shared with nothing else), and the SwiGLU expression is the
+// shared one (`cortex/kernels/swiglu.cuh`).  A float store/load is lossless, so computing the product from
 // the register values is what the two-kernel pipeline computed from memory.  `fusions_parity` checks this
 // bitwise.
 //
@@ -14,16 +14,16 @@
 // S2 row (`s2_gemv_q8`, code_bits 2, Q8_0 activations) or an S4/S8 row (`s_gemv_q8_*_split`, Q8_0 or Q8_K
 // activations).  The per-side kind is a run-time integer picked ONCE per row, outside the accumulation
 // loops.  Anything else (a non-32 `tpr`, an unknown width) falls back to the unfused sequence.
-#include "strata/kernels/s_gemv.hpp"
-#include "strata/kernels/s_rowdev.cuh"
-#include "strata/kernels/swiglu.cuh"
+#include "cortex/kernels/s_gemv.hpp"
+#include "cortex/kernels/s_rowdev.cuh"
+#include "cortex/kernels/swiglu.cuh"
 
 #include <cuda_runtime.h>
 
 #include <cstdio>
 #include <cstdlib>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
 // side kinds: 0 = S2 row (Q8_0 act), 1 = split<Q8K>, 2 = split<Q8_0>; widths 4 and 8 fold into `kind`
@@ -133,4 +133,4 @@ bool s_gemv_pair_silu(const uint8_t* x_q8_0, const uint8_t* x_q8k, const SForm& 
     return true;
 }
 
-}  // namespace strata::kernels
+}  // namespace cortex::kernels

@@ -1,6 +1,6 @@
 import { api } from './client';
 
-/** A saved tuning, as Strata Control reports it (the same store the Terminal uses). */
+/** A saved tuning, as Cortex Control reports it (the same store the Terminal uses). */
 export interface TunePreset {
   id: string;
   name: string;

@@ -11,8 +11,8 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/kernels/native_moe.hpp"
-#include "strata/kernels/native_router.hpp"
+#include "cortex/kernels/native_moe.hpp"
+#include "cortex/kernels/native_router.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -60,7 +60,7 @@ std::vector<T> down(const T* d, size_t n) {
 
 int main(int argc, char**) {
     (void) argc;
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     std::mt19937 rng(783);
     std::normal_distribution<float> gauss(0.0f, 1.0f);
     int bad = 0;

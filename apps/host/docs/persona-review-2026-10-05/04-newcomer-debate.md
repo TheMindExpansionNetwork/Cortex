@@ -1,6 +1,6 @@
 # Round 2 — reviewer 04: newcomer from TikTok
 
-I read all eight original reports and the complete shared ballot independently. I did not consult peer votes or debate documents. This remains a simulated perspective of a first-time visitor curious to try Strata; gender supplies no assumptions about competence or preference. No observed usability findings, app changes, browser launch or model execution are claimed.
+I read all eight original reports and the complete shared ballot independently. I did not consult peer votes or debate documents. This remains a simulated perspective of a first-time visitor curious to try Cortex; gender supplies no assumptions about competence or preference. No observed usability findings, app changes, browser launch or model execution are claimed.
 
 ## Specific challenges
 

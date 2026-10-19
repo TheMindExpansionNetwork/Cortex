@@ -23,7 +23,7 @@ test('corrupt or unverified downloads cannot become executable', () => {
 });
 
 test('failed concurrent setup shares one download, cleans up and can be retried', async () => {
-  const directory=await mkdtemp(join(tmpdir(),'strata-connector-test-'));
+  const directory=await mkdtemp(join(tmpdir(),'cortex-connector-test-'));
   let requests=0, release;
   const installer=createConnectorInstaller({directory,platform:'linux',arch:'x64',fetchImpl:async()=>{
     requests++;

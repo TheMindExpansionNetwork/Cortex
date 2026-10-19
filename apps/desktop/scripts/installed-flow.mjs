@@ -4,8 +4,8 @@
  *
  *   node apps/desktop/scripts/installed-flow.mjs --install <folder the installer wrote> [--work <scratch>] [--spy <acquire-spy.mjs>]
  *
- * It starts the installed host with the installed node.exe exactly as the Tauri shell does (STRATA_PACKAGED=1,
- * STRATA_NO_ACQUIRE=1; Control found beside the host), against a scratch component folder holding a fake engine
+ * It starts the installed host with the installed node.exe exactly as the Tauri shell does (CORTEX_PACKAGED=1,
+ * CORTEX_NO_ACQUIRE=1; Control found beside the host), against a scratch component folder holding a fake engine
  * package and a scratch install folder holding one run config. Everything per-user (profiles, runtime state, host data,
  * components) lives under --work, so the real profile of whoever runs this is never read or written.
  *
@@ -17,8 +17,8 @@
  * With --spy the host runs under tests/helpers/acquire-spy.mjs and the run fails on any attempt to reach the internet or
  * run an installer.
  *
- * REAL mode (a test box with a GPU): --components <folder holding engine/<package>> --models <folder with strata-<id>.json
- * whose engine is "component:strata-engine"> --model <id> [--backend cuda]. The same host and Control, a real engine and a
+ * REAL mode (a test box with a GPU): --components <folder holding engine/<package>> --models <folder with cortex-<id>.json
+ * whose engine is "component:cortex-engine"> --model <id> [--backend cuda]. The same host and Control, a real engine and a
  * real model: load, a real answer, ownership, unload, the missing-engine notice, load again, clean shutdown. The stub-only
  * steps (the marker file, the hard-kill report) are left out.
  */
@@ -40,7 +40,7 @@ const controlDir = join(install, 'control');
 const python = isWin ? join(controlDir, 'python', 'python.exe') : join(controlDir, 'python', 'bin', 'python3');
 const real = !!args.components;
 const modelId = String(args.model ?? 'stub');
-const work = resolve(args.work ?? mkdtempSync(join(tmpdir(), 'strata-installed-flow-')));
+const work = resolve(args.work ?? mkdtempSync(join(tmpdir(), 'cortex-installed-flow-')));
 mkdirSync(work, { recursive: true });
 const dirs = { components: real ? resolve(args.components) : join(work, 'components'), models: real ? resolve(args.models) : join(work, 'models'), profiles: join(work, 'profiles'), runtime: join(work, 'runtime'), home: join(work, 'home') };
 // the runtime and profile folders are created by Control itself, with the owner-only ACL it insists on
@@ -55,11 +55,11 @@ const sha = buf => createHash('sha256').update(buf).digest('hex');
 // ------------------------------------------------------------------------------ fixtures
 const baseEnv = {
   ...process.env,
-  STRATA_COMPONENTS_DIR: dirs.components, STRATA_PROFILE_DIR: dirs.profiles, STRATA_RUNTIME_DIR: dirs.runtime,
-  STRATA_INSTALL_DIR: dirs.models, STRATA_ENGINE_BACKEND: String(args.backend ?? 'cuda'), STRATA_HOME: dirs.home, STRATA_MODELS_DIR: real ? join(work, 'models-unused') : dirs.models,
+  CORTEX_COMPONENTS_DIR: dirs.components, CORTEX_PROFILE_DIR: dirs.profiles, CORTEX_RUNTIME_DIR: dirs.runtime,
+  CORTEX_INSTALL_DIR: dirs.models, CORTEX_ENGINE_BACKEND: String(args.backend ?? 'cuda'), CORTEX_HOME: dirs.home, CORTEX_MODELS_DIR: real ? join(work, 'models-unused') : dirs.models,
   APPDATA: join(work, 'appdata'), XDG_CONFIG_HOME: join(work, 'xdg'), PYTHONDONTWRITEBYTECODE: '1',
 };
-delete baseEnv.STRATA_API_KEY;
+delete baseEnv.CORTEX_API_KEY;
 mkdirSync(baseEnv.APPDATA, { recursive: true });
 const mark = join(work, 'engine-ran.json');
 
@@ -87,20 +87,20 @@ function installFakeEngine() {
     : `#!/bin/sh\nexec "${python}" "$(dirname "$0")/engine_main.py" "$@"\n`);
   if (!isWin) chmodSync(join(folder, entry), 0o755);
   const files = [entry, 'engine_main.py'].map(p => { const b = readFileSync(join(folder, p)); return { path: p, sha256: sha(b), bytes: b.length }; });
-  writeFileSync(join(folder, 'engine-component.json'), JSON.stringify({ schema_version: 1, id: 'strata-engine', version: '0.1.45', platform, backend: 'cuda', entrypoint: entry, files }));
+  writeFileSync(join(folder, 'engine-component.json'), JSON.stringify({ schema_version: 1, id: 'cortex-engine', version: '0.1.45', platform, backend: 'cuda', entrypoint: entry, files }));
   return folder;
 }
 
 function makeTokenizerAndConfig() {
   const tok = join(dirs.models, 'tokenizer');
   mkdirSync(tok, { recursive: true });
-  const script = `import json, sys\nfrom tools.strata_tokenizer import BYTE_TO_UNICODE\ntok = sys.argv[1]\ntokens = [BYTE_TO_UNICODE[i] for i in range(256)] + ['ab', '<|im_start|>', '<|im_end|>', '<|endoftext|>']\njson.dump({t: i for i, t in enumerate(tokens)}, open(tok + '/vocab.json', 'w'))\nopen(tok + '/merges.txt', 'w').write('a b')\njson.dump([0] * 257 + [3, 3, 3], open(tok + '/token_type.json', 'w'))\n`;
+  const script = `import json, sys\nfrom tools.cortex_tokenizer import BYTE_TO_UNICODE\ntok = sys.argv[1]\ntokens = [BYTE_TO_UNICODE[i] for i in range(256)] + ['ab', '<|im_start|>', '<|im_end|>', '<|endoftext|>']\njson.dump({t: i for i, t in enumerate(tokens)}, open(tok + '/vocab.json', 'w'))\nopen(tok + '/merges.txt', 'w').write('a b')\njson.dump([0] * 257 + [3, 3, 3], open(tok + '/token_type.json', 'w'))\n`;
   const done = spawnSync(python, ['-c', script, tok], { cwd: controlDir, env: { ...baseEnv, PYTHONNOUSERSITE: '1' }, encoding: 'utf8' });
   if (done.status !== 0) throw new Error('tokenizer fixture failed: ' + done.stderr);
-  writeFileSync(join(dirs.models, 'strata-stub.json'), JSON.stringify({ exe: 'component:strata-engine', backend: 'cuda', tokenizer: tok, args: [], cwd: work, model_name: 'stub', host: '127.0.0.1', port: 0 }));
+  writeFileSync(join(dirs.models, 'cortex-stub.json'), JSON.stringify({ exe: 'component:cortex-engine', backend: 'cuda', tokenizer: tok, args: [], cwd: work, model_name: 'stub', host: '127.0.0.1', port: 0 }));
 }
 
-const control = (...argv) => spawnSync(python, [join(controlDir, 'strata.py'), ...argv, '--output', 'json'], { cwd: controlDir, env: { ...baseEnv, PYTHONNOUSERSITE: '1', STRATA_NO_ACQUIRE: '1', FAKE_ENGINE_MARK: mark }, encoding: 'utf8', timeout: 120000 });
+const control = (...argv) => spawnSync(python, [join(controlDir, 'cortex.py'), ...argv, '--output', 'json'], { cwd: controlDir, env: { ...baseEnv, PYTHONNOUSERSITE: '1', CORTEX_NO_ACQUIRE: '1', FAKE_ENGINE_MARK: mark }, encoding: 'utf8', timeout: 120000 });
 const controlJson = (...argv) => { const r = control(...argv); let json = null; try { json = JSON.parse(r.stdout.slice(r.stdout.indexOf('{'))); } catch { /* not json */ } return { code: r.status, json, text: r.stdout + r.stderr }; };
 const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
@@ -112,8 +112,8 @@ async function startHost() {
   if (args.spy) { spyLog = join(work, 'acquire-spy.log'); writeFileSync(spyLog, ''); }
   host = spawn(node, hostArgs, {
     cwd: join(install, 'host'), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
-    env: { ...baseEnv, STRATA_PORT: String(port), STRATA_DIST: join(install, 'host', 'dist'), NODE_ENV: 'production', STRATA_PACKAGED: '1', STRATA_REAL_ENGINE: '1',
-      STRATA_NO_ACQUIRE: '1', STRATA_SHUTDOWN_TOKEN: shutdownToken, FAKE_ENGINE_MARK: mark, STRATA_SHARE_PORT: String(await freePort()), STRATA_TUNNEL_PORT: String(await freePort()),
+    env: { ...baseEnv, CORTEX_PORT: String(port), CORTEX_DIST: join(install, 'host', 'dist'), NODE_ENV: 'production', CORTEX_PACKAGED: '1', CORTEX_REAL_ENGINE: '1',
+      CORTEX_NO_ACQUIRE: '1', CORTEX_SHUTDOWN_TOKEN: shutdownToken, FAKE_ENGINE_MARK: mark, CORTEX_SHARE_PORT: String(await freePort()), CORTEX_TUNNEL_PORT: String(await freePort()),
       ...(spyLog ? { ACQUIRE_SPY_LOG: spyLog } : {}) },
   });
   let log = '';
@@ -127,9 +127,9 @@ async function startHostViaShell() {
   port = await freePort(); base = `http://127.0.0.1:${port}`;
   const spec = { command: node, args: [hostEntry], options: {
     cwd: join(install, 'host'), stdio: 'ignore', windowsHide: true,
-    env: { ...baseEnv, STRATA_PORT: String(port), STRATA_DIST: join(install, 'host', 'dist'), NODE_ENV: 'production', STRATA_PACKAGED: '1', STRATA_REAL_ENGINE: '1',
-      STRATA_NO_ACQUIRE: '1', STRATA_SHUTDOWN_TOKEN: shutdownToken, STRATA_EXIT_WITH_PARENT: '1', FAKE_ENGINE_MARK: mark,
-      STRATA_SHARE_PORT: String(await freePort()), STRATA_TUNNEL_PORT: String(await freePort()) } } };
+    env: { ...baseEnv, CORTEX_PORT: String(port), CORTEX_DIST: join(install, 'host', 'dist'), NODE_ENV: 'production', CORTEX_PACKAGED: '1', CORTEX_REAL_ENGINE: '1',
+      CORTEX_NO_ACQUIRE: '1', CORTEX_SHUTDOWN_TOKEN: shutdownToken, CORTEX_EXIT_WITH_PARENT: '1', FAKE_ENGINE_MARK: mark,
+      CORTEX_SHARE_PORT: String(await freePort()), CORTEX_TUNNEL_PORT: String(await freePort()) } } };
   const shell = spawn(node, ['-e', "const s=JSON.parse(process.env.HOST_SPEC);const c=require('node:child_process').spawn(s.command,s.args,s.options);console.log(c.pid);setInterval(()=>{},1000);"],
     { env: { ...process.env, HOST_SPEC: JSON.stringify(spec) }, stdio: ['ignore', 'pipe', 'inherit'], windowsHide: true });
   const hostPid = await new Promise(r => shell.stdout.once('data', c => r(Number(String(c).trim()))));
@@ -157,15 +157,15 @@ async function stopHost(hard = false) {
 }
 
 async function main() {
-  for (const need of [node, hostEntry, python, join(controlDir, 'strata.py')]) if (!existsSync(need)) { record('installed layout', false, `missing ${need}`); return; }
+  for (const need of [node, hostEntry, python, join(controlDir, 'cortex.py')]) if (!existsSync(need)) { record('installed layout', false, `missing ${need}`); return; }
   record('installed layout', true, install);
   if (real) {
     const packages = existsSync(join(dirs.components, 'engine')) ? readdirSync(join(dirs.components, 'engine')) : [];
-    record('fixtures', packages.length > 0 && existsSync(join(dirs.models, `strata-${modelId}.json`)), `engine package(s) ${packages.join(', ')} in ${dirs.components}; run config strata-${modelId}.json in ${dirs.models}`);
+    record('fixtures', packages.length > 0 && existsSync(join(dirs.models, `cortex-${modelId}.json`)), `engine package(s) ${packages.join(', ')} in ${dirs.components}; run config cortex-${modelId}.json in ${dirs.models}`);
   } else {
     installFakeEngine();
     makeTokenizerAndConfig();
-    record('fixtures', true, `stub engine package in ${dirs.components}; run config strata-stub.json`);
+    record('fixtures', true, `stub engine package in ${dirs.components}; run config cortex-stub.json`);
   }
 
   if (!(await startHost())) { record('host healthy', false, host.hostLog().slice(-600)); return; }
@@ -235,10 +235,10 @@ async function main() {
     ran2 = listed.length ? { pid: Number(listed[0].trim().split(/\s+/)[0]) } : null;
   }
   record('load again after the engine package returns', again.job.state === 'done', again.job.error ?? '');
-  const wrong = await fetch(base + '/api/control/shutdown', { method: 'POST', headers: { 'x-strata-shutdown': 'nope' } });
+  const wrong = await fetch(base + '/api/control/shutdown', { method: 'POST', headers: { 'x-cortex-shutdown': 'nope' } });
   record('shutdown without the shell\'s secret is refused', wrong.status === 403, String(wrong.status));
   const exited = new Promise(r => host.once('exit', code => r(code)));
-  const stopping = await fetch(base + '/api/control/shutdown', { method: 'POST', headers: { 'x-strata-shutdown': shutdownToken } });
+  const stopping = await fetch(base + '/api/control/shutdown', { method: 'POST', headers: { 'x-cortex-shutdown': shutdownToken } });
   const code = await Promise.race([exited, delay(90000).then(() => 'timeout')]);
   for (let i = 0; i < 100 && ran2 && alive(ran2.pid); i++) await delay(100);
   const final = controlJson('runtime', 'status', '--profile', 'app-1');

@@ -1,4 +1,4 @@
-// metal/src/gpu/runtime.cpp - include/strata/gpu/runtime.hpp on Metal (metal-cpp).  Skeleton of MAC-PLAN Phase 1.
+// metal/src/gpu/runtime.cpp - include/cortex/gpu/runtime.hpp on Metal (metal-cpp).  Skeleton of MAC-PLAN Phase 1.
 //
 // Memory model (measured on the M5 Max, phaseA-tests/mac-design.md):
 //   - every allocation is one MTLBuffer, storageModeShared, hazard tracking untracked (the engine orders its own work
@@ -16,8 +16,8 @@
 #include <Foundation/Foundation.hpp>
 #include <Metal/Metal.hpp>
 
-#include "strata/gpu/metal.hpp"
-#include "strata/gpu/runtime.hpp"
+#include "cortex/gpu/metal.hpp"
+#include "cortex/gpu/runtime.hpp"
 
 #include <sys/sysctl.h>
 
@@ -31,7 +31,7 @@
 #include <thread>
 #include <vector>
 
-namespace strata::gpu {
+namespace cortex::gpu {
 
 namespace {
 
@@ -186,8 +186,8 @@ Error wait_value(MTL::SharedEvent* ev, uint64_t v) {
 
 void check_purged(const Alloc* a, const char* what) {
     if (a && a->purged) {
-        std::fprintf(stderr, "strata metal runtime: a %s touches a device allocation of %.1f MB that was given back "
-                             "(STRATA_METAL_KEEP_HOST_WEIGHTS=1 keeps it)\n", what, a->bytes / 1e6);
+        std::fprintf(stderr, "cortex metal runtime: a %s touches a device allocation of %.1f MB that was given back "
+                             "(CORTEX_METAL_KEEP_HOST_WEIGHTS=1 keeps it)\n", what, a->bytes / 1e6);
         void* fr[48];
         backtrace_symbols_fd(fr, backtrace(fr, 48), 2);   // which host code still reads it
         std::abort();
@@ -267,12 +267,12 @@ Error run_op(StreamImpl* s, const Op& o) {
     return kSuccess;
 }
 
-// STRATA_METAL_ALLOC_LOG=1: every allocation of 16 MB or more, with the running total (memory budgets on small Macs)
+// CORTEX_METAL_ALLOC_LOG=1: every allocation of 16 MB or more, with the running total (memory budgets on small Macs)
 void alloc_log(const char* what, size_t n) {
-    static const bool on = std::getenv("STRATA_METAL_ALLOC_LOG") != nullptr;
+    static const bool on = std::getenv("CORTEX_METAL_ALLOC_LOG") != nullptr;
     static std::atomic<uint64_t> tot{0};
     const uint64_t t = tot += n;
-    if (on && n >= (16u << 20)) std::fprintf(stderr, "strata metal runtime: %s %.1f MB (total %.2f GB)\n", what, n / 1e6, t / 1e9);
+    if (on && n >= (16u << 20)) std::fprintf(stderr, "cortex metal runtime: %s %.1f MB (total %.2f GB)\n", what, n / 1e6, t / 1e9);
 }
 
 Error new_alloc(void** p, size_t bytes, bool host) {
@@ -611,7 +611,7 @@ Error dispatch(Stream st, MTL::ComputePipelineState* p, const void* args, size_t
                     if (kv.second == p) { name = kv.first; break; }
             }
             std::fprintf(stderr,
-                         "strata metal: the kernel %s can run at most %lu threads per threadgroup on this GPU (%s), but the "
+                         "cortex metal: the kernel %s can run at most %lu threads per threadgroup on this GPU (%s), but the "
                          "launch asks for %lu.\nMetal skips such a dispatch without any error, so every answer would be "
                          "wrong; stopping here instead.  Please report this (the GPU, macOS version and this line) at "
                          "https://github.com/Niko1221/Strata/issues .  (#2323)\n",
@@ -637,4 +637,4 @@ Error dispatch(Stream st, MTL::ComputePipelineState* p, const void* args, size_t
 Stats stats() { return rt().stats; }
 
 }  // namespace metal
-}  // namespace strata::gpu
+}  // namespace cortex::gpu

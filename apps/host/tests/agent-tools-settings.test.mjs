@@ -1,8 +1,8 @@
 /**
  * Settings -> Tools, behind the screen: what is saved, what reaches the agent, web search with no key, and the person's own tools.
  *
- * Pure tests always run. The two that start the real Harness need STRATA_HARNESS_DIR (the model is scripted; what is real is the Harness,
- * its web seam and tool executor, the Strata gate plugin, the bridge and the app's own tool server).
+ * Pure tests always run. The two that start the real Harness need CORTEX_HARNESS_DIR (the model is scripted; what is real is the Harness,
+ * its web seam and tool executor, the Cortex gate plugin, the bridge and the app's own tool server).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,13 +19,13 @@ import { standardPreset } from '../server/agent/preset.mjs';
 import { TOOL_GROUPS } from '../server/agent/tools-catalog.mjs';
 import { createAgentTools } from '../server/agent/tools-settings.mjs';
 import { findBrowser, browserCandidates, findPlaywrightMcp } from '../server/agent/browser-probe.mjs';
-import { manualDecision, planDecision } from '../server/agent/plugins/strata-gate.mjs';
+import { manualDecision, planDecision } from '../server/agent/plugins/cortex-gate.mjs';
 import { createDuckDuckGoSearch, looksBlocked, parseHtmlResults, parseLiteResults, realUrl, BLOCKED_MESSAGE } from '../server/web-search-ddg.mjs';
 import { createExaSearch, createPerplexitySearch } from '../server/web-search-keyed.mjs';
 
-const HARNESS = process.env.STRATA_HARNESS_DIR;
-const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'STRATA_HARNESS_DIR is not set to a built Harness' : false;
-const tmp = () => mkdtempSync(join(tmpdir(), 'strata-tools-set-'));
+const HARNESS = process.env.CORTEX_HARNESS_DIR;
+const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'CORTEX_HARNESS_DIR is not set to a built Harness' : false;
+const tmp = () => mkdtempSync(join(tmpdir(), 'cortex-tools-set-'));
 const cleanup = dir => { try { rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch { /* best effort */ } };
 const make = (dir, state = {}) => { let saved = state; return { tools: createAgentTools({ read: () => saved, write: v => { saved = v; }, dataDir: dir }), saved: () => saved }; };
 
@@ -100,21 +100,21 @@ const toolWeb = entries => entries.find(e => e.id === 'preset-standard').config.
 test('profile: web search is on with no key (DuckDuckGo), pinned so a second backend cannot make the choice ambiguous', () => {
   const e = entriesOf(buildProfile({ local: [], connections: [] }));
   assert.equal(toolWeb(e).config.search, true); assert.equal(toolWeb(e).config.fetch, true);
-  assert.deepEqual(e.find(x => x.id === 'web').config, { searchProvider: 'strata-duckduckgo', fetchProvider: 'http' });
+  assert.deepEqual(e.find(x => x.id === 'web').config, { searchProvider: 'cortex-duckduckgo', fetchProvider: 'http' });
   assert.equal(e.find(x => x.id === 'web-search-deepseek').disabled, true);
-  const plugin = e.flatMap(x => x.insert ?? []).find(x => x.id === 'strata-web-search');
+  const plugin = e.flatMap(x => x.insert ?? []).find(x => x.id === 'cortex-web-search');
   assert.ok(existsSync(plugin.name)); assert.equal(plugin.config.provider, 'duckduckgo');
 });
 
 test('profile: a keyed service is used only with its key saved; the key travels in the environment and is in no file', () => {
   const view = (provider, key) => ({ off: new Set(), search: { provider, key }, servers: {}, hasInstructionTools: false, hasCommandTools: false, toolFile: null, browserEnabled: false });
   const noKey = buildProfile({ local: [], connections: [], tools: view('exa', '') });
-  assert.equal(entriesOf(noKey).find(x => x.id === 'web').config.searchProvider, 'strata-duckduckgo', 'no key: DuckDuckGo, not a broken search');
+  assert.equal(entriesOf(noKey).find(x => x.id === 'web').config.searchProvider, 'cortex-duckduckgo', 'no key: DuckDuckGo, not a broken search');
   const exa = buildProfile({ local: [], connections: [], tools: view('exa', 'exa-secret-key') });
   assert.equal(entriesOf(exa).find(x => x.id === 'web').config.searchProvider, 'exa');
-  assert.equal(exa.env.STRATA_SEARCH_KEY, 'exa-secret-key'); assert.ok(!exa.patch.includes('exa-secret-key'));
+  assert.equal(exa.env.CORTEX_SEARCH_KEY, 'exa-secret-key'); assert.ok(!exa.patch.includes('exa-secret-key'));
   const ds = buildProfile({ local: [], connections: [], tools: view('deepseek', 'ds-secret') });
-  assert.deepEqual(entriesOf(ds).find(x => x.id === 'web-search-deepseek').config, { apiKeyEnv: 'STRATA_SEARCH_KEY' });
+  assert.deepEqual(entriesOf(ds).find(x => x.id === 'web-search-deepseek').config, { apiKeyEnv: 'CORTEX_SEARCH_KEY' });
   assert.equal(entriesOf(ds).find(x => x.id === 'web').config.searchProvider, 'deepseek-official');
   assert.notEqual(noKey.signature, exa.signature, 'a changed choice restarts the agent');
 });
@@ -140,20 +140,20 @@ test('profile: the person\'s instruction and command tools are the app\'s own to
     tools.addCustom({ name: 'Remote', about: 'a', kind: 'server', address: 'https://r.example/mcp' });
     const e = entriesOf(buildProfile({ local: [], connections: [], tools: tools.profileView() }));
     const rows = e.flatMap(x => x.insert ?? []).filter(r => r.name === '@deepseek-ai/dsh-mcp-client');
-    assert.deepEqual(rows.map(r => r.config.serverName).sort(), ['custom-remote', 'strata-commands', 'strata-instructions']);
-    const own = rows.find(r => r.config.serverName === 'strata-commands').config;
+    assert.deepEqual(rows.map(r => r.config.serverName).sort(), ['custom-remote', 'cortex-commands', 'cortex-instructions']);
+    const own = rows.find(r => r.config.serverName === 'cortex-commands').config;
     assert.deepEqual([own.command, own.args[0], own.args[1]], [process.execPath, CUSTOM_TOOLS_SCRIPT, 'commands']);
   } finally { cleanup(dir); }
 });
 
 test('the gate: instruction tools only hand back text, so they do not ask; commands, servers and the browser ask in Manual and are refused in Plan', () => {
-  assert.equal(manualDecision({ name: 'mcp__strata-instructions__notes', arguments: {} }), null);
-  assert.equal(manualDecision({ name: 'mcp__strata-commands__run_it', arguments: {} })?.kind, 'ask');
-  assert.equal(manualDecision({ name: 'mcp__strata-commands__check_site', arguments: { input: 'example.com' } }).reason, 'Run your tool “check site” with: example.com');
+  assert.equal(manualDecision({ name: 'mcp__cortex-instructions__notes', arguments: {} }), null);
+  assert.equal(manualDecision({ name: 'mcp__cortex-commands__run_it', arguments: {} })?.kind, 'ask');
+  assert.equal(manualDecision({ name: 'mcp__cortex-commands__check_site', arguments: { input: 'example.com' } }).reason, 'Run your tool “check site” with: example.com');
   assert.equal(manualDecision({ name: 'mcp__custom-remote__lookup', arguments: {} })?.kind, 'ask');
-  assert.equal(planDecision({ name: 'mcp__strata-instructions__notes' }), null);
+  assert.equal(planDecision({ name: 'mcp__cortex-instructions__notes' }), null);
   assert.equal(planDecision({ name: 'read' }), null);
-  for (const name of ['mcp__strata-commands__run_it', 'mcp__custom-remote__lookup', 'mcp__browser__browser_navigate']) assert.equal(planDecision({ name })?.kind, 'deny', name);
+  for (const name of ['mcp__cortex-commands__run_it', 'mcp__custom-remote__lookup', 'mcp__browser__browser_navigate']) assert.equal(planDecision({ name })?.kind, 'deny', name);
   assert.match(planDecision({ name: 'mcp__x__y' }).reason, /Plan mode only looks/);
 });
 
@@ -202,9 +202,9 @@ test('search: polite by design: one request at a time, spaced out, a minute limi
     now: () => clock, sleep: async ms => { waits.push(ms); clock += ms; },
     fetch: async (url, init) => { calls++; assert.equal(init.method, 'POST'); assert.match(init.headers['user-agent'], /Mozilla/); assert.match(String(url), /duckduckgo\.com/); return new Response(HTML, { status: 200 }); },
   });
-  const a = await provider.search({ query: 'Strata engine', maxResults: 1 });
+  const a = await provider.search({ query: 'Cortex engine', maxResults: 1 });
   assert.equal(a.sources.length, 1);
-  await provider.search({ query: 'strata ENGINE' });          // same words: from the cache
+  await provider.search({ query: 'cortex ENGINE' });          // same words: from the cache
   assert.equal(calls, 1);
   await provider.search({ query: 'another one' });
   assert.equal(calls, 2); assert.ok(waits.some(ms => ms >= 1400), 'the second request waited for the gap');
@@ -250,17 +250,17 @@ function mcpSession(dir, mode) {
   return { ask, close: () => child.kill() };
 }
 
-test('tool server: instruction tools return the person\'s text; command tools run their command with the assistant\'s text only in STRATA_INPUT', async () => {
+test('tool server: instruction tools return the person\'s text; command tools run their command with the assistant\'s text only in CORTEX_INPUT', async () => {
   const dir = tmp();
   try {
     const script = join(dir, 'show.mjs');
-    writeFileSync(script, "console.log('got:' + process.env.STRATA_INPUT); if (process.env.STRATA_INPUT === 'fail') process.exit(3);");
+    writeFileSync(script, "console.log('got:' + process.env.CORTEX_INPUT); if (process.env.CORTEX_INPUT === 'fail') process.exit(3);");
     const { tools } = make(dir);
     tools.addCustom({ name: 'Notes', about: 'House style.', kind: 'instructions', instructions: 'Start with one line.' });
     tools.addCustom({ name: 'Show', about: 'Shows its input.', kind: 'command', command: `"${process.execPath}" "${script}"` });
     const instr = mcpSession(dir, 'instructions');
     try {
-      assert.equal((await instr.ask('initialize', { protocolVersion: '2024-11-05' })).result.serverInfo.name, 'strata-instructions');
+      assert.equal((await instr.ask('initialize', { protocolVersion: '2024-11-05' })).result.serverInfo.name, 'cortex-instructions');
       const list = (await instr.ask('tools/list')).result.tools;
       assert.deepEqual(list.map(t => [t.name, t.description]), [['notes', 'House style.']]);
       assert.equal((await instr.ask('tools/call', { name: 'notes', arguments: {} })).result.content[0].text, 'Start with one line.');
@@ -305,21 +305,21 @@ async function rig(t, setup) {
 test('real Harness: the person\'s own tools are offered; an instruction tool never asks, a command asks in Manual and is refused in Plan', { skip }, async (t) => {
   const r = await rig(t, (tools, dir) => {
     const script = join(dir, 'touch.mjs');
-    writeFileSync(script, "import { writeFileSync } from 'node:fs'; writeFileSync(process.argv[2], 'ran'); console.log('ok:' + process.env.STRATA_INPUT);");
+    writeFileSync(script, "import { writeFileSync } from 'node:fs'; writeFileSync(process.argv[2], 'ran'); console.log('ok:' + process.env.CORTEX_INPUT);");
     tools.addCustom({ name: 'House style', about: 'Write in our house style.', kind: 'instructions', instructions: 'Always start with one line.' });
     tools.addCustom({ name: 'Make marker', about: 'Writes a marker file.', kind: 'command', command: `"${process.execPath}" "${script}" "${join(dir, 'marker.txt')}"` });
   });
   const marker = join(r.dir, 'marker.txt');
-  const first = await r.run('c1', 'mcp__strata-instructions__house_style', {}, { mode: 'manual' });
-  assert.ok(r.offered().includes('mcp__strata-instructions__house_style') && r.offered().includes('mcp__strata-commands__make_marker'), 'both of the person\'s tools are offered');
+  const first = await r.run('c1', 'mcp__cortex-instructions__house_style', {}, { mode: 'manual' });
+  assert.ok(r.offered().includes('mcp__cortex-instructions__house_style') && r.offered().includes('mcp__cortex-commands__make_marker'), 'both of the person\'s tools are offered');
   assert.ok(!first.some(c => c.state === 'proposed'), 'an instruction tool never asks');
   assert.match(first.at(-1).result, /Always start with one line/);
-  const plan = await r.run('c2', 'mcp__strata-commands__make_marker', { input: 'p' }, { mode: 'plan' });
+  const plan = await r.run('c2', 'mcp__cortex-commands__make_marker', { input: 'p' }, { mode: 'plan' });
   assert.ok(!existsSync(marker), 'Plan mode refused the command');
   assert.ok(!plan.some(c => c.state === 'done' && /ok:/.test(c.result ?? '')));
-  const denied = await r.run('c3', 'mcp__strata-commands__make_marker', { input: 'd' }, { mode: 'manual', answer: 'deny' });
+  const denied = await r.run('c3', 'mcp__cortex-commands__make_marker', { input: 'd' }, { mode: 'manual', answer: 'deny' });
   assert.ok(denied.some(c => c.state === 'proposed') && !existsSync(marker), 'Manual asked first, and a No ran nothing');
-  const approved = await r.run('c4', 'mcp__strata-commands__make_marker', { input: 'yes' }, { mode: 'manual', answer: 'approve' });
+  const approved = await r.run('c4', 'mcp__cortex-commands__make_marker', { input: 'yes' }, { mode: 'manual', answer: 'approve' });
   assert.ok(approved.some(c => c.state === 'proposed'));
   assert.equal(approved.at(-1).state, 'done'); assert.match(approved.at(-1).result, /ok:yes/); assert.ok(existsSync(marker));
 });
@@ -374,17 +374,17 @@ test('browser: the tool server is found in the agent component; the screen can s
 const browserNow = findBrowser();
 const playwrightCli = HARNESS ? findPlaywrightMcp(HARNESS) : null;
 // Opt-in: it starts a real (headless) Chrome, which a test run must not do on someone's PC unasked.
-const browserSkip = process.env.STRATA_TEST_BROWSER !== '1' ? 'starts a real browser: set STRATA_TEST_BROWSER=1' : skip || !browserNow.found || !playwrightCli ? 'needs STRATA_HARNESS_DIR with the browser tool server and Chrome or Edge on this computer' : false;
+const browserSkip = process.env.CORTEX_TEST_BROWSER !== '1' ? 'starts a real browser: set CORTEX_TEST_BROWSER=1' : skip || !browserNow.found || !playwrightCli ? 'needs CORTEX_HARNESS_DIR with the browser tool server and Chrome or Edge on this computer' : false;
 
 test('real browser: the assistant opens a local page in the person\'s Chrome or Edge and reads it; Manual asks before opening it, Plan refuses', { skip: browserSkip, timeout: 240000 }, async (t) => {
   const http = await import('node:http');
-  const page = http.createServer((req, res) => { res.setHeader('content-type', 'text/html'); res.end('<html><head><title>Strata browser test</title></head><body><h1>Hello from the browser test</h1><button>Press me</button></body></html>'); });
+  const page = http.createServer((req, res) => { res.setHeader('content-type', 'text/html'); res.end('<html><head><title>Cortex browser test</title></head><body><h1>Hello from the browser test</h1><button>Press me</button></body></html>'); });
   await new Promise(r => page.listen(0, '127.0.0.1', r));
   t.after(() => page.close());
   const url = `http://127.0.0.1:${page.address().port}/`;
-  const previous = process.env.STRATA_BROWSER_HEADLESS;
-  process.env.STRATA_BROWSER_HEADLESS = '1';
-  t.after(() => { if (previous === undefined) delete process.env.STRATA_BROWSER_HEADLESS; else process.env.STRATA_BROWSER_HEADLESS = previous; });
+  const previous = process.env.CORTEX_BROWSER_HEADLESS;
+  process.env.CORTEX_BROWSER_HEADLESS = '1';
+  t.after(() => { if (previous === undefined) delete process.env.CORTEX_BROWSER_HEADLESS; else process.env.CORTEX_BROWSER_HEADLESS = previous; });
   const worker = await startScriptedWorker({});
   const dir = tmp();
   const ws = join(dir, 'ws'); mkdirSync(ws, { recursive: true });

@@ -1,11 +1,11 @@
-"""serve/lifeline.py: a process Strata starts ends when the process that started it ends, however that ends.
+"""serve/lifeline.py: a process Cortex starts ends when the process that started it ends, however that ends.
 
     python -m unittest serve.test_lifeline
 
 Each case runs a small "server" process (a fresh interpreter) that starts a sleeping child through
 `lifeline.popen`, then ends that server the hard way (kill -9 / TerminateProcess), and checks that the child
 is gone. The mechanism under test is Windows' job object, Linux's PR_SET_PDEATHSIG, or the portable watcher
-(forced with STRATA_LIFELINE=watcher so it is proven on every POSIX box, not only on macOS).
+(forced with CORTEX_LIFELINE=watcher so it is proven on every POSIX box, not only on macOS).
 """
 import json
 import os
@@ -45,13 +45,13 @@ SERVER = textwrap.dedent("""
 
 
 def alive(pid: int) -> bool:
-    from strata_control import procs
+    from cortex_control import procs
     return procs.start_token(pid) is not None
 
 
 class Lifeline(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="strata-lifeline-")
+        self.temp = tempfile.TemporaryDirectory(prefix="cortex-lifeline-")
         self.addCleanup(self.temp.cleanup)
         self.env = {**os.environ, "LOCALAPPDATA": self.temp.name, "XDG_STATE_HOME": self.temp.name,
                     "PYTHONPATH": str(ROOT)}
@@ -103,7 +103,7 @@ class Lifeline(unittest.TestCase):
 
     @unittest.skipUnless(POSIX, "the portable watcher is the POSIX path")
     def test_the_portable_watcher_ends_the_child_when_the_server_is_killed(self):
-        self.assertEqual(self._killed_parent_takes_the_child(STRATA_LIFELINE="watcher"), "watcher")
+        self.assertEqual(self._killed_parent_takes_the_child(CORTEX_LIFELINE="watcher"), "watcher")
 
     @unittest.skipUnless(sys.platform.startswith("linux"), "PR_SET_PDEATHSIG is Linux")
     def test_a_child_started_on_a_request_thread_outlives_that_thread_but_not_the_server(self):
@@ -120,9 +120,9 @@ class Lifeline(unittest.TestCase):
         self.assertTrue(self.wait_gone(info["child"]), "end_children at exit must stop what is still running")
 
     def test_the_child_is_recorded_while_it_runs_and_forgotten_after(self):
-        from strata_control import procs
+        from cortex_control import procs
         proc, info = self.launch("sleep")
-        base = Path(self.temp.name) / "Strata" / "procs" if not POSIX else Path(self.temp.name) / "strata" / "procs"
+        base = Path(self.temp.name) / "Cortex" / "procs" if not POSIX else Path(self.temp.name) / "cortex" / "procs"
         record = base / f"{info['child']}.json"
         deadline = time.monotonic() + 5
         while not record.exists() and time.monotonic() < deadline:
@@ -152,7 +152,7 @@ class HardFallback(unittest.TestCase):
     def test_an_engine_that_ignores_everything_is_killed(self):
         from unittest import mock
         from serve import server
-        engine = server.StrataEngine("missing-executable", [], lazy=True)
+        engine = server.CortexEngine("missing-executable", [], lazy=True)
         engine.proc = subprocess.Popen([sys.executable, "-c", STUBBORN], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                        text=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         engine.proc.stdout.readline()

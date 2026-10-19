@@ -1,4 +1,4 @@
-"""Shared fixtures for the `strata launch` tests: an isolated home, a fake computer, and a text dump of a Textual screen."""
+"""Shared fixtures for the `cortex launch` tests: an isolated home, a fake computer, and a text dump of a Textual screen."""
 
 from __future__ import annotations
 
@@ -21,16 +21,16 @@ class Home:
     """A throw-away per-user home: profiles, presets, launch presets, state, components and install folder."""
 
     def __init__(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory(prefix="strata-launch-test-")
+        self.tmp = tempfile.TemporaryDirectory(prefix="cortex-launch-test-")
         base = Path(self.tmp.name)
         self.base = base
         self.env = {
-            "STRATA_PROFILE_DIR": str(base / "config" / "profiles"),
-            "STRATA_PRESET_DIR": str(base / "config" / "presets"),
-            "STRATA_LAUNCH_PRESET_DIR": str(base / "config" / "launch-presets"),
-            "STRATA_COMPONENTS_DIR": str(base / "components"),
-            "STRATA_INSTALL_DIR": str(base / "install"),
-            "STRATA_RUNTIME_DIR": str(base / "runtime"),
+            "CORTEX_PROFILE_DIR": str(base / "config" / "profiles"),
+            "CORTEX_PRESET_DIR": str(base / "config" / "presets"),
+            "CORTEX_LAUNCH_PRESET_DIR": str(base / "config" / "launch-presets"),
+            "CORTEX_COMPONENTS_DIR": str(base / "components"),
+            "CORTEX_INSTALL_DIR": str(base / "install"),
+            "CORTEX_RUNTIME_DIR": str(base / "runtime"),
             "XDG_STATE_HOME": str(base / "state"),
             "LOCALAPPDATA": str(base / "local"),
             "HOME": str(base / "home"),
@@ -49,8 +49,8 @@ class Home:
 
 
 def catalog(hw: dict | None = None, root: Path | None = None):
-    from strata_cli.launch.catalog import Catalog
-    return Catalog(root=root or Path(os.environ["STRATA_INSTALL_DIR"]), hardware=hw or HW_12)
+    from cortex_cli.launch.catalog import Catalog
+    return Catalog(root=root or Path(os.environ["CORTEX_INSTALL_DIR"]), hardware=hw or HW_12)
 
 
 def text_of(app) -> str:
@@ -60,7 +60,7 @@ def text_of(app) -> str:
 
 
 def run_cli(argv: list[str]) -> tuple[int, str, str]:
-    from strata_cli.cli import main
+    from cortex_cli.cli import main
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         try:

@@ -93,6 +93,6 @@ The existing rendered contrast probe was run through CUA's read-only evaluator f
 
 ## Practical limits
 
-Native Strata integration and real inference benchmarking remain deferred as requested. Demo speeds cannot establish recommendation quality or resource savings. Quantitative drag/scroll responsiveness during streaming, battery impact and full luminance/motion performance measurements were not performed; no performance improvement is claimed. Accessibility verification here covers the touched controls, sampled contrast and listed layouts, not a full screen-reader audit.
+Native Cortex integration and real inference benchmarking remain deferred as requested. Demo speeds cannot establish recommendation quality or resource savings. Quantitative drag/scroll responsiveness during streaming, battery impact and full luminance/motion performance measurements were not performed; no performance improvement is claimed. Accessibility verification here covers the touched controls, sampled contrast and listed layouts, not a full screen-reader audit.
 
 The reusable workflow is installed separately at `/Users/nikoveit/.codex/skills/ui-persona-review/`, with independent reviews, peer challenges, validated voting and reporting. Application implementation remains an explicitly authorized follow-up rather than part of its default review behavior.

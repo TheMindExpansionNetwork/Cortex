@@ -8,5 +8,5 @@ export const engineMissing = (native: NativeState | null | undefined) => !!nativ
 
 export function EngineWarning({ native }: { native: NativeState | null | undefined }) {
   if (!engineMissing(native)) return null;
-  return <div className="engine-warning" role="status"><Icon name="info" size={18}/><div><p>{tr("Strata didn’t recognise an engine for this computer. The model will download, but it may not run until the right engine is installed (Settings → Engine).")}</p>{native?.engine?.notice ? <small className="muted">{native.engine.notice}</small> : null}</div></div>;
+  return <div className="engine-warning" role="status"><Icon name="info" size={18}/><div><p>{tr("Cortex didn’t recognise an engine for this computer. The model will download, but it may not run until the right engine is installed (Settings → Engine).")}</p>{native?.engine?.notice ? <small className="muted">{native.engine.notice}</small> : null}</div></div>;
 }

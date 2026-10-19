@@ -1,7 +1,7 @@
 # Metal kernel parity suite — Apple M4, real Metal device
 # repo: 04cedad9d4f0a78492596b1a180626781dbbdad7
 # device: Apple M4 apple9 metal4, recommended working set 11.8 GiB, measured read BW up to 96.1 GB/s
-# command: cmake -S metal -B build-metal-kern -DSTRATA_METAL_ENGINE=OFF && ninja -C build-metal-kern && ./build-metal-kern/<suite>
+# command: cmake -S metal -B build-metal-kern -DCORTEX_METAL_ENGINE=OFF && ninja -C build-metal-kern && ./build-metal-kern/<suite>
 
 gemv_parity            PASS ( parity lines)
 100                    PASS ( parity lines)

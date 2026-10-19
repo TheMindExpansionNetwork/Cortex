@@ -27,9 +27,9 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/kernels/rope.hpp"
-#include "strata/kernels/native_qsa.hpp"
-#include "strata/kernels/native_rope.hpp"
+#include "cortex/kernels/rope.hpp"
+#include "cortex/kernels/native_qsa.hpp"
+#include "cortex/kernels/native_rope.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -63,7 +63,7 @@ int main(int argc, char** argv) {
 
     // ---- 1. the table against the float64 reference
     std::vector<float> hcos((size_t) max_pos * half), hsin((size_t) max_pos * half);
-    strata::kernels::build_rope_table(n_rot, theta, max_pos, hcos.data(), hsin.data());
+    cortex::kernels::build_rope_table(n_rot, theta, max_pos, hcos.data(), hsin.data());
     long long table_bad = 0;
     double table_worst = 0.0;
     for (int p = 0; p < max_pos; ++p) {
@@ -156,7 +156,7 @@ int main(int argc, char** argv) {
     check(DPCT_CHECK_ERROR((dpct::get_current_device().queues_wait_and_throw(), dpct::get_in_order_queue()).memcpy(
               d_pos, pos.data(), pos.size() * sizeof(int)).wait()),
           "copy pos");
-    strata::kernels::rope_neox_apply(d_x, d_out, rows, head_dim, n_rot, d_cos, d_sin, d_pos, nullptr);
+    cortex::kernels::rope_neox_apply(d_x, d_out, rows, head_dim, n_rot, d_cos, d_sin, d_pos, nullptr);
     std::vector<float> got(ref.size());
     check(DPCT_CHECK_ERROR(
               (dpct::get_current_device().queues_wait_and_throw(), dpct::get_in_order_queue())
@@ -218,7 +218,7 @@ int main(int argc, char** argv) {
                                    .memcpy(d_pos, &p7, sizeof(int))
                                    .wait()),
               "copy p7");
-        strata::kernels::rope_neox_apply(d_x, d_out, 1, head_dim, n_rot, d_cos, d_sin, d_pos, nullptr);
+        cortex::kernels::rope_neox_apply(d_x, d_out, 1, head_dim, n_rot, d_cos, d_sin, d_pos, nullptr);
         check(DPCT_CHECK_ERROR(
                   (dpct::get_current_device().queues_wait_and_throw(), dpct::get_in_order_queue())
                       .memcpy(o.data(), d_out, o.size() * sizeof(float))
@@ -242,9 +242,9 @@ int main(int argc, char** argv) {
     {
         // 4a. type None IS the five-argument builder above - bit for bit.
         std::vector<float> nc((size_t) max_pos * half), ns((size_t) max_pos * half);
-        strata::kernels::RopeScaling none;
+        cortex::kernels::RopeScaling none;
         none.freq_base = theta;
-        strata::kernels::build_rope_table(n_rot, none, max_pos, nc.data(), ns.data());
+        cortex::kernels::build_rope_table(n_rot, none, max_pos, nc.data(), ns.data());
         const long long none_bad =
             (long long) (std::memcmp(nc.data(), hcos.data(), nc.size() * 4) != 0) +
             (long long) (std::memcmp(ns.data(), hsin.data(), ns.size() * 4) != 0);
@@ -253,12 +253,12 @@ int main(int argc, char** argv) {
 
         // 4b. LINEAR, factor 4: `ang = p * inv / 4` in float64.  The factor is a power of two on purpose -
         // dividing by it is exact, so no multiplication-order rounding can sneak between spec and builder.
-        strata::kernels::RopeScaling lin;
-        lin.type = strata::kernels::RopeScalingType::Linear;
+        cortex::kernels::RopeScaling lin;
+        lin.type = cortex::kernels::RopeScalingType::Linear;
         lin.freq_base = theta;
         lin.factor = 4.0;
         std::vector<float> lc((size_t) max_pos * half), ls((size_t) max_pos * half);
-        strata::kernels::build_rope_table(n_rot, lin, max_pos, lc.data(), ls.data());
+        cortex::kernels::build_rope_table(n_rot, lin, max_pos, lc.data(), ls.data());
         long long lin_bad = 0;
         for (int p = 0; p < max_pos; ++p) {
             for (int i = 0; i < half; ++i) {
@@ -276,7 +276,7 @@ int main(int argc, char** argv) {
         // 4c. THE INTERPOLATION CLAIM ITSELF: linear(4) at position p is `none` at p/4 - the same table row,
         // bit for bit, at every position divisible by the factor.
         std::vector<float> wc((size_t) 4 * max_pos * half), ws((size_t) 4 * max_pos * half);
-        strata::kernels::build_rope_table(n_rot, lin, 4 * max_pos, wc.data(), ws.data());
+        cortex::kernels::build_rope_table(n_rot, lin, 4 * max_pos, wc.data(), ws.data());
         long long equiv_bad = 0;
         for (int p = 0; p < 4 * max_pos; p += 4) {
             for (int i = 0; i < half; ++i) {
@@ -292,13 +292,13 @@ int main(int argc, char** argv) {
         // The ramp helper is shared with the builder (the rope_neox_pair convention: one definition, not two
         // transcriptions of it); the interpolation mix and the mscale formula are written here from the ggml
         // source lines, which is the spec being tested.
-        strata::kernels::RopeScaling yarn;
-        yarn.type = strata::kernels::RopeScalingType::YaRN;
+        cortex::kernels::RopeScaling yarn;
+        yarn.type = cortex::kernels::RopeScalingType::YaRN;
         yarn.freq_base = theta;
         yarn.factor = 4.0;
         yarn.ext_factor = 1.0;
         std::vector<float> yc((size_t) max_pos * half), ys((size_t) max_pos * half);
-        strata::kernels::build_rope_table(n_rot, yarn, max_pos, yc.data(), ys.data());
+        cortex::kernels::build_rope_table(n_rot, yarn, max_pos, yc.data(), ys.data());
         const double fs = yarn.freq_scale();          // 0.25
         const double ms = yarn.mscale();              // attn_factor * (1 + 0.1*ln(4))
         double cd[2];
@@ -309,7 +309,7 @@ int main(int argc, char** argv) {
                 const double inv = std::pow(theta, -2.0 * (double) i / (double) n_rot);
                 const double extrap = (double) p * inv;
                 const double interp = fs * extrap;
-                const double ramp = (double) strata::kernels::rope_yarn_ramp((float) cd[0], (float) cd[1], i) *
+                const double ramp = (double) cortex::kernels::rope_yarn_ramp((float) cd[0], (float) cd[1], i) *
                                     yarn.ext_factor;
                 const double ang = interp * (1.0 - ramp) + extrap * ramp;
                 const float rc = (float) (std::cos(ang) * ms), rs = (float) (std::sin(ang) * ms);
@@ -357,12 +357,12 @@ int main(int argc, char** argv) {
         // 4f. THE OBSERVABILITY assertion: the fixtures must SEE scaling.  If the builder ignored its config,
         // linear(2) would equal `none` everywhere and 4b-4e would be green on a broken builder.
         {
-            strata::kernels::RopeScaling lin2;
-            lin2.type = strata::kernels::RopeScalingType::Linear;
+            cortex::kernels::RopeScaling lin2;
+            lin2.type = cortex::kernels::RopeScalingType::Linear;
             lin2.freq_base = theta;
             lin2.factor = 2.0;
             std::vector<float> l2c((size_t) 101 * half), l2s((size_t) 101 * half);
-            strata::kernels::build_rope_table(n_rot, lin2, 101, l2c.data(), l2s.data());
+            cortex::kernels::build_rope_table(n_rot, lin2, 101, l2c.data(), l2s.data());
             const float c_none = (float) std::cos(100.0);      // pair 0, position 100, unscaled: ang = 100
             const float c_lin = l2c[(size_t) 100 * half];      // pair 0, position 100, linear(2): ang = 50
             const bool sees = std::fabs((double) c_none - (double) c_lin) > 1e-3;
@@ -380,7 +380,7 @@ int main(int argc, char** argv) {
             for (int d = 0; d < head_dim; ++d) orow[d] = xr[d];
             for (int i = 0; i < half; ++i) {
                 float c = yc[(size_t) pos[(size_t) r] * half + i], s = ys[(size_t) pos[(size_t) r] * half + i];
-                strata::kernels::rope_neox_pair(xr[i], xr[half + i], c, s, orow[i], orow[half + i]);
+                cortex::kernels::rope_neox_pair(xr[i], xr[half + i], c, s, orow[i], orow[half + i]);
             }
         }
         /*
@@ -419,7 +419,7 @@ int main(int argc, char** argv) {
         check(DPCT_CHECK_ERROR((dpct::get_current_device().queues_wait_and_throw(), dpct::get_in_order_queue()).memcpy(
                   d_pos, pos.data(), pos.size() * sizeof(int)).wait()),
               "copy pos");
-        strata::kernels::rope_neox_apply(d_x, d_out, rows, head_dim, n_rot, d_cos, d_sin, d_pos, nullptr);
+        cortex::kernels::rope_neox_apply(d_x, d_out, rows, head_dim, n_rot, d_cos, d_sin, d_pos, nullptr);
         std::vector<float> got2(ref2.size());
         check(DPCT_CHECK_ERROR(
                   (dpct::get_current_device().queues_wait_and_throw(), dpct::get_in_order_queue())
@@ -448,12 +448,12 @@ int main(int argc, char** argv) {
     // engine's default is the table path precisely because float64 host trig has no such floor.)
     {
         const int npos = 2048;
-        strata::kernels::RopeScaling yarn;
-        yarn.type = strata::kernels::RopeScalingType::YaRN;
+        cortex::kernels::RopeScaling yarn;
+        yarn.type = cortex::kernels::RopeScalingType::YaRN;
         yarn.factor = 2.0;
         yarn.ext_factor = 1.0;
         std::vector<float> sc((size_t) npos * half), ss((size_t) npos * half);
-        strata::kernels::build_rope_table(n_rot, yarn, npos, sc.data(), ss.data());
+        cortex::kernels::build_rope_table(n_rot, yarn, npos, sc.data(), ss.data());
         std::mt19937 rng2(23);
         std::normal_distribution<float> gauss2(0.0f, 1.0f);
         const int nrows = 24 * 16;             // 16 positions spread over the table's range
@@ -523,8 +523,8 @@ int main(int argc, char** argv) {
         check(DPCT_CHECK_ERROR(
                   cs5 = dpct::get_current_device().create_queue(true)),
               "stream5");
-        strata::kernels::rope_neox_apply(d_x2, d_t2, nrows, head_dim, n_rot, d_c2, d_s2, d_p2, nullptr);
-        strata::kernels::native_rope_apply(d_x2, d_n2, nrows, head_dim, n_rot, yarn, d_p2, cs5);
+        cortex::kernels::rope_neox_apply(d_x2, d_t2, nrows, head_dim, n_rot, d_c2, d_s2, d_p2, nullptr);
+        cortex::kernels::native_rope_apply(d_x2, d_n2, nrows, head_dim, n_rot, yarn, d_p2, cs5);
         check(DPCT_CHECK_ERROR(cs5->wait()), "sync5");
         std::vector<float> got_t(x2.size()), got_n(x2.size());
         check(DPCT_CHECK_ERROR(
@@ -556,8 +556,8 @@ int main(int argc, char** argv) {
 
         // and the None config: the native path against the UNSCALED table - the identity this feature must
         // not disturb.
-        strata::kernels::RopeScaling none5;               // all defaults: type None, freq_scale 1, mscale 1
-        strata::kernels::native_rope_apply(d_x2, d_n2, nrows, head_dim, n_rot, none5, d_p2, cs5);
+        cortex::kernels::RopeScaling none5;               // all defaults: type None, freq_scale 1, mscale 1
+        cortex::kernels::native_rope_apply(d_x2, d_n2, nrows, head_dim, n_rot, none5, d_p2, cs5);
         check(DPCT_CHECK_ERROR(cs5->wait()), "sync5b");
         check(DPCT_CHECK_ERROR(
                   (dpct::get_current_device().queues_wait_and_throw(), dpct::get_in_order_queue())
@@ -565,7 +565,7 @@ int main(int argc, char** argv) {
                       .wait()),
               "back n2b");
         std::vector<float> nc5((size_t) npos * half), ns5((size_t) npos * half);
-        strata::kernels::build_rope_table(n_rot, none5, npos, nc5.data(), ns5.data());
+        cortex::kernels::build_rope_table(n_rot, none5, npos, nc5.data(), ns5.data());
         /*
         DPCT1114: cudaMemcpy is migrated to asynchronization memcpy,
         assuming in the original code the source host memory is pageable memory.
@@ -584,7 +584,7 @@ int main(int argc, char** argv) {
         check(DPCT_CHECK_ERROR((dpct::get_current_device().queues_wait_and_throw(), dpct::get_in_order_queue()).memcpy(
                   d_s2, ns5.data(), ns5.size() * sizeof(float)).wait()),
               "copy s2b");
-        strata::kernels::rope_neox_apply(d_x2, d_t2, nrows, head_dim, n_rot, d_c2, d_s2, d_p2, nullptr);
+        cortex::kernels::rope_neox_apply(d_x2, d_t2, nrows, head_dim, n_rot, d_c2, d_s2, d_p2, nullptr);
         check(DPCT_CHECK_ERROR(
                   (dpct::get_current_device().queues_wait_and_throw(), dpct::get_in_order_queue())
                       .memcpy(got_t.data(), d_t2, got_t.size() * sizeof(float))
@@ -612,8 +612,8 @@ int main(int argc, char** argv) {
         // (`in_stride == head_dim`) and strided Q/gate split (`in_stride == 2 * head_dim`) inputs,
         // across supported head_dims (128, 256) and both unscaled and YaRN scaling.
         // The kernel is off by default on the HIP build until this check passes there (native_norm_rope_usable): the
-        // check then reports SKIPPED, and STRATA_NORM_ROPE=1 runs it (gfx1151, Aurora, 0.1.40: it does not pass).
-        const bool run6 = strata::kernels::native_norm_rope_usable(256, 64);
+        // check then reports SKIPPED, and CORTEX_NORM_ROPE=1 runs it (gfx1151, Aurora, 0.1.40: it does not pass).
+        const bool run6 = cortex::kernels::native_norm_rope_usable(256, 64);
         if (!run6)
             std::printf("  native_qsa_rms_norm_rope                   SKIPPED (the fused kernel is not enabled on this build)\n");
         for (int hd6 : {128, 256}) {
@@ -694,10 +694,10 @@ int main(int argc, char** argv) {
                           (size_t)hd6 * sizeof(float), (size_t)rows6,
                           dpct::device_to_device, *cs5)),
                       "split6");
-                strata::kernels::native_qsa_rms_norm_weighted(d_ref6, d_g6, d_ref6, hd6, rows6, 1e-6f, cs5);
-                strata::kernels::native_rope_apply(d_ref6, d_ref6, rows6, hd6, nr6, sc6, d_pos6, cs5);
+                cortex::kernels::native_qsa_rms_norm_weighted(d_ref6, d_g6, d_ref6, hd6, rows6, 1e-6f, cs5);
+                cortex::kernels::native_rope_apply(d_ref6, d_ref6, rows6, hd6, nr6, sc6, d_pos6, cs5);
 
-                strata::kernels::native_qsa_rms_norm_rope(d_xs6, 2 * hd6, d_g6, d_fus6, rows6, hd6, nr6, 1e-6f, sc6,
+                cortex::kernels::native_qsa_rms_norm_rope(d_xs6, 2 * hd6, d_g6, d_fus6, rows6, hd6, nr6, 1e-6f, sc6,
                                                           d_pos6, cs5);
                 check(DPCT_CHECK_ERROR(cs5->wait()), "sync6a");
                 std::vector<float> href((size_t) rows6 * hd6), hfus((size_t) rows6 * hd6);
@@ -732,9 +732,9 @@ int main(int argc, char** argv) {
                 check(DPCT_CHECK_ERROR((dpct::get_current_device().queues_wait_and_throw(), dpct::get_in_order_queue()).memcpy(
                           d_fus6, d_ref6, (size_t)rows6 * hd6 * sizeof(float)).wait()),
                       "contig6_fus");
-                strata::kernels::native_qsa_rms_norm_weighted(d_ref6, d_g6, d_ref6, hd6, rows6, 1e-6f, cs5);
-                strata::kernels::native_rope_apply(d_ref6, d_ref6, rows6, hd6, nr6, sc6, d_pos6, cs5);
-                strata::kernels::native_qsa_rms_norm_rope(d_fus6, hd6, d_g6, d_fus6, rows6, hd6, nr6, 1e-6f, sc6,
+                cortex::kernels::native_qsa_rms_norm_weighted(d_ref6, d_g6, d_ref6, hd6, rows6, 1e-6f, cs5);
+                cortex::kernels::native_rope_apply(d_ref6, d_ref6, rows6, hd6, nr6, sc6, d_pos6, cs5);
+                cortex::kernels::native_qsa_rms_norm_rope(d_fus6, hd6, d_g6, d_fus6, rows6, hd6, nr6, 1e-6f, sc6,
                                                           d_pos6, cs5);
                 check(DPCT_CHECK_ERROR(cs5->wait()), "sync6b");
                 check(DPCT_CHECK_ERROR((dpct::get_current_device().queues_wait_and_throw(), dpct::get_in_order_queue())

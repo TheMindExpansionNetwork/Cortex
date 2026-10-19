@@ -2,7 +2,7 @@ import type { TuneResult } from './native-tune';
 
 /**
  * One layout for every way a tune can end: a tone (the round tile's colour and icon), a headline, one plain sentence, up to three facts, and
- * the buttons that make sense. The host says which outcome it was (`code`, `reason_code`, `values`, see strata_control/autotune.py); older
+ * the buttons that make sense. The host says which outcome it was (`code`, `reason_code`, `values`, see cortex_control/autotune.py); older
  * answers without a code are read from `outcome` and `verdict`. All words go through the catalog in the component, not here.
  */
 export type OutcomeCode = 'faster' | 'already_fastest' | 'busy_pc' | 'failed' | 'stopped' | 'still_fast' | 'slower' | 'unsure';

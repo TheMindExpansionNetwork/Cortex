@@ -1,13 +1,13 @@
-// src/core/peer_experts.cpp - see include/strata/core/peer_experts.hpp.
-#include "strata/core/peer_experts.hpp"
+// src/core/peer_experts.cpp - see include/cortex/core/peer_experts.hpp.
+#include "cortex/core/peer_experts.hpp"
 
-#include "strata/core/device.hpp"   // primary_device() (STRATA_PRIMARY_DEVICE)
-#include "strata/kernels/cpu/expert_layout.hpp"
-#include "strata/kernels/cpu/hadamard.hpp"
-#include "strata/kernels/elementwise.hpp"
-#include "strata/kernels/iq_kernels.hpp"
-#include "strata/kernels/quantize_act.hpp"
-#include "strata/kernels/s2_expert_grouped.hpp"
+#include "cortex/core/device.hpp"   // primary_device() (CORTEX_PRIMARY_DEVICE)
+#include "cortex/kernels/cpu/expert_layout.hpp"
+#include "cortex/kernels/cpu/hadamard.hpp"
+#include "cortex/kernels/elementwise.hpp"
+#include "cortex/kernels/iq_kernels.hpp"
+#include "cortex/kernels/quantize_act.hpp"
+#include "cortex/kernels/s2_expert_grouped.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -17,7 +17,7 @@
 #include <stdexcept>
 #include <vector>
 
-namespace strata::core {
+namespace cortex::core {
 
 static bool g_peer_portable = false;
 void set_peer_portable(bool on) { g_peer_portable = on; }
@@ -25,8 +25,8 @@ bool peer_portable() { return g_peer_portable; }
 
 namespace {
 
-constexpr int64_t H = strata::kernels::cpu::H;
-constexpr int64_t CAP = strata::kernels::cpu::MAXT * 10;   // entries per layer: MAXT tokens x top-10
+constexpr int64_t H = cortex::kernels::cpu::H;
+constexpr int64_t CAP = cortex::kernels::cpu::MAXT * 10;   // entries per layer: MAXT tokens x top-10
 
 struct Meta {                           // one block, uploaded with one copy per layer
     unsigned long long ptr[CAP];
@@ -132,7 +132,7 @@ bool PeerExperts::open(int device, const std::vector<std::pair<int32_t, int32_t>
               " devices; set CUDA_VISIBLE_DEVICES)";
         return false;
     }
-    const auto& lay = strata::kernels::cpu::expert_layout();
+    const auto& lay = cortex::kernels::cpu::expert_layout();
     n_layers_ = n_layers;
     n_expert_ = n_expert;
     src_ = &src;
@@ -141,7 +141,7 @@ bool PeerExperts::open(int device, const std::vector<std::pair<int32_t, int32_t>
         int a = 0, b = 0;
         cudaDeviceCanAccessPeer(&a, primary_device(), device);
         cudaDeviceCanAccessPeer(&b, device, primary_device());
-        if (const char* np = std::getenv("STRATA_PEER_NO_P2P"); np != nullptr && std::atoi(np) != 0) a = 0;   // test knob: pretend the pair has no P2P
+        if (const char* np = std::getenv("CORTEX_PEER_NO_P2P"); np != nullptr && std::atoi(np) != 0) a = 0;   // test knob: pretend the pair has no P2P
         p2p_ = a && b;
         if (p2p_) {
             On on0(primary_device());
@@ -153,9 +153,9 @@ bool PeerExperts::open(int device, const std::vector<std::pair<int32_t, int32_t>
             p2p_ = e0 == cudaSuccess && e1 == cudaSuccess;
             // recommend, never force: the direct path is used only if a test copy each way arrives exact (#2666)
             if (p2p_ && !p2p_copies_data(device)) {
-                std::fprintf(stderr, "strata: peer GPU %d: peer access is enabled but a test copy between the two GPUs arrived wrong "
+                std::fprintf(stderr, "cortex: peer GPU %d: peer access is enabled but a test copy between the two GPUs arrived wrong "
                                      "(a host bridge between them, no real P2P): the prompt path takes the host route instead "
-                                     "(STRATA_PEER_NO_P2P=1 does that by hand)\n", device);
+                                     "(CORTEX_PEER_NO_P2P=1 does that by hand)\n", device);
                 { On q0(0); cudaDeviceDisablePeerAccess(device); cudaGetLastError(); }
                 { On q1(device); cudaDeviceDisablePeerAccess(0); cudaGetLastError(); }
                 p2p_ = false;
@@ -165,11 +165,11 @@ bool PeerExperts::open(int device, const std::vector<std::pair<int32_t, int32_t>
     On on(device);
     device_ = device;
     // scratch first, so the slots take what is really left
-    int64_t ff = strata::kernels::cpu::FF;
+    int64_t ff = cortex::kernels::cpu::FF;
     if (lay.native)
         for (const auto& f : lay.fmt) ff = std::max<int64_t>(ff, f.n_ff);
-    const size_t scratch = std::max<size_t>((size_t) strata::kernels::moe_hit_grouped_scratch_bytes(CAP, H, ff),
-                                            strata::kernels::native_expert_scratch_bytes(CAP, ff));
+    const size_t scratch = std::max<size_t>((size_t) cortex::kernels::moe_hit_grouped_scratch_bytes(CAP, H, ff),
+                                            cortex::kernels::native_expert_scratch_bytes(CAP, ff));
     const bool alloc_ok =
         ck(cudaStreamCreateWithFlags(&stream_, cudaStreamNonBlocking), "stream", err) &&
         ck(cudaStreamCreateWithFlags(&refill_, cudaStreamNonBlocking), "refill stream", err) &&
@@ -183,9 +183,9 @@ bool PeerExperts::open(int device, const std::vector<std::pair<int32_t, int32_t>
         ck(cudaMalloc((void**) &d_q8_, (size_t) CAP * (H / 32) * 36), "activations", err) &&
         ck(cudaMalloc(&d_scratch_, scratch), "scratch", err);
     if (!alloc_ok) { close(); return false; }
-    if (strata::kernels::cpu::hadamard_spec().any()) {   // APR: this device's copies of the sign vectors
-        d_sx_ = strata::kernels::hadamard_device_signs(strata::kernels::cpu::hadamard_signs((int) H), (int) H);
-        d_sh_ = strata::kernels::hadamard_device_signs(strata::kernels::cpu::hadamard_signs((int) ff), (int) ff);
+    if (cortex::kernels::cpu::hadamard_spec().any()) {   // APR: this device's copies of the sign vectors
+        d_sx_ = cortex::kernels::hadamard_device_signs(cortex::kernels::cpu::hadamard_signs((int) H), (int) H);
+        d_sh_ = cortex::kernels::hadamard_device_signs(cortex::kernels::cpu::hadamard_signs((int) ff), (int) ff);
     }
 
     // the pairs the primary does not hold, in rank order, as many as fit
@@ -243,7 +243,7 @@ bool PeerExperts::open(int device, const std::vector<std::pair<int32_t, int32_t>
 
 bool PeerExperts::launch(int64_t layer, const float* x, const int32_t* ids, int64_t n_tok, int64_t k,
                          const int32_t* kind, std::string& err, float* out) {
-    static const bool direct_env = [] { const char* v = std::getenv("STRATA_PEER_DIRECT"); return v == nullptr || std::atoi(v) != 0; }();
+    static const bool direct_env = [] { const char* v = std::getenv("CORTEX_PEER_DIRECT"); return v == nullptr || std::atoi(v) != 0; }();
     const bool direct = direct_env && out != nullptr;
     launched_direct_ = false;
     launched_rows_ = 0;
@@ -288,15 +288,15 @@ bool PeerExperts::launch(int64_t layer, const float* x, const int32_t* ids, int6
         !ck(cudaMemcpyAsync(d_meta_, h_meta_, sizeof(Meta), cudaMemcpyHostToDevice, s), "plan", err))
         return false;
     Meta* dm = (Meta*) d_meta_;
-    const auto& lay = strata::kernels::cpu::expert_layout();
+    const auto& lay = cortex::kernels::cpu::expert_layout();
     if (lay.native) {
         const auto& f = lay.fmt[(size_t) layer];
         // APR: Hadamard-folded gate/up take H (s * x); d_x_ is this device's private copy, rotated in place
-        if (f.had_gu) strata::kernels::hadamard_rows(d_x_, d_x_, n_tok, H, f.had_block, d_sx_, s);
-        strata::kernels::quantize_q8_1_rows(d_x_, n_tok, H, d_q8_, s);
-        auto L = strata::kernels::native_expert_layout(f.gu_type, f.d_type, f.n_embd, f.n_ff);
+        if (f.had_gu) cortex::kernels::hadamard_rows(d_x_, d_x_, n_tok, H, f.had_block, d_sx_, s);
+        cortex::kernels::quantize_q8_1_rows(d_x_, n_tok, H, d_q8_, s);
+        auto L = cortex::kernels::native_expert_layout(f.gu_type, f.d_type, f.n_embd, f.n_ff);
         if (f.had_d) { L.had_block = f.had_block; L.d_signs = d_sh_; }
-        strata::kernels::native_expert_grouped(L, dm->ptr, dm->start, dm->count, dm->dst, dm->tok, groups, rows, d_q8_,
+        cortex::kernels::native_expert_grouped(L, dm->ptr, dm->start, dm->count, dm->dst, dm->tok, groups, rows, d_q8_,
                                                d_scratch_, d_out_, s);
     } else {
         err = "peer experts: only native packs are supported";
@@ -304,7 +304,7 @@ bool PeerExperts::launch(int64_t layer, const float* x, const int32_t* ids, int6
     }
     if (direct) {   // the rows straight into the host `out` (zero-copy, coalesced float4 writes)
         try {
-            strata::kernels::scatter_rows_f32(d_out_, out, dm->out_row, rows, H, s);
+            cortex::kernels::scatter_rows_f32(d_out_, out, dm->out_row, rows, H, s);
         } catch (const std::exception& e) { err = std::string("peer experts: scatter: ") + e.what(); return false; }
         launched_direct_ = true;
         return true;
@@ -334,7 +334,7 @@ bool PeerExperts::finish(float* out, std::string& err) {
 
 bool PeerExperts::adapt(const float* usage, const int32_t* res0, int max_swaps, std::string& err) {
     if (!pending_.empty() || max_swaps <= 0) return true;
-    const auto& lay = strata::kernels::cpu::expert_layout();
+    const auto& lay = cortex::kernels::cpu::expert_layout();
     struct Swap { float gain; int32_t layer, in, out; };
     std::vector<Swap> swaps;
     std::vector<std::pair<float, int32_t>> cand, vict;
@@ -388,4 +388,4 @@ void PeerExperts::apply_pending(bool wait) {
     pending_.clear();
 }
 
-}  // namespace strata::core
+}  // namespace cortex::core

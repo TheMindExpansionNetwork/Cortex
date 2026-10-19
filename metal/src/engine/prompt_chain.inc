@@ -5,8 +5,8 @@
 // the PLE block after layer 0 (GEMMs + msl/ple.metal), every row's final residual (the drafter's prompt rows), the
 // window's history parity, RoPE table and pending fold.  No head: the last prompt token runs as a decode window.
 //
-// The 8-row-window prompt path stays as the fallback: STRATA_METAL_PROMPT=window, and prompts shorter than
-// STRATA_METAL_PROMPT_MIN rows (default 32).  STRATA_METAL_PROMPT_CHUNK = C (default 2048).  The kernel variants
+// The 8-row-window prompt path stays as the fallback: CORTEX_METAL_PROMPT=window, and prompts shorter than
+// CORTEX_METAL_PROMPT_MIN rows (default 32).  CORTEX_METAL_PROMPT_CHUNK = C (default 2048).  The kernel variants
 // follow prompt_chain's defaults: matrix-unit register operands where the GPU has the M5's right-input layout
 // (COOP_K4, function constant 7), else the older expert and attention kernels (the M4).
 
@@ -95,7 +95,7 @@ bool Window::pc_setup(int C) {
     b.dn3[0] = 16; b.dn3[1] = 64; b.dn3[2] = 32; b.dn3[3] = 2;
     b.meta.as<uint32_t>()[2] = b.k4 ? NFF / (b.gu3[1] * b.gu3[3]) : NFF / 64;
     b.meta.as<uint32_t>()[5] = b.k4 ? N / (b.dn3[1] * b.dn3[3]) : N / 64;
-    std::fprintf(stderr, "strata metal: prompt kernels (mac-kern's prompt chain) for chunks of %d rows, %s, ready in %.0f ms\n",
+    std::fprintf(stderr, "cortex metal: prompt kernels (mac-kern's prompt chain) for chunks of %d rows, %s, ready in %.0f ms\n",
                  C, b.k4 ? "matrix-unit register operands (COOP_K4)" : "the older expert / attention kernels (no M5 layout)",
                  now_ms() - t0);
     return true;
@@ -104,7 +104,7 @@ bool Window::pc_setup(int C) {
 // one chunk of nT rows at cells pos0.. (the window state is exactly at pos0 before, at pos0 + nT after)
 bool Window::pc_chunk(const int64_t* tokens, int nT, int64_t pos0, std::string& err) {
     PromptBufs& b = pb_;
-    strata::core::SessionState& ss = *ss_;
+    cortex::core::SessionState& ss = *ss_;
     const double th0 = now_ms();
     // ---- the rows: the embedding into every stream; the PLE table rows
     const gguf::Tensor& te = T("token_embd.weight");
@@ -117,11 +117,11 @@ bool Window::pc_chunk(const int64_t* tokens, int nT, int64_t pos0, std::string& 
         for (int c = 1; c < HC; ++c) std::memcpy(r + (size_t) c * N, r, (size_t) N * 4);
     }
     if (ple_on_) {
-        std::vector<uint32_t> rows((size_t) nT * strata::kernels::PLE_N_HEADS);
+        std::vector<uint32_t> rows((size_t) nT * cortex::kernels::PLE_N_HEADS);
         int32_t prev[2] = {ss.ple_prev[0], ss.ple_prev[1]};
         for (int t = 0; t < nT; ++t) {
             const int32_t tk = (int32_t) tokens[t];
-            strata::kernels::ngram_rows(&tk, prev, 1, ss.ple.consts, rows.data() + (size_t) t * strata::kernels::PLE_N_HEADS);
+            cortex::kernels::ngram_rows(&tk, prev, 1, ss.ple.consts, rows.data() + (size_t) t * cortex::kernels::PLE_N_HEADS);
             prev[0] = prev[1];
             prev[1] = tk;
         }
@@ -346,7 +346,7 @@ bool Window::pc_chunk(const int64_t* tokens, int nT, int64_t pos0, std::string& 
             dq(T("blk.1.ple_value.weight"), b.Wpv);
             gemm(b.pembh, b.Wpk, b.pkey, nT, 10240, N);
             gemm(b.pembh, b.Wpv, b.pval, nT, N, N);
-            struct PleArgs { uint32_t n_embd, hc; float eps; } pa2{N, HC, strata::kernels::NG_RMS_EPS};
+            struct PleArgs { uint32_t n_embd, hc; float eps; } pa2{N, HC, cortex::kernels::NG_RMS_EPS};
             auto off = [&](const char* n) { return T(n).offset; };
             D(P(lple_, "ple_gnorm", {}, "ple_gnorm"), {mtl::Arg::B(b.pkey), mtl::Arg::B(W_, off("blk.1.ple_norm_key.weight")),
                                                        mtl::Arg::B(b.keyn), mtl::Arg::V(pa2)}, HC, nT, 256);
@@ -371,7 +371,7 @@ bool Window::pc_chunk(const int64_t* tokens, int nT, int64_t pos0, std::string& 
     hp_ = 1 - hp_;
     // the host side of the commit: the PLE history (the last 9 normalized rows) and the n-gram context
     if (ple_on_) {
-        using namespace strata::kernels;
+        using namespace cortex::kernels;
         const float* nw = b.normW.as<float>();
         float* hist = pleHist_.as<float>();
         for (int c = 0; c < NG_HC_DIM; ++c) {
@@ -395,7 +395,7 @@ bool Window::pc_chunk(const int64_t* tokens, int nT, int64_t pos0, std::string& 
 bool Window::prompt(const int64_t* tokens, int64_t n, int64_t pos0,
                     const std::function<bool(const float*, int64_t, int64_t, std::string&)>& on_chunk, std::string& err) {
     static const int C = [] {
-        const char* e = std::getenv("STRATA_METAL_PROMPT_CHUNK");
+        const char* e = std::getenv("CORTEX_METAL_PROMPT_CHUNK");
         return std::max(64, std::min(8192, e ? std::atoi(e) : 2048));
     }();
     if (!pc_setup((int) std::min<int64_t>(C, std::max<int64_t>(n, 64)))) { err = "metal prompt: setup failed"; return false; }
@@ -414,8 +414,8 @@ bool Window::prompt(const int64_t* tokens, int64_t n, int64_t pos0,
             if (!ok) return false;
         }
     }
-    if (std::getenv("STRATA_METAL_TRACE") || std::getenv("STRATA_METAL_PROFILE"))
-        std::fprintf(stderr, "strata metal: prompt %lld tokens in %.1f ms (GPU %.1f ms, host rows %.1f ms, drafter rows %.1f ms) "
+    if (std::getenv("CORTEX_METAL_TRACE") || std::getenv("CORTEX_METAL_PROFILE"))
+        std::fprintf(stderr, "cortex metal: prompt %lld tokens in %.1f ms (GPU %.1f ms, host rows %.1f ms, drafter rows %.1f ms) "
                              "-> %.1f tok/s\n", (long long) n, now_ms() - t0, pb_.gpu_ms, pb_.host_ms, pb_.mtp_ms,
                      1000.0 * (double) n / (now_ms() - t0));
     return true;

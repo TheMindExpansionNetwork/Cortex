@@ -1,5 +1,5 @@
 // metal/kernels/gr2.metal - the hyper-connection read in TWO dispatches (after quant/units/gr.metal), for BF16 HC
-// weights (the exact path) or a Q8_0 copy of them (the STRATA_HC_Q8 option):
+// weights (the exact path) or a Q8_0 copy of them (the CORTEX_HC_Q8 option):
 //
 //   gr_down3  grid (row blocks, hc streams).  The RMSNorm is per stream, so a threadgroup owns one stream c: it forms
 //             R'_c = R_c + bo * 2 sigmoid(inj_prev_c / hc) (10 KB a token), its sum of squares and rs_c itself,

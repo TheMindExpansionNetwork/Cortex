@@ -1,4 +1,4 @@
-"""The owner's multi-GPU rule in setup (strata_control/gpu_fit.py): the model goes on the LARGEST card + RAM first; the second card is
+"""The owner's multi-GPU rule in setup (cortex_control/gpu_fit.py): the model goes on the LARGEST card + RAM first; the second card is
 offered as a layer split and is the default only when the model does not fit one card (with RAM) or would be too tight.
 
     python tools/test_setup_gpu_fit.py
@@ -70,11 +70,11 @@ class SetupFitRule(unittest.TestCase):
         argv = ["--family", "qwen", "--no-start", "--model", "IQ3_XXS", "--context", "32768"]
         code, out, cfg, asked = install(62.0, found, argv, answers={"Which cards?": "1"}, extra=patches)
         self.assertEqual(code, 0, out)
-        self.assertIn("This PC has NVIDIA and AMD cards Strata can use", out)
+        self.assertIn("This PC has NVIDIA and AMD cards Cortex can use", out)
         self.assertIn("never split across NVIDIA and AMD cards", out)
         self.assertIn("two models at the same", out)
         self.assertIn("not supported yet", out)
-        self.assertIn("This computer also has an AMD AI PRO R9700 (32 GB). The AMD build of Strata can use it", out)
+        self.assertIn("This computer also has an AMD AI PRO R9700 (32 GB). The AMD build of Cortex can use it", out)
         self.assertNotIn("Which GPUs?", " ".join(asked))              # one NVIDIA card: no split question
         self.assertEqual(cfg.get("gpu", 0), 0)
 

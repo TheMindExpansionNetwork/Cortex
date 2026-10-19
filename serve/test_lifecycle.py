@@ -11,10 +11,10 @@ from pathlib import Path
 from unittest import mock
 
 from serve.frontend import ChatTemplate
-from serve.server import ByteTokenizer, EngineDied, EngineStuck, MockEngine, Service, StrataEngine, serve
+from serve.server import ByteTokenizer, EngineDied, EngineStuck, MockEngine, Service, CortexEngine, serve
 
 
-class ResidentEngine(StrataEngine):
+class ResidentEngine(CortexEngine):
     def __init__(self, tok):
         self.reply = MockEngine(tok, "Hello.", max_context=4096)
         self.max_context, self.info, self.last = 4096, {}, {}
@@ -49,7 +49,7 @@ class Lifecycle(unittest.TestCase):
     def test_close_cleans_up_after_a_broken_stdin_pipe(self):
         for running in (False, True):
             with self.subTest(running=running):
-                engine = StrataEngine("missing-executable", [], lazy=True)
+                engine = CortexEngine("missing-executable", [], lazy=True)
                 read_fd, write_fd = os.pipe()
                 stdin = os.fdopen(write_fd, "w")
                 self.addCleanup(stdin.close)
@@ -82,7 +82,7 @@ class Lifecycle(unittest.TestCase):
                 engine.close()                          # repeated cleanup is harmless
 
     def test_close_sends_eof_before_waiting_for_windows_reader(self):
-        engine = StrataEngine("missing-executable", [], lazy=True)
+        engine = CortexEngine("missing-executable", [], lazy=True)
         proc = mock.Mock()
         proc.stdin, proc.stdout = io.StringIO(), io.StringIO()
         proc.poll.side_effect = [None, 0]
@@ -93,7 +93,7 @@ class Lifecycle(unittest.TestCase):
         proc.kill.assert_not_called()
 
     def test_close_does_not_forget_a_process_still_exiting(self):
-        engine = StrataEngine("missing-executable", [], lazy=True)
+        engine = CortexEngine("missing-executable", [], lazy=True)
         proc = mock.Mock()
         proc.stdin, proc.stdout = io.StringIO(), io.StringIO()
         proc.poll.return_value = None
@@ -107,7 +107,7 @@ class Lifecycle(unittest.TestCase):
 
     def test_close_terminates_before_it_kills(self):
         # an engine that does not end on QUIT is terminated first (as the unload always did); kill is the last resort
-        engine = StrataEngine("missing-executable", [], lazy=True)
+        engine = CortexEngine("missing-executable", [], lazy=True)
         proc = mock.Mock()
         proc.stdin, proc.stdout = io.StringIO(), io.StringIO()
         proc.poll.side_effect = [None, 0]
@@ -119,7 +119,7 @@ class Lifecycle(unittest.TestCase):
         self.assertIsNone(engine.proc)
 
     def test_native_lazy_constructor_does_not_start_a_process(self):
-        engine = StrataEngine("missing-executable", ["--max-context", "16384"], lazy=True)
+        engine = CortexEngine("missing-executable", ["--max-context", "16384"], lazy=True)
         self.assertFalse(engine.alive())
         self.assertEqual(engine.max_context, 16384)
         self.assertIsNone(engine.exit_code())
@@ -148,7 +148,7 @@ class Lifecycle(unittest.TestCase):
             return response.status, data if "event-stream" in response.headers.get("Content-Type", "") else json.loads(data)
 
     def test_discover_chat_unload_and_stream_reload(self):
-        self.assertEqual(self.request("/api/health")[1]["service"], "strata")
+        self.assertEqual(self.request("/api/health")[1]["service"], "cortex")
         self.assertFalse(self.request("/v1/status")[1]["loaded"])
         self.assertEqual(self.request("/v1/models")[1]["data"][0]["status"]["value"], "unloaded")
         self.assertTrue(self.request("/props")[1]["models_autoload"])

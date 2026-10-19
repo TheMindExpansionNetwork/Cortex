@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Strata — local AI, tuned to one model</title>
-    <meta name="description" content="Strata runs one local model, tuned to your hardware." />
+    <title>Cortex — local AI, tuned to one model</title>
+    <meta name="description" content="Cortex runs one local model, tuned to your hardware." />
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#f9fafb" />
     <script>
       // Set the saved appearance before CSS and logo images are painted.
       try {
-        const saved = JSON.parse(localStorage.getItem('strata.prefs.v2') || localStorage.getItem('strata.prefs.v1') || '{}');
+        const saved = JSON.parse(localStorage.getItem('cortex.prefs.v2') || localStorage.getItem('cortex.prefs.v1') || '{}');
         const choice = saved.theme ?? 'system';
         const theme = choice === 'dark' || (choice === 'system' && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
         document.documentElement.dataset.theme = theme;

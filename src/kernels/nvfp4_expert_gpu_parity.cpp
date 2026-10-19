@@ -5,7 +5,7 @@
 //
 // Eight tokens of N(0,1) activations through one expert: q8_1 input, gate/up with s_gate / s_up, SwiGLU, q8_1 of the
 // hidden, down with s_down on its output. Only the two activation roundings separate it from the reference (~1%).
-#include "strata/kernels/iq_kernels.hpp"
+#include "cortex/kernels/iq_kernels.hpp"
 
 #include "ggml.h"
 
@@ -19,7 +19,7 @@
 #include <random>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 void ck(cudaError_t e, const char* what) {

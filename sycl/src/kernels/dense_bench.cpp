@@ -1,13 +1,13 @@
 // sycl/src/kernels/dense_bench.cpp - the decode window's dense GEMVs (native_mmvq) at the model's shapes and formats:
 // NMAT different matrices per shape captured in one graph, so the weights stream from DRAM as in the engine (a window
 // reads every layer's matrix once); us per call, GB/s of weights, and an FNV hash of the outputs so two builds or two
-// STRATA_MMVQ_* settings can be compared bit for bit.
+// CORTEX_MMVQ_* settings can be compared bit for bit.
 //
 //     dense_bench [type ...]      (default: 14 13 12 23 = Q6_K Q5_K Q4_K IQ4_XS)
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/kernels/native_mmvq.hpp"
+#include "cortex/kernels/native_mmvq.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -17,7 +17,7 @@
 #include <random>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 const char* name_of(int t) {

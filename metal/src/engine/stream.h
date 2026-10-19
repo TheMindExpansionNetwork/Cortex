@@ -29,12 +29,12 @@
 #include <thread>
 #include <vector>
 
-namespace strata::metal_engine {
+namespace cortex::metal_engine {
 
 class ExpertStream {
 public:
     ~ExpertStream();
-    // On when STRATA_METAL_STREAM=1, or (unset / auto) when the GGUF's experts do not fit in the GPU working set
+    // On when CORTEX_METAL_STREAM=1, or (unset / auto) when the GGUF's experts do not fit in the GPU working set
     // with room to spare.  =0: never (the whole GGUF wrapped, as on the M5 Max).
     static bool wanted(const gguf::File& f, const mtl::Context& cx);
     bool open(const gguf::File& f, std::string& err);
@@ -61,7 +61,7 @@ public:
     uint64_t down_in_slot(int l) const { return lay_[(size_t) l].gs + lay_[(size_t) l].us; }
     // The host's turn at layer l: ids = the window's T x topk routed ids; pred = T x 512 router logits of layer l + 1
     // computed from this layer's FFN input (nullptr: no read-ahead).
-    // pred2: layer l + 2's, from the same input (STRATA_METAL_PREFETCH2 = its top-k, 0 = off)
+    // pred2: layer l + 2's, from the same input (CORTEX_METAL_PREFETCH2 = its top-k, 0 = off)
     void at_layer(int l, int T, int topk, const int32_t* ids, const float* pred, const float* pred2 = nullptr);
     int ahead2() const { return pre_k2_; }
     // a prompt's scratch buffers inside the arena: region() places them (once), hold_region() empties and holds its
@@ -93,7 +93,7 @@ private:
 
     int fd_ = -1;
     // <gguf>.experts (metal/tools/stream_experts.py): each expert's gate, up and down rows together, read with one
-    // request (cfd_ >= 0); else the GGUF's three slices.  STRATA_METAL_CONTIG=0: the GGUF always.
+    // request (cfd_ >= 0); else the GGUF's three slices.  CORTEX_METAL_CONTIG=0: the GGUF always.
     int cfd_ = -1;
     std::vector<uint64_t> coff_;
     std::vector<Lay> lay_;
@@ -129,4 +129,4 @@ private:
     uint64_t fill_bytes_ = 0;
 };
 
-}  // namespace strata::metal_engine
+}  // namespace cortex::metal_engine

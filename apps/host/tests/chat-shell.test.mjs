@@ -29,7 +29,7 @@ test('chat metrics ignore another session and all-request totals',()=>{
  assert.equal(chatMetrics(null,null).pct,null);
 });
 test('native file actions use explicit argument arrays and reject traversal and symlinks',async()=>{
- const root=await mkdtemp(join(tmpdir(),'strata-artifact-test-'));
+ const root=await mkdtemp(join(tmpdir(),'cortex-artifact-test-'));
  try {
   const examplesDir=join(root,'examples'),previewsDir=join(root,'copies');await mkdir(examplesDir);
   await writeFile(join(examplesDir,'a file.md'),'Example');await writeFile(join(root,'private.md'),'Outside');await symlink(join(root,'private.md'),join(examplesDir,'outside.md'));

@@ -14,24 +14,24 @@ const isWin = process.platform === 'win32';
 function controlDir(parent, name, version) {
   const dir = join(parent, name);
   mkdirSync(join(dir, 'python', ...(isWin ? [] : ['bin'])), { recursive: true });
-  mkdirSync(join(dir, 'strata_control'), { recursive: true });
+  mkdirSync(join(dir, 'cortex_control'), { recursive: true });
   writeFileSync(bundledPython(dir), 'x');
-  writeFileSync(join(dir, 'strata.py'), '# cli');
+  writeFileSync(join(dir, 'cortex.py'), '# cli');
   if (version) writeFileSync(join(dir, 'BUNDLE.json'), JSON.stringify({ version }));
   return dir;
 }
 
-test('only the update step may acquire: Control keeps STRATA_NO_ACQUIRE unless `acquire` is asked for', () => {
-  const control = { dir: '/c', python: '/c/python/python3', cli: '/c/strata.py' };
-  assert.equal(controlEnvironment(control, { env: {}, components: '/k' }).STRATA_NO_ACQUIRE, '1');
-  const env = controlEnvironment(control, { env: { STRATA_NO_ACQUIRE: '1' }, components: '/k', acquire: true });
-  assert.equal('STRATA_NO_ACQUIRE' in env, false);
-  assert.equal(env.STRATA_COMPONENTS_DIR, '/k');
+test('only the update step may acquire: Control keeps CORTEX_NO_ACQUIRE unless `acquire` is asked for', () => {
+  const control = { dir: '/c', python: '/c/python/python3', cli: '/c/cortex.py' };
+  assert.equal(controlEnvironment(control, { env: {}, components: '/k' }).CORTEX_NO_ACQUIRE, '1');
+  const env = controlEnvironment(control, { env: { CORTEX_NO_ACQUIRE: '1' }, components: '/k', acquire: true });
+  assert.equal('CORTEX_NO_ACQUIRE' in env, false);
+  assert.equal(env.CORTEX_COMPONENTS_DIR, '/k');
   assert.equal(env.PYTHONNOUSERSITE, '1');
 });
 
 test('an updated Control wins only when it is newer than the bundled one, and only when whole', () => {
-  const root = mkdtempSync(join(tmpdir(), 'strata-update-control-'));
+  const root = mkdtempSync(join(tmpdir(), 'cortex-update-control-'));
   try {
     const install = join(root, 'install');
     mkdirSync(join(install, 'host'), { recursive: true });
@@ -45,7 +45,7 @@ test('an updated Control wins only when it is newer than the bundled one, and on
     assert.equal(find().dir, bundled, 'an app update that ships a newer Control is not held back by an older updated one');
     writeFileSync(join(bundled, 'BUNDLE.json'), JSON.stringify({ version: '0.1.46' }));
     assert.equal(find().dir, bundled, 'a tie keeps the bundled one');
-    rmSync(join(updated, 'strata.py'));
+    rmSync(join(updated, 'cortex.py'));
     writeFileSync(join(bundled, 'BUNDLE.json'), JSON.stringify({ version: '0.1.45' }));
     assert.equal(find().dir, bundled, 'a half-installed updated Control is not used');
     writeFileSync(join(components, 'control', 'active.json'), JSON.stringify({ version: '0.1.46', folder: '../../etc' }));
@@ -70,22 +70,22 @@ function fakeSpawn(lines, code = 0, seen = []) {
 test('runCli streams JSON lines as events and returns the last record; `acquire` reaches the environment', async () => {
   const seen = [];
   const events = [];
-  const control = { dir: '/c', python: '/c/python/python3', cli: '/c/strata.py' };
+  const control = { dir: '/c', python: '/c/python/python3', cli: '/c/cortex.py' };
   const spawnProcess = fakeSpawn([{ event: 'phase', phase: 'feed', message: 'Reading' }, { event: 'progress', percent: 50, label: 'engine 0.1.46' }, { ok: true, results: [] }], 0, seen);
-  const result = await runCli(control, ['update', '--output', 'jsonl'], { spawnProcess, env: { STRATA_NO_ACQUIRE: '1' }, acquire: true, onLine: e => events.push(e) });
+  const result = await runCli(control, ['update', '--output', 'jsonl'], { spawnProcess, env: { CORTEX_NO_ACQUIRE: '1' }, acquire: true, onLine: e => events.push(e) });
   assert.equal(events.length, 3);
   assert.equal(events[1].percent, 50);
   assert.deepEqual(result.json, { ok: true, results: [] });
-  assert.equal('STRATA_NO_ACQUIRE' in seen[0].options.env, false);
+  assert.equal('CORTEX_NO_ACQUIRE' in seen[0].options.env, false);
   await runCli(control, ['models', 'list'], { spawnProcess: fakeSpawn([{ ok: true }], 0, seen), env: {} });
-  assert.equal(seen[1].options.env.STRATA_NO_ACQUIRE, '1', 'everything else keeps the switch on');
+  assert.equal(seen[1].options.env.CORTEX_NO_ACQUIRE, '1', 'everything else keeps the switch on');
 });
 
 test('createControl: the update calls ask the explicit commands; a failed step carries its message and exit code', async () => {
   const seen = [];
   const reply = { ok: true, results: [{ component: 'engine', status: 'updated' }] };
   const control = createControl({
-    control: { dir: '/c', python: '/p', cli: '/c/strata.py' }, env: { STRATA_UPDATE_FEED: 'http://127.0.0.1:1/strata-feed.json', STRATA_APP_VERSION: '0.1.0' },
+    control: { dir: '/c', python: '/p', cli: '/c/cortex.py' }, env: { CORTEX_UPDATE_FEED: 'http://127.0.0.1:1/strata-feed.json', CORTEX_APP_VERSION: '0.1.0' },
     run: async (args, options) => { seen.push([args.join(' '), !!options.acquire]); return { code: 0, json: args.includes('--check') ? { ok: true, engine: {} } : args[0] === 'components' ? { ok: true, to: '0.1.45' } : reply, text: '', stderr: '' }; },
   });
   await control.updateCheck();
@@ -97,7 +97,7 @@ test('createControl: the update calls ask the explicit commands; a failed step c
     ['components rollback --output json', false],
   ], 'only the check and the update acquire; the rollback downloads nothing');
   const failing = createControl({
-    control: { dir: '/c', python: '/p', cli: '/c/strata.py' }, env: {},
+    control: { dir: '/c', python: '/p', cli: '/c/cortex.py' }, env: {},
     run: async () => ({ code: 7, json: { ok: false, results: [{ component: 'engine', status: 'failed', error: 'app-1 is serving.', exit_code: 7 }] }, text: '', stderr: '' }),
   });
   await assert.rejects(failing.update({}), err => err.code === 'engine_serving' && /serving/.test(err.message) && err.exitCode === 7);
@@ -112,7 +112,7 @@ test('the Settings update check maps the feed to the existing result shape', asy
   assert.match(result.engine.message, /new engine is available \(505 MB\)/);
   assert.doesNotMatch(result.engine.message, /0\.1\.4|sha|exit/i);
   assert.equal(result.engine.canInstall, true);
-  assert.equal(result.strata.status, 'current');
+  assert.equal(result.cortex.status, 'current');
   result = await checkComponentUpdates({ control: make(report({ engine: { installed: null, offered: { version: '0.1.46' }, status: 'install', download_bytes: 505 * (1 << 20) } })) });
   assert.equal(result.engine.status, 'available');
   assert.match(result.engine.message, /needs an engine to run models\. Press Update engine/);
@@ -123,7 +123,7 @@ test('the Settings update check maps the feed to the existing result shape', asy
   assert.doesNotMatch(result.engine.message, /windows-x86_64/);
   assert.match(result.engine.details, /windows-x86_64/, 'the technical reason is kept for the Details disclosure');
   result = await checkComponentUpdates({ control: make(new Error('this build trusts no update key')) });
-  assert.equal(result.strata.status, 'error');
+  assert.equal(result.cortex.status, 'error');
   assert.equal(result.engine.status, 'error');
   assert.doesNotMatch(result.engine.message, /update key/);
   assert.match(result.engine.details, /no update key/);
@@ -131,14 +131,14 @@ test('the Settings update check maps the feed to the existing result shape', asy
   // the app's verdict comes from the shell's updater when the bridge exists
   const appUpdater = { check: async () => ({ available: true, version: '0.2.0', notes: 'Faster starts.' }) };
   result = await checkComponentUpdates({ control: make(report()), appUpdater, appVersion: '0.1.0' });
-  assert.equal(result.strata.status, 'available');
-  assert.equal(result.strata.latestVersion, '0.2.0');
-  assert.match(result.strata.message, /new version of Strata is available\. Faster starts/);
+  assert.equal(result.cortex.status, 'available');
+  assert.equal(result.cortex.latestVersion, '0.2.0');
+  assert.match(result.cortex.message, /new version of Cortex is available\. Faster starts/);
 });
 
 test('the shell bridge client exists only inside the desktop app, speaks to loopback with the token, and polls to the end', async () => {
   assert.equal(createAppUpdater({ env: {} }), null);
-  assert.equal(createAppUpdater({ env: { STRATA_SHELL_BRIDGE: 'http://example.com:80', STRATA_SHELL_TOKEN: 'x' } }), null, 'not a loopback address');
+  assert.equal(createAppUpdater({ env: { CORTEX_SHELL_BRIDGE: 'http://example.com:80', CORTEX_SHELL_TOKEN: 'x' } }), null, 'not a loopback address');
   const calls = [];
   const states = [{ state: 'downloading', downloaded: 10, total: 100 }, { state: 'downloading', downloaded: 100, total: 100 }, { state: 'done' }];
   const fetcher = async (url, init) => {
@@ -146,14 +146,14 @@ test('the shell bridge client exists only inside the desktop app, speaks to loop
     if (url.endsWith('/app-update/status')) return Response.json(states.shift());
     return Response.json(url.endsWith('/check') ? { available: true, version: '0.2.0' } : { state: 'downloading' });
   };
-  const updater = createAppUpdater({ env: { STRATA_SHELL_BRIDGE: 'http://127.0.0.1:4000', STRATA_SHELL_TOKEN: 'tok' }, fetcher, sleep: async () => {} });
+  const updater = createAppUpdater({ env: { CORTEX_SHELL_BRIDGE: 'http://127.0.0.1:4000', CORTEX_SHELL_TOKEN: 'tok' }, fetcher, sleep: async () => {} });
   assert.equal((await updater.check()).version, '0.2.0');
   const progress = [];
   await updater.install({ onProgress: p => progress.push(p.downloaded ?? null) });
   assert.deepEqual(progress, [10, 100, null]);
   assert.ok(calls.every(c => c[2] === 'Bearer tok'));
   assert.deepEqual(calls.map(c => c[0] + ' ' + c[1].split('/').pop()), ['GET check', 'POST install', 'GET status', 'GET status', 'GET status']);
-  const failing = createAppUpdater({ env: { STRATA_SHELL_BRIDGE: 'http://127.0.0.1:4000', STRATA_SHELL_TOKEN: 'tok' }, sleep: async () => {},
+  const failing = createAppUpdater({ env: { CORTEX_SHELL_BRIDGE: 'http://127.0.0.1:4000', CORTEX_SHELL_TOKEN: 'tok' }, sleep: async () => {},
     fetcher: async url => Response.json(url.endsWith('/status') ? { state: 'error', error: 'signature mismatch' } : {}) });
   await assert.rejects(failing.install(), /signature mismatch/);
 });
@@ -161,12 +161,12 @@ test('the shell bridge client exists only inside the desktop app, speaks to loop
 // ---------------------------------------------------------------------------------- the Settings buttons in the packaged app
 
 function fixture({ withApp = false, update } = {}) {
-  const root = mkdtempSync(join(tmpdir(), 'strata-update-ops-'));
+  const root = mkdtempSync(join(tmpdir(), 'cortex-update-ops-'));
   const install = join(root, 'install'), data = join(root, 'data');
   mkdirSync(install, { recursive: true });
-  process.env.STRATA_INSTALL_DIR = install;      // the app's own install folder: the host always names it to Control
-  const config = join(install, 'strata-iq2_xs.json');
-  writeFileSync(config, JSON.stringify({ exe: 'component:strata-engine', tokenizer: join(install, 'tok'), args: ['--max-context', '32768'], model_name: 'Qwen', port: 8080 }));
+  process.env.CORTEX_INSTALL_DIR = install;      // the app's own install folder: the host always names it to Control
+  const config = join(install, 'cortex-iq2_xs.json');
+  writeFileSync(config, JSON.stringify({ exe: 'component:cortex-engine', tokenizer: join(install, 'tok'), args: ['--max-context', '32768'], model_name: 'Qwen', port: 8080 }));
   const calls = [];
   let previous = null;
   const control = {
@@ -189,7 +189,7 @@ function fixture({ withApp = false, update } = {}) {
     check: async () => ({ available: true, version: '0.2.0' }),
     install: async ({ onProgress }) => { calls.push(['app-install']); onProgress({ downloaded: 50, total: 100 }); return { state: 'done' }; },
   } : null;
-  const native = createNativeControl({ control, appUpdater, directory: data, spawnProcess: (...args) => { if (!args[1]?.some(a => String(a).endsWith('strata_mcp.py'))) spawned.push(args); throw new Error('no process but the installer tool (Control strata_mcp.py, absent in this fixture) may be started by the host in packaged mode'); }, fetcher: async () => Response.json({}), requests: () => [] });
+  const native = createNativeControl({ control, appUpdater, directory: data, spawnProcess: (...args) => { if (!args[1]?.some(a => String(a).endsWith('cortex_mcp.py'))) spawned.push(args); throw new Error('no process but the installer tool (Control cortex_mcp.py, absent in this fixture) may be started by the host in packaged mode'); }, fetcher: async () => Response.json({}), requests: () => [] });
   return { native, calls, spawned, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 const finish = async (native, id) => { for (let i = 0; i < 400; i++) { const job = native.state().jobs.find(j => j.id === id); if (job.state !== 'running') return job; await new Promise(r => setTimeout(r, 10)); } throw new Error('job did not finish'); };
@@ -247,23 +247,23 @@ test('packaged: no update while a model is loaded; calibration is still refused'
   } finally { await f.native.close(); f.cleanup(); }
 });
 
-test('packaged: "Update Strata" updates Control through the feed, then the app through the shell', async () => {
+test('packaged: "Update Cortex" updates Control through the feed, then the app through the shell', async () => {
   const f = fixture({ withApp: true });
   try {
     await f.native.refresh(true);
-    const job = await finish(f.native, f.native.operation('update-strata', {}).id);
+    const job = await finish(f.native, f.native.operation('update-cortex', {}).id);
     assert.equal(job.state, 'done', job.error);
     assert.deepEqual(f.calls.map(c => c[0]), ['update', 'app-install']);
     assert.deepEqual(f.calls[0], ['update', false, true]);
-    assert.match(job.summary, /app update is installed\. Strata will restart/);
+    assert.match(job.summary, /app update is installed\. Cortex will restart/);
   } finally { await f.native.close(); f.cleanup(); }
 });
 
-test('without the shell bridge "Update Strata" still updates Control and says nothing false about the app', async () => {
+test('without the shell bridge "Update Cortex" still updates Control and says nothing false about the app', async () => {
   const f = fixture();
   try {
     await f.native.refresh(true);
-    const job = await finish(f.native, f.native.operation('update-strata', {}).id);
+    const job = await finish(f.native, f.native.operation('update-cortex', {}).id);
     assert.equal(job.state, 'done', job.error);
     assert.doesNotMatch(job.summary, /app update is installed/);
   } finally { await f.native.close(); f.cleanup(); }

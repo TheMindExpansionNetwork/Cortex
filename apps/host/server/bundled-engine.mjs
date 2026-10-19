@@ -1,5 +1,5 @@
 /**
- * The engine that ships inside the installer (<install>/engine-bundle/<package folder>, the same layout Strata Control's
+ * The engine that ships inside the installer (<install>/engine-bundle/<package folder>, the same layout Cortex Control's
  * packaging/package_engine.py writes: engine-component.json, schema 2, SHA-256 and size for every file).
  *
  * On start, when this PC has no engine package for the bundle's platform and backend, or only an older one, the bundled
@@ -27,7 +27,7 @@ export function compareVersions(a, b) {
 async function readManifest(folder) {
   try {
     const data = JSON.parse((await readFile(join(folder, MANIFEST), 'utf8')).replace(/^﻿/, ''));
-    if (!data || data.id !== 'strata-engine' || typeof data.version !== 'string' || typeof data.platform !== 'string' || typeof data.backend !== 'string') return null;
+    if (!data || data.id !== 'cortex-engine' || typeof data.version !== 'string' || typeof data.platform !== 'string' || typeof data.backend !== 'string') return null;
     if (!Array.isArray(data.files) || !data.files.length || typeof data.entrypoint !== 'string') return null;
     return data;
   } catch { return null; }

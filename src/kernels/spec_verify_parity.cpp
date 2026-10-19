@@ -1,5 +1,5 @@
 // src/kernels/spec_verify_parity.cpp - the GPU verifier of probabilistic draft acceptance (sample_tokens_spec) against
-// the host reference (include/strata/core/spec_prob.hpp), token for token.
+// the host reference (include/cortex/core/spec_prob.hpp), token for token.
 //
 // Random logits at three vocabulary sizes (one block, a few blocks, the engine's 248,320), windows of 2..8 rows,
 // chains with top_k / top_p / min_p / temperature and repetition penalties over a per-row history, drafts taken from
@@ -8,8 +8,8 @@
 // ties to the lowest index, top_p's cut in double, min_p in logit space, temperature), the Philox draws of the kernel
 // (u_pick = pos, u_accept = pos | 1<<62, u_resid = pos | 1<<63), and judges every row with spec_verify_row /
 // spec_sample.  Every out[t] must match, accepted or not.  Needs a GPU.
-#include "strata/core/spec_prob.hpp"
-#include "strata/kernels/sampler.hpp"
+#include "cortex/core/spec_prob.hpp"
+#include "cortex/kernels/sampler.hpp"
 
 #include <cuda_runtime.h>
 
@@ -21,9 +21,9 @@
 #include <random>
 #include <vector>
 
-using strata::core::SpecP;
-using strata::core::SpecQ;
-using strata::kernels::SamplerParams;
+using cortex::core::SpecP;
+using cortex::core::SpecQ;
+using cortex::kernels::SamplerParams;
 
 namespace {
 
@@ -135,7 +135,7 @@ int main(int argc, char** argv) {
     check(cudaMalloc((void**) &d_out, kMaxT * sizeof(int)), "malloc out");
     check(cudaMalloc((void**) &d_hist, (size_t) kMaxT * 64 * sizeof(int32_t)), "malloc hist");
     check(cudaMalloc((void**) &d_dtok, kMaxT * sizeof(int32_t)), "malloc dtok");
-    check(cudaMalloc((void**) &d_q, (size_t) kMaxT * strata::core::kSpecQStride * sizeof(int32_t)), "malloc q");
+    check(cudaMalloc((void**) &d_q, (size_t) kMaxT * cortex::core::kSpecQStride * sizeof(int32_t)), "malloc q");
     for (int nv : vocabs) {
         for (int T : Ts) {
             for (int rep = 0; rep < 24; ++rep) {
@@ -177,7 +177,7 @@ int main(int argc, char** argv) {
                 std::vector<PList> P((size_t) T), Q((size_t) T);
                 const int n_q = (int) (g() % (T));   // 0 .. T-1 rows with a list
                 std::vector<int32_t> dtok((size_t) (T - 1), 0);
-                std::vector<int32_t> qbuf((size_t) T * strata::core::kSpecQStride, -1);
+                std::vector<int32_t> qbuf((size_t) T * cortex::core::kSpecQStride, -1);
                 for (int t = 0; t < T; ++t) P[(size_t) t] = chain_list(logits[(size_t) t], rowhist[(size_t) t], p);
                 for (int t = 0; t < T - 1; ++t) {
                     if (t < n_q) {
@@ -187,8 +187,8 @@ int main(int argc, char** argv) {
                         SamplerParams q;
                         q.top_k = tk[g() % 5]; q.top_p = tp[g() % 3]; q.min_p = 0.0f; q.temperature = tt[g() % 4];
                         Q[(size_t) t] = chain_list(lq, {}, q);
-                        int32_t* row = qbuf.data() + (size_t) t * strata::core::kSpecQStride;
-                        float* prow = (float*) (row + strata::core::kSpecQEntries);
+                        int32_t* row = qbuf.data() + (size_t) t * cortex::core::kSpecQStride;
+                        float* prow = (float*) (row + cortex::core::kSpecQEntries);
                         for (size_t i = 0; i < Q[(size_t) t].id.size(); ++i) { row[i] = Q[(size_t) t].id[i]; prow[i] = Q[(size_t) t].pf[i]; }
                         // the draft: drawn from q
                         const float u = (float) (g() >> 40) * (1.0f / 16777216.0f);
@@ -206,7 +206,7 @@ int main(int argc, char** argv) {
                 check(cudaMemcpy(d_hist, hist.data(), hist.size() * sizeof(int32_t), cudaMemcpyHostToDevice), "up hist");
                 check(cudaMemcpy(d_dtok, dtok.data(), dtok.size() * sizeof(int32_t), cudaMemcpyHostToDevice), "up dtok");
                 check(cudaMemcpy(d_q, qbuf.data(), qbuf.size() * sizeof(int32_t), cudaMemcpyHostToDevice), "up q");
-                const bool ran = strata::kernels::sample_tokens_spec(d_logits, T, nv, pen ? d_hist : nullptr, pen ? 64 : 0, p,
+                const bool ran = cortex::kernels::sample_tokens_spec(d_logits, T, nv, pen ? d_hist : nullptr, pen ? 64 : 0, p,
                                                                      d_dtok, d_q, n_q, d_out, nullptr);
                 if (!ran) { std::printf("sample_tokens_spec did not run (nv %d T %d)\n", nv, T); return 1; }
                 check(cudaDeviceSynchronize(), "sync");
@@ -217,14 +217,14 @@ int main(int argc, char** argv) {
                     const SpecP sp{P[(size_t) t].id.data(), P[(size_t) t].p.data(), (int) P[(size_t) t].id.size()};
                     int32_t want;
                     if (t == T - 1) {
-                        want = strata::core::spec_sample(sp, host_philox_uniform(p.seed, pos));
+                        want = cortex::core::spec_sample(sp, host_philox_uniform(p.seed, pos));
                         ++plain;
                     } else {
                         SpecQ sq{nullptr, nullptr, -1};
                         if (t < n_q) sq = SpecQ{Q[(size_t) t].id.data(), Q[(size_t) t].pf.data(), (int) Q[(size_t) t].id.size()};
-                        const auto r = strata::core::spec_verify_row(sp, dtok[(size_t) t], sq,
-                                                                     host_philox_uniform(p.seed, pos | strata::core::kSpecCtrAccept),
-                                                                     host_philox_uniform(p.seed, pos | strata::core::kSpecCtrResid));
+                        const auto r = cortex::core::spec_verify_row(sp, dtok[(size_t) t], sq,
+                                                                     host_philox_uniform(p.seed, pos | cortex::core::kSpecCtrAccept),
+                                                                     host_philox_uniform(p.seed, pos | cortex::core::kSpecCtrResid));
                         want = r.token;
                         (r.accepted ? accepted : rejected) += 1;
                         qrows_total += t < n_q;

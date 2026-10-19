@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { diffRun, imageTypeOf, runImagePath } from '../server/timeskip.mjs';
 
 function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), 'strata-cmp-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-cmp-'));
   const base = join(dir, 'base'), upd = join(dir, 'upd'), outside = join(dir, 'secret.png');
   mkdirSync(join(base, 'img'), { recursive: true }); mkdirSync(join(upd, 'img'), { recursive: true });
   writeFileSync(outside, 'not for you');
@@ -46,7 +46,7 @@ test('a picture is served only from inside the run, only as a picture', () => {
 });
 
 test('the page that was made comes first; a browser profile and other housekeeping come last, without their contents', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'strata-ts-rank-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-ts-rank-'));
   try {
     const base = join(dir, 'base'), cand = join(dir, 'cand');
     for (const root of [base, cand]) { mkdirSync(join(root, '.chrome-profile', 'Default', 'Cache'), { recursive: true }); mkdirSync(join(root, 'notes'), { recursive: true }); }
@@ -67,7 +67,7 @@ test('the page that was made comes first; a browser profile and other housekeepi
 });
 
 test('a big file that did not change is not listed as changed; one that did is', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'strata-ts-big-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-ts-big-'));
   try {
     const base = join(dir, 'base'), cand = join(dir, 'cand'); mkdirSync(base); mkdirSync(cand);
     const big = Buffer.alloc(400 * 1024, 7);

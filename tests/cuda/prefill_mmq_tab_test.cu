@@ -1,4 +1,4 @@
-// prefill_mmq_tab_test - STRATA_MMQ_DIRECT: the pointer-table MMQ (src/prefill/moe_mmq_tab.cuh, Product::tab) bit for
+// prefill_mmq_tab_test - CORTEX_MMQ_DIRECT: the pointer-table MMQ (src/prefill/moe_mmq_tab.cuh, Product::tab) bit for
 // bit against the gathered MMQ the prompt path runs today (experts copied `expert_bytes` apart, a zeroed 4096-byte
 // tail after the last one).
 //
@@ -15,13 +15,13 @@
 // IQ3_S + Q8_0, some read in place (direct), the others gathered at compact positions c != q - one at a time
 // (gather_native) or by gather_native_group with a mid-group flush (first > 0) - including groups whose last entry is
 // direct and groups with no gathered entry; both products bitwise equal to all-gathered.
-// Part 4, STRATA_MMQ_GROUP_SORT: a layer's experts in groups of 16 as prefill.cpp runs them (activations quantized
+// Part 4, CORTEX_MMQ_GROUP_SORT: a layer's experts in groups of 16 as prefill.cpp runs them (activations quantized
 // in group order through the src map, absolute bounds, max_rows = the group's largest count), once in ID order and
 // once with the full groups in row-count order (mmq_resident_sort_rows, the partial group kept): every token's
 // product row bitwise equal, when mmq::whole_tiles says so for this card (else only reported). Sorting the partial
-// group too (STRATA_MMQ_RESIDENT_SORT_NE) is reported, not required.
+// group too (CORTEX_MMQ_RESIDENT_SORT_NE) is reported, not required.
 // Exit 77 without a CUDA device of sm_80 or newer or without the pointer-table build.
-#include "strata/prefill/moe_mmq.hpp"
+#include "cortex/prefill/moe_mmq.hpp"
 
 #include "ggml.h"
 
@@ -41,7 +41,7 @@
 #include <vector>
 
 namespace {
-namespace mmq = strata::prefill::mmq;
+namespace mmq = cortex::prefill::mmq;
 
 constexpr int G = mmq::kGatherGroupMax;
 constexpr size_t TAIL = 4096;
@@ -480,7 +480,7 @@ void order_case(mmq::Context& ctx, const Shape& sh, const std::vector<int>& cnt,
         upload(x.p, hx.data(), hx.size() * 4, "x");
     }
     Layer full = id, all = id;
-    namespace d = strata::prefill::detail;
+    namespace d = cortex::prefill::detail;
     d::mmq_resident_sort_rows(full.ids.data(), T, 1, full.count, full.off, full.order, full.slot.data(), full.src.data(),
                               d::mmq_resident_sort_span(full.order.size(), G, true));
     d::mmq_resident_sort_rows(all.ids.data(), T, 1, all.count, all.off, all.order, all.slot.data(), all.src.data(),

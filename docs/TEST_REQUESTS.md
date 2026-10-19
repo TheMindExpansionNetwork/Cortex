@@ -1,6 +1,6 @@
 # Test requests and hardware wanted
 
-Strata is built and measured on a few machines. Results from other hardware are welcome and are used: they tell us
+Cortex is built and measured on a few machines. Results from other hardware are welcome and are used: they tell us
 what a setup really does and show where the engine picks something wrong. Write a report as described in
 [COMMUNITY_BENCHMARKS.md](COMMUNITY_BENCHMARKS.md): the build, the card and PCIe width, the CPU and RAM speed, the
 model file, the exact command, three runs per size, and what you did not test. Post it in an issue, or on the pull

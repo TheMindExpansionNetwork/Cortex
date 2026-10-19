@@ -1,6 +1,6 @@
 /**
  * The first workspace is never the app's own folder, and any workspace can be renamed (a display name; the path stays).
- * A real host process with a scratch user profile; no STRATA_WORKSPACE, started inside the host folder like the installed app.
+ * A real host process with a scratch user profile; no CORTEX_WORKSPACE, started inside the host folder like the installed app.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,8 +16,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function start(t, { user, home }) {
   const port = await freePort();
-  const env = { ...process.env, STRATA_HOME: home, STRATA_PORT: String(port), USERPROFILE: user, HOME: user, STRATA_REAL_ENGINE: '0', STRATA_COMPONENTS_DIR: join(home, 'components') };
-  delete env.STRATA_WORKSPACE;
+  const env = { ...process.env, CORTEX_HOME: home, CORTEX_PORT: String(port), USERPROFILE: user, HOME: user, CORTEX_REAL_ENGINE: '0', CORTEX_COMPONENTS_DIR: join(home, 'components') };
+  delete env.CORTEX_WORKSPACE;
   const child = spawn(process.execPath, [join(HOST_DIR, 'server', 'index.mjs')], { cwd: HOST_DIR, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   let log = ''; child.stdout.on('data', d => { log += d; }); child.stderr.on('data', d => { log += d; });
   t.after(async () => {
@@ -35,16 +35,16 @@ async function start(t, { user, home }) {
   return { call };
 }
 
-const scratch = () => { const dir = mkdtempSync(join(tmpdir(), 'strata-ws-')); const user = join(dir, 'user'); const home = join(dir, 'home'); mkdirSync(user, { recursive: true }); mkdirSync(home, { recursive: true }); return { dir, user, home }; };
+const scratch = () => { const dir = mkdtempSync(join(tmpdir(), 'cortex-ws-')); const user = join(dir, 'user'); const home = join(dir, 'home'); mkdirSync(user, { recursive: true }); mkdirSync(home, { recursive: true }); return { dir, user, home }; };
 
-test('item 6: with nothing chosen the first workspace is Documents\\Strata, never the app folder', async t => {
+test('item 6: with nothing chosen the first workspace is Documents\\Cortex, never the app folder', async t => {
   const s = scratch(); t.after(() => rmSync(s.dir, { recursive: true, force: true }));
   const host = await start(t, s);
   const { body } = await host.call('GET', '/api/workspaces');
   const first = body.workspaces[0];
   assert.equal(first.id, 'root');
-  assert.equal(resolve(first.path), join(s.user, 'Documents', 'Strata', 'Workspace'));
-  assert.equal(first.name, 'Strata');
+  assert.equal(resolve(first.path), join(s.user, 'Documents', 'Cortex', 'Workspace'));
+  assert.equal(first.name, 'Cortex');
   assert.ok(existsSync(first.path), 'the folder is created');
   assert.notEqual(resolve(first.path), HOST_DIR);
 });
@@ -55,8 +55,8 @@ test('item 6: a saved first workspace that is the app folder moves to the defaul
   writeFileSync(join(s.home, 'data', 'workspaces.json'), JSON.stringify([{ id: 'root', name: 'host', path: HOST_DIR }, { id: 'ws_a', name: 'Mine', path: s.user }]));
   const host = await start(t, s);
   const { body } = await host.call('GET', '/api/workspaces');
-  assert.equal(resolve(body.workspaces[0].path), join(s.user, 'Documents', 'Strata', 'Workspace'));
-  assert.equal(body.workspaces[0].name, 'Strata');
+  assert.equal(resolve(body.workspaces[0].path), join(s.user, 'Documents', 'Cortex', 'Workspace'));
+  assert.equal(body.workspaces[0].name, 'Cortex');
   assert.deepEqual(body.workspaces[0].aliases, [HOST_DIR]);
   assert.equal(body.workspaces[1].path, s.user, 'a folder the person added is left alone');
 });

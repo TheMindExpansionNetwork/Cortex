@@ -4,7 +4,7 @@
 // cycled to miss the GPU's last-level cache, as a layer's call does.
 //
 //     build/q8_gemv_bench [--cols 1,2,3,4,6] [--iters 50] [--bw GB/s]
-#include "strata/kernels/native_mmvq.hpp"
+#include "cortex/kernels/native_mmvq.hpp"
 
 #include <cuda_runtime.h>
 
@@ -17,7 +17,7 @@
 #include <string>
 #include <vector>
 
-namespace K = strata::kernels;
+namespace K = cortex::kernels;
 
 namespace {
 struct Shape { const char* what; int n_in, n_out; };

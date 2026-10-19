@@ -1,7 +1,7 @@
 #pragma once
 
-#include "strata/core/conversation_cache.hpp"
-#include "strata/core/progress.hpp"
+#include "cortex/core/conversation_cache.hpp"
+#include "cortex/core/progress.hpp"
 
 #include <cuda_runtime.h>
 
@@ -12,7 +12,7 @@
 #include <thread>
 #include <vector>
 
-namespace strata::core::conversation_detail {
+namespace cortex::core::conversation_detail {
 
 /// Conversation snapshot / checkpoint copies go through a private non-blocking stream of the current device
 /// instead of the legacy (null) stream.  A plain cudaMemcpy is ordered against every blocking stream of the
@@ -53,10 +53,10 @@ inline cudaError_t copy_nonblocking(void* dst, const void* src, size_t bytes, bo
 /// it to the pagefile, copying it back runs at the drive's page-in speed (measured in the reports: ~190 hard faults
 /// a second, under 1 MB/s) and one memcpy of it stays silent past the 60 s limit, so the watchdog ended an engine
 /// that was only slow.  One beat per 1 MiB slice keeps a copy that moves alive and still lets a real stall show.
-/// STRATA_TEST_SLOW_COPY_US=N (tests only): every 1 MiB slice of a checkpoint copy takes N microseconds more, as when
+/// CORTEX_TEST_SLOW_COPY_US=N (tests only): every 1 MiB slice of a checkpoint copy takes N microseconds more, as when
 /// the OS has paged the checkpoints out and each slice is read back from the drive.  Unset: no delay.
 inline long test_slow_copy_us() {
-    static const long v = [] { const char* e = std::getenv("STRATA_TEST_SLOW_COPY_US"); return e ? std::atol(e) : 0L; }();
+    static const long v = [] { const char* e = std::getenv("CORTEX_TEST_SLOW_COPY_US"); return e ? std::atol(e) : 0L; }();
     return v;
 }
 
@@ -118,4 +118,4 @@ inline cudaError_t order_after_queued() {
     return cudaStreamWaitEvent(nullptr, events[(size_t) dev], 0);
 }
 
-} // namespace strata::core::conversation_detail
+} // namespace cortex::core::conversation_detail

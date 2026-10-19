@@ -1,7 +1,7 @@
 /**
  * A scripted OpenAI-compatible chat-completions worker, for the agent-bridge tests.
  *
- * It stands in for the Strata API worker so that the Harness agent loop, the tool executor, the
+ * It stands in for the Cortex API worker so that the Harness agent loop, the tool executor, the
  * approval gate and the host bridge are all real while the model is scripted. A scripted model proves
  * the integration path, not model quality; the real-model run is a separate step.
  *

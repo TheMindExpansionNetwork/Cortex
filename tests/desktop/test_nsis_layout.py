@@ -1,4 +1,4 @@
-r"""The Windows installer must never touch the user's data. The app lives in %LOCALAPPDATA%\Programs\Strata; %LOCALAPPDATA%\Strata
+r"""The Windows installer must never touch the user's data. The app lives in %LOCALAPPDATA%\Programs\Cortex; %LOCALAPPDATA%\Cortex
 holds engines, model run configs, tuning. A build that installed the app into the data folder is migrated by removing only its app
 files. Exercised with makensis on a temp layout (the template's own migration macro, extracted and run); skipped without NSIS."""
 
@@ -12,9 +12,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE = ROOT / "apps" / "desktop" / "src-tauri" / "nsis" / "installer.nsi"
 MAKENSIS = Path(os.environ.get("LOCALAPPDATA", "")) / "tauri" / "NSIS" / "makensis.exe"
-DATA = ["components/engine/0.1.45/strata.exe", "install/strata-iq3_s.json", "procs/p.json", "runtime/r.json", "time-skip/t.json",
+DATA = ["components/engine/0.1.45/cortex.exe", "install/cortex-iq3_s.json", "procs/p.json", "runtime/r.json", "time-skip/t.json",
         "presets/p.json"]
-APP = ["strata-desktop.exe", "uninstall.exe", "host/server/index.mjs", "node/node.exe", "control/python/python.exe"]
+APP = ["cortex-desktop.exe", "uninstall.exe", "host/server/index.mjs", "node/node.exe", "control/python/python.exe"]
 BS = "\\"
 
 
@@ -28,7 +28,7 @@ def touch(base: Path, names):
 class TemplateTests(unittest.TestCase):
     text = TEMPLATE.read_text(encoding="utf-8")
 
-    def test_the_default_folder_is_programs_strata_and_the_data_folder_is_never_remembered_as_the_app(self):
+    def test_the_default_folder_is_programs_cortex_and_the_data_folder_is_never_remembered_as_the_app(self):
         self.assertIn(r'StrCpy $INSTDIR "$LOCALAPPDATA\Programs\${PRODUCTNAME}"', self.text)
         self.assertIn(r'StrCmp $4 "$LOCALAPPDATA\${PRODUCTNAME}" restore_done 0', self.text)
         self.assertIn("StrIsUnder", self.text)          # a remembered folder under Temp is ignored too
@@ -43,7 +43,7 @@ class TemplateTests(unittest.TestCase):
 @unittest.skipUnless(MAKENSIS.is_file(), "NSIS (the Tauri bundler's copy) is not installed here")
 class MigrationTests(unittest.TestCase):
     def run_nsis(self, body: str, work: Path):
-        block = re.search(r"; STRATA-MIGRATE-BEGIN.*?; STRATA-MIGRATE-END", TEMPLATE.read_text(encoding="utf-8"), re.S).group(0)
+        block = re.search(r"; CORTEX-MIGRATE-BEGIN.*?; CORTEX-MIGRATE-END", TEMPLATE.read_text(encoding="utf-8"), re.S).group(0)
         script = work / "t.nsi"
         script.write_text('Unicode true\nOutFile "t.exe"\nRequestExecutionLevel user\nSilentInstall silent\n' + block + "\nSection\n" + body + "\nSectionEnd\n", encoding="utf-8")
         done = subprocess.run([str(MAKENSIS), "/V1", str(script)], cwd=work, capture_output=True, text=True)
@@ -51,7 +51,7 @@ class MigrationTests(unittest.TestCase):
         subprocess.run([str(work / "t.exe")], cwd=work, check=True, timeout=60)
 
     def layout(self, base: Path) -> Path:
-        old = base / "Strata"
+        old = base / "Cortex"
         touch(old, DATA + APP)
         return old
 
@@ -59,8 +59,8 @@ class MigrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
             old = self.layout(base)
-            new = base / "Programs" / "Strata"
-            self.run_nsis(f'!insertmacro StrataMigrateOldInstall "{old}" "{new}"', base)
+            new = base / "Programs" / "Cortex"
+            self.run_nsis(f'!insertmacro CortexMigrateOldInstall "{old}" "{new}"', base)
             for name in DATA:
                 self.assertTrue((old / name).is_file(), f"data kept: {name}")
             for name in APP:
@@ -72,15 +72,15 @@ class MigrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
             old = self.layout(base)
-            self.run_nsis(f'!insertmacro StrataMigrateOldInstall "{old}" "{old}"', base)
+            self.run_nsis(f'!insertmacro CortexMigrateOldInstall "{old}" "{old}"', base)
             for name in DATA + APP:
                 self.assertTrue((old / name).is_file(), name)
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
-            touch(base / "Strata", DATA)                   # data only: no strata-desktop.exe
-            self.run_nsis(f'!insertmacro StrataMigrateOldInstall "{base / "Strata"}" "{base / "Programs" / "Strata"}"', base)
+            touch(base / "Cortex", DATA)                   # data only: no cortex-desktop.exe
+            self.run_nsis(f'!insertmacro CortexMigrateOldInstall "{base / "Cortex"}" "{base / "Programs" / "Cortex"}"', base)
             for name in DATA:
-                self.assertTrue((base / "Strata" / name).is_file(), name)
+                self.assertTrue((base / "Cortex" / name).is_file(), name)
 
     def test_an_uninstall_of_the_template_kind_leaves_data_in_a_shared_folder(self):
         """The uninstaller deletes named files and uses non-recursive RMDir: in a folder that also holds data (a legacy install) the
@@ -94,7 +94,7 @@ class MigrationTests(unittest.TestCase):
             self.run_nsis("\n".join(lines), base)
             for name in DATA:
                 self.assertTrue((old / name).is_file(), name)
-            self.assertFalse((old / "strata-desktop.exe").exists())
+            self.assertFalse((old / "cortex-desktop.exe").exists())
 
 
 if __name__ == "__main__":

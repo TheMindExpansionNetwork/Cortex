@@ -521,7 +521,7 @@ class ToolRoundTrip(Server):
         # Qwen writes Codex's MCP tools in their flat `mcp__server__tool` form; Codex only
         # runs the call when it comes back with its namespace.
         self.engine.scripts = [self.tok.encode(
-            "</think>\n\n<tool_call>\n<function=mcp__websearch__web_search>\n<parameter=query>\nstrata\n"
+            "</think>\n\n<tool_call>\n<function=mcp__websearch__web_search>\n<parameter=query>\ncortex\n"
             "</parameter>\n</function>\n</tool_call><|im_end|>", parse_special=True)]
         self.engine.script = self.engine.scripts[0]
         tools = [{"type": "namespace", "name": "mcp__websearch", "description": "Search.", "tools": [
@@ -531,7 +531,7 @@ class ToolRoundTrip(Server):
         self.assertEqual(code, 200, r)
         call, = r["output"]
         self.assertEqual((call["namespace"], call["name"], json.loads(call["arguments"])),
-                         ("mcp__websearch", "web_search", {"query": "strata"}))
+                         ("mcp__websearch", "web_search", {"query": "cortex"}))
 
     def test_namespace_and_custom_calls_come_back_under_their_own_names(self):
         self.engine.scripts = [self.tok.encode(

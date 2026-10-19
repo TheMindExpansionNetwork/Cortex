@@ -11,12 +11,12 @@
 //      `quantize_q8_0` / `quantize_q8_K`.
 //   3. `quantize_act_images` against the three standalone quantizers (q8_0 bytes, q8_K bytes, bf16 bits).
 //   4. `bf16_gemv_pair` against two `bf16_gemv_split(32)` calls (the warp accumulation it replicates).
-#include "strata/kernels/bf16_gemv.hpp"
-#include "strata/kernels/bf16_bits.hpp"
-#include "strata/kernels/elementwise.hpp"
-#include "strata/kernels/f16_bits.hpp"
-#include "strata/kernels/quantize_act.hpp"
-#include "strata/kernels/s_gemv.hpp"
+#include "cortex/kernels/bf16_gemv.hpp"
+#include "cortex/kernels/bf16_bits.hpp"
+#include "cortex/kernels/elementwise.hpp"
+#include "cortex/kernels/f16_bits.hpp"
+#include "cortex/kernels/quantize_act.hpp"
+#include "cortex/kernels/s_gemv.hpp"
 
 #include <cuda_runtime.h>
 
@@ -30,7 +30,7 @@
 #include <string>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 

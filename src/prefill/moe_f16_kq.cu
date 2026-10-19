@@ -1,11 +1,11 @@
-// src/prefill/moe_f16_kq.cu - see moe_f16_kq.hpp.  gfx11 only (opt-in STRATA_PF_F16=1 with STRATA_PF_FUSED_KQ=1).
+// src/prefill/moe_f16_kq.cu - see moe_f16_kq.hpp.  gfx11 only (opt-in CORTEX_PF_F16=1 with CORTEX_PF_FUSED_KQ=1).
 //
-// gufo's routed-expert kernels for the K-quants, on Strata's tables, int8 activations and H (the work item, the
+// gufo's routed-expert kernels for the K-quants, on Cortex's tables, int8 activations and H (the work item, the
 // activation staging and the epilogues are moe_f16_common.cuh's):
 //   - gate/up (Q4_K, Q5_K): the weight codes stay packed in LDS (one 32-byte nibble group per row and stage) and
 //     each wave turns its own 16 rows into F16 right after the LDS read: w = q * (d sc) - dmin m as one packed FMA;
 //   - down (Q5_1): a K block's 16 code bytes and its high-bit word in LDS, w = q d + m per wave.
-// The output differs from native_w11_kernel's (F16 weights instead of int8 sub-blocks), like STRATA_PF_FUSED_KQ's
+// The output differs from native_w11_kernel's (F16 weights instead of int8 sub-blocks), like CORTEX_PF_FUSED_KQ's
 // does from the MMQ path.
 //
 // Adapted from gufo 97b8645f: src/models/qwen38_flash_next/kernels/rocm/kernels.hip.cpp
@@ -35,7 +35,7 @@
 
 #include <algorithm>
 
-namespace strata::prefill::fused::f16kq {
+namespace cortex::prefill::fused::f16kq {
 namespace {
 
 using namespace f16;
@@ -58,7 +58,7 @@ constexpr uint32_t HALF_MAGIC = 0x64646464U;   // the high bytes of 1024.0 as F1
 // Four code bytes (< 32) to four halves: 1024 + q exactly, minus 1024, then q * scale + bias.
 __device__ __forceinline__ void codes_to_halves(uint32_t codes, __half2 magic, __half2 scale2, __half2 bias2, __half2& lo,
                                                 __half2& hi) {
-#if STRATA_F16_DEVICE
+#if CORTEX_F16_DEVICE
     const uint32_t p0 = __builtin_amdgcn_perm(codes, HALF_MAGIC, 0x01050004U);
     const uint32_t p1 = __builtin_amdgcn_perm(codes, HALF_MAGIC, 0x03070206U);
     lo = __hfma2(__hadd2(__builtin_bit_cast(__half2, p0), magic), scale2, bias2);
@@ -74,7 +74,7 @@ __global__ void __launch_bounds__(THREADS) gate_up_kernel(const Batch b, const N
                                                           const int2* __restrict__ tiles, const int32_t* __restrict__ off,
                                                           const uint8_t* __restrict__ act, const int32_t* __restrict__ src,
                                                           uint8_t* __restrict__ out) {
-#if STRATA_F16_DEVICE
+#if CORTEX_F16_DEVICE
     constexpr bool Q5K = WT == T_Q5_K;
     constexpr int BLOCK_CHUNKS = Q5K ? 11 : 9;   // 16-byte chunks per 256-value block
     constexpr int CODE_CHUNK = Q5K ? 3 : 1;      // the first chunk of qs
@@ -219,7 +219,7 @@ template <int BN>
 __global__ void __launch_bounds__(THREADS) down_kernel(const Batch b, const NativeGeom geo, const int32_t* __restrict__ ts,
                                                        const int2* __restrict__ tiles, const int32_t* __restrict__ off,
                                                        const uint8_t* __restrict__ h, float* __restrict__ dm) {
-#if STRATA_F16_DEVICE
+#if CORTEX_F16_DEVICE
     constexpr int CODE_BYTES = ROWS * 2 * 16, HIGH_BYTES = 2 * ROWS * 4, SCALE_BYTES = 2 * ROWS * 4;
     constexpr int STAGE_BYTES = CODE_BYTES + HIGH_BYTES + SCALE_BYTES + ActStage<BN>::BYTES;
     static_assert(D_EPI_BYTES <= STAGE_BYTES, "the epilogue fits the stage");
@@ -331,4 +331,4 @@ void down(const Batch& b, const NativeGeom& g, const int32_t* ts, const int2* ti
     else down_kernel<kTileRows><<<grid, THREADS, 0, s>>>(b, g, ts, tiles, off, h, dm);
 }
 
-}  // namespace strata::prefill::fused::f16kq
+}  // namespace cortex::prefill::fused::f16kq

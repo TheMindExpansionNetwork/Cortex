@@ -13,12 +13,12 @@ export const PHASE_TEXT = {
   done: 'Done.',
 };
 
-/** { message, details, next } for an error thrown by Control's update calls (or the shell bridge). `subject` is "engine" or "Strata". */
+/** { message, details, next } for an error thrown by Control's update calls (or the shell bridge). `subject` is "engine" or "Cortex". */
 export function plainUpdateError(error, subject = 'engine') {
   const raw = String(error?.message ?? error ?? '');
   const code = error?.code ?? '';
   const exit = error?.exitCode ?? null;
-  const button = `Update ${subject === 'engine' ? 'engine' : 'Strata'}`;
+  const button = `Update ${subject === 'engine' ? 'engine' : 'Cortex'}`;
   const keep = 'Your current version still works.';
   let message = `The update didn't finish and nothing was changed. ${keep}`;
   let next = `Press ${button} in Settings to try again.`;
@@ -40,7 +40,7 @@ export function plainUpdateError(error, subject = 'engine') {
     message = "There isn't an engine for this PC's graphics card yet.";
     next = 'Check for updates again later.';
   } else if (/trusts no update key/i.test(raw)) {
-    message = "Updates aren't available in this version of Strata yet.";
+    message = "Updates aren't available in this version of Cortex yet.";
     next = 'They will be after the next version.';
   } else if (/signature|SHA-256|does not match|not trusted|expired|older than|replayed|integrity|refused/i.test(raw) || exit === 5) {
     message = `The update didn't pass its safety check, so it was not installed. ${keep}`;

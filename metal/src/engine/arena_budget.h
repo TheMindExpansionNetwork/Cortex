@@ -3,7 +3,7 @@
 //
 // The arena is anonymous memory the GPU needs resident while a command buffer runs.  It must leave room for macOS and the
 // desktop, and for the other big memory the engine itself uses while it runs:
-//   keep      macOS and the desktop: max(7 GB, 15% of the RAM) - STRATA_METAL_KEEP_FREE_GB sets it.  The M5 Max
+//   keep      macOS and the desktop: max(7 GB, 15% of the RAM) - CORTEX_METAL_KEEP_FREE_GB sets it.  The M5 Max
 //             (128 GB) froze with an 89 GB arena and 7 GB kept beside a 50 GB n-gram table; with 15% it keeps 20.6 GB.
 //             The 32 GB M4 (IQ3_XXS after a 6K prompt, 5 interleaved runs, memory_pressure every 3 s, vm_stat
 //             swapouts): 7 GB kept + 2 GB reserve 5.93 tok/s (arena ~8.5 GB, least free 50%), 7 + 0.5 6.59 (~10 GB,
@@ -16,7 +16,7 @@
 //             (host memory) - stays under footprint_cap() (below): on a big Mac 60% of the RAM.  The 67% rule it replaces
 //             counted only the Metal buffers (cx.allocated(), 7.5 GB) while the process held 11-15 GB, and 67% was too
 //             much anyway (see kLeaveShare).
-// STRATA_METAL_ARENA_GB sets the arena outright (the engine says when that goes over the cap; it is the user's choice).
+// CORTEX_METAL_ARENA_GB sets the arena outright (the engine says when that goes over the cap; it is the user's choice).
 // The arena is placed just before it is filled, and the memory macOS can give is asked again then: when it has dropped
 // (another program), the arena shrinks (arena_shrink).
 // "Available" (arena_avail) counts free and purgeable pages and the file cache macOS drops without writing anything:
@@ -24,14 +24,14 @@
 // is left out: macOS frees it only by compressing or swapping it (the soak's 93 MB swapped out while an arena planned
 // with every inactive page filled).  Free + purgeable alone is too little: at the engine's start the model file's own
 // pages fill the cache (6.4 GB free + purgeable on the 32 GB M4 against 15 GB a minute later).  The arena is filled in
-// steps (STRATA_METAL_ARENA_STEP_GB, default 1.5): before each step the free memory is asked again, and the fill stops -
+// steps (CORTEX_METAL_ARENA_STEP_GB, default 1.5): before each step the free memory is asked again, and the fill stops -
 // the rest of the arena's slots unused - when a step would take macOS below what it keeps (arena_grow).
 #pragma once
 
 #include <algorithm>
 #include <cstddef>
 
-namespace strata::metal_engine {
+namespace cortex::metal_engine {
 
 struct ArenaMem {
     double phys = 0;          // bytes of RAM
@@ -41,9 +41,9 @@ struct ArenaMem {
     double ple_mapped = 0;    // the n-gram table's bytes when it is mapped whole in RAM, else 0
     double proc_footprint = 0;   // what the process holds right now, whatever it is (task_info phys_footprint); 0: unknown
     double filecache_min = 0;    // sysctl vm.vm_page_filecache_min in bytes: the file cache macOS keeps before it compresses (0: unknown)
-    double keep_gb = -1;      // STRATA_METAL_KEEP_FREE_GB (< 0: unset)
-    double arena_gb = -1;     // STRATA_METAL_ARENA_GB (< 0: unset)
-    double leave_share = -1;  // STRATA_METAL_LEAVE_SHARE: the share of the RAM a big Mac leaves to macOS (< 0: kLeaveShare)
+    double keep_gb = -1;      // CORTEX_METAL_KEEP_FREE_GB (< 0: unset)
+    double arena_gb = -1;     // CORTEX_METAL_ARENA_GB (< 0: unset)
+    double leave_share = -1;  // CORTEX_METAL_LEAVE_SHARE: the share of the RAM a big Mac leaves to macOS (< 0: kLeaveShare)
 };
 
 constexpr double kGB = 1e9;
@@ -142,7 +142,7 @@ inline bool resident_fits(double phys, double working_set, double model_bytes, d
 }
 
 /// Just before the arena is filled: the bytes it may still have when macOS can now give `available_now` (it shrinks,
-/// never grows; the explicit STRATA_METAL_ARENA_GB is kept as it is).
+/// never grows; the explicit CORTEX_METAL_ARENA_GB is kept as it is).
 inline double arena_shrink(const ArenaMem& m, double planned, double available_now) {
     if (m.arena_gb >= 0) return planned;
     ArenaMem now = m;
@@ -151,7 +151,7 @@ inline double arena_shrink(const ArenaMem& m, double planned, double available_n
 }
 
 /// The stepped fill: may the next `step` bytes of the arena be filled while macOS has `available_now` free + purgeable?
-/// (the explicit STRATA_METAL_ARENA_GB always fills)
+/// (the explicit CORTEX_METAL_ARENA_GB always fills)
 inline bool arena_grow(const ArenaMem& m, double available_now, double step) {
     if (m.arena_gb >= 0) return true;
     return available_now - step >= arena_keep(m) + arena_ple_reserve(m);
@@ -174,4 +174,4 @@ inline size_t arena_fill_plan(const ArenaMem& m, const double* cost, size_t n, d
     return i;
 }
 
-}  // namespace strata::metal_engine
+}  // namespace cortex::metal_engine

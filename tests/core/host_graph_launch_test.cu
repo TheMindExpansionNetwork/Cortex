@@ -1,4 +1,4 @@
-#include "strata/core/host_graph_launch.hpp"
+#include "cortex/core/host_graph_launch.hpp"
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -41,7 +41,7 @@ int main(int argc, char** argv) {
         if (!done) { timed_out = true; *(volatile unsigned*)host = 1; }
     });
     {
-        strata::core::HostGraphLaunch launch(exec, stream, 0, threaded,
+        cortex::core::HostGraphLaunch launch(exec, stream, 0, threaded,
                                             [&] { *(volatile unsigned*)host = 1; });
         gpu(launch.status());
         check(launch.query() == cudaErrorNotReady, "graph waits for CPU service");
@@ -60,7 +60,7 @@ int main(int argc, char** argv) {
         *host = 0;
         std::atomic<bool> released{false};
         {
-            strata::core::HostGraphLaunch launch(exec, stream, 0, true,
+            cortex::core::HostGraphLaunch launch(exec, stream, 0, true,
                 [&] { released = true; *(volatile unsigned*)host = 1; });
         }
         check(released, "early return releases device waits");
@@ -68,7 +68,7 @@ int main(int argc, char** argv) {
         gpu(cudaMemcpy(&count, value, sizeof(unsigned), cudaMemcpyDeviceToHost));
         check(count == 8192, "early return drains the actual graph");
         if (argc > 1 && std::strcmp(argv[1], "--errors") == 0) {
-            strata::core::HostGraphLaunch invalid(exec, stream, -1, true, [] {});
+            cortex::core::HostGraphLaunch invalid(exec, stream, -1, true, [] {});
             check(invalid.finish() == cudaErrorInvalidDevice, "launch-thread device error propagated");
             (void)cudaGetLastError();
         }

@@ -32,7 +32,7 @@ export function cachedHardware() {
 }
 
 function testHardware() {
-  const raw = process.env.STRATA_TEST_HARDWARE;
+  const raw = process.env.CORTEX_TEST_HARDWARE;
   if (!raw) return null;
   try { const value = JSON.parse(raw); return value && typeof value === 'object' ? value : null; } catch { return null; }
 }
@@ -42,7 +42,7 @@ export async function detect({ force = false } = {}) {
 
   const platform = process.platform;
   const arch = process.arch;
-  // Tests only: STRATA_TEST_HARDWARE='{"totalGb":128,"freeGb":100,"gpus":[...]}' stands in for the probes, so a
+  // Tests only: CORTEX_TEST_HARDWARE='{"totalGb":128,"freeGb":100,"gpus":[...]}' stands in for the probes, so a
   // test about routing or lifecycle does not depend on how much memory the machine running it has.
   const forced = testHardware();
   const totalGb = forced?.totalGb ?? os.totalmem() / 1024 ** 3;
@@ -227,7 +227,7 @@ function buildChecks(hw) {
           id: 'gpu',
           label: 'GPU and driver',
           state: 'warn',
-          detail: 'No GPU accelerator found — Strata will run on the CPU',
+          detail: 'No GPU accelerator found — Cortex will run on the CPU',
           value: accel.label,
         }
       : {
@@ -282,13 +282,13 @@ function buildVerdict(hw) {
   if (warned.length) {
     return {
       ok: true,
-      headline: 'This computer can run Strata.',
-      detail: `${warned.map((w) => w.label).join(' and ')} ${warned.length > 1 ? 'are' : 'is'} a limit — Strata will pick a lighter model.`,
+      headline: 'This computer can run Cortex.',
+      detail: `${warned.map((w) => w.label).join(' and ')} ${warned.length > 1 ? 'are' : 'is'} a limit — Cortex will pick a lighter model.`,
     };
   }
   return {
     ok: true,
-    headline: 'This computer can run Strata comfortably.',
+    headline: 'This computer can run Cortex comfortably.',
     detail: 'Everything needed for the recommended model is present.',
   };
 }

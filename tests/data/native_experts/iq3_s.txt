@@ -1,4 +1,4 @@
-# strata native experts v3: layer gu_type d_type offset blob_bytes gate_off up_off down_off [shard] (n_expert 512, total 50292326400; absolute offsets in Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf, or in the named shard beside it)
+# cortex native experts v3: layer gu_type d_type offset blob_bytes gate_off up_off down_off [shard] (n_expert 512, total 50292326400; absolute offsets in Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf, or in the named shard beside it)
 0 18 20 0 2176000 1386491904 1711166464 913711104
 1 22 42 1114112000 1510400 2340958080 2613152640 2104106880
 2 22 20 1887436800 1971200 3491172096 3763417856 3018391296

@@ -7,7 +7,7 @@ import contextlib
 import random
 from typing import Any, Callable
 
-from strata_control.tune_session import RequestSet, RunResult, StartFailed
+from cortex_control.tune_session import RequestSet, RunResult, StartFailed
 
 
 class StubEngine:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the Strata DMG without a Finder session.
+# Build the Cortex DMG without a Finder session.
 #
 # Tauri's default DMG step runs an AppleScript that asks Finder to arrange the window (icon
 # positions, background). Finder AppleEvents time out in a non-GUI or sandboxed context — observed
@@ -14,16 +14,16 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DESKTOP="$(cd "$HERE/.." && pwd)"
 BUNDLE="$DESKTOP/src-tauri/target/release/bundle"
-APP="$BUNDLE/macos/Strata.app"
+APP="$BUNDLE/macos/Cortex.app"
 VERSION="$(grep -m1 '^version = ' "$DESKTOP/src-tauri/Cargo.toml" | cut -d'"' -f2)"   # the one place the app version is written
-OUT="${1:-$BUNDLE/dmg/Strata_${VERSION}_aarch64.dmg}"
+OUT="${1:-$BUNDLE/dmg/Cortex_${VERSION}_aarch64.dmg}"
 
 if [ ! -d "$APP" ]; then
   echo "error: $APP does not exist; run 'cargo tauri build --bundles app' first" >&2
   exit 1
 fi
 
-WORK="$(mktemp -d -t strata-dmg)"
+WORK="$(mktemp -d -t cortex-dmg)"
 trap 'rm -rf "$WORK"' EXIT
 
 # A staging folder is what create-dmg copies into the image: the app, and nothing else.
@@ -46,8 +46,8 @@ rm -f "$OUT"
 
 # --skip-jenkins: no Finder AppleScript. Everything else is the same code path Tauri uses.
 "$SCRIPT" \
-  --volname "Strata $VERSION" \
-  --volicon "$BUNDLE/macos/Strata.app/Contents/Resources/Strata.icns" \
+  --volname "Cortex $VERSION" \
+  --volicon "$BUNDLE/macos/Cortex.app/Contents/Resources/Cortex.icns" \
   --app-drop-link 400 200 \
   --skip-jenkins \
   --no-internet-enable \

@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
-from strata_cli.cli import main
+from cortex_cli.cli import main
 
 
 def gguf_fixture(*, architecture="qwen4exp", tokenizer=True, expert_type=42,
@@ -51,7 +51,7 @@ class ModelInventoryTests(unittest.TestCase):
             (tokenizer / name).write_bytes(b"placeholder")
         pack = self.root / "pack"
         pack.mkdir()
-        self.config = self.root / "strata-demo.json"
+        self.config = self.root / "cortex-demo.json"
         self.config.write_text(json.dumps({
             "exe": str(engine), "tokenizer": str(tokenizer),
             "args": ["--pack", str(pack), "--max-context", "32768"],
@@ -67,7 +67,7 @@ class ModelInventoryTests(unittest.TestCase):
         return code, json.loads(raw)
 
     def test_list_and_inspect_are_read_only_and_do_not_claim_compatibility(self):
-        (self.root / "strata-demo.shared-settings.json").write_text("{}", encoding="utf-8")
+        (self.root / "cortex-demo.shared-settings.json").write_text("{}", encoding="utf-8")
         before = {path.name: (path.read_bytes(), path.stat().st_mtime_ns)
                   for path in self.root.iterdir() if path.is_file()}
         code, listed = self.command("list", "--installed")
@@ -93,7 +93,7 @@ class ModelInventoryTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(listed["models"][0]["component_status"], "missing_or_invalid")
         self.assertIn("COMPONENT_MISSING", listed["models"][0]["issue_codes"])
-        (self.root / "strata-broken.json").write_text("{broken", encoding="utf-8")
+        (self.root / "cortex-broken.json").write_text("{broken", encoding="utf-8")
         code, listed = self.command("list", "--installed")
         self.assertEqual(code, 0)
         self.assertEqual(listed["model_count"], 2)
@@ -107,7 +107,7 @@ class ModelInventoryTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertFalse(error["ok"])
         if os.name == "posix":
-            (self.root / "strata-link.json").symlink_to(self.config)
+            (self.root / "cortex-link.json").symlink_to(self.config)
             code, listed = self.command("list", "--installed")
             self.assertEqual(code, 0)
             self.assertEqual(next(row for row in listed["models"] if row["id"] == "link")
@@ -127,7 +127,7 @@ class ModelInventoryTests(unittest.TestCase):
         snapshot = {"model": {"id": "served-demo", "loaded": True},
                     "instance": {"id": "instance-123"}}
         output = io.StringIO()
-        with mock.patch("strata_cli.client.Endpoint.snapshot", return_value=snapshot) as fetch, \
+        with mock.patch("cortex_cli.client.Endpoint.snapshot", return_value=snapshot) as fetch, \
                 redirect_stdout(output):
             code = main(["models", "list", "--served", "--url", "http://127.0.0.1:8095",
                          "--output", "json"])
@@ -139,7 +139,7 @@ class ModelInventoryTests(unittest.TestCase):
                                               "execution_compatibility": "unverified"}])
         fetch.assert_called_once_with()
         output = io.StringIO()
-        with mock.patch("strata_cli.client.Endpoint.snapshot", return_value={
+        with mock.patch("cortex_cli.client.Endpoint.snapshot", return_value={
                 "model": {"id": None, "loaded": None}, "instance": {"id": "i"}}), \
                 redirect_stdout(output):
             code = main(["models", "list", "--served", "--url", "http://127.0.0.1:8095",
@@ -173,11 +173,11 @@ class ModelInventoryTests(unittest.TestCase):
         thread.start()
         try:
             output = io.StringIO()
-            with mock.patch.dict(os.environ, {"STRATA_TELEMETRY_KEY": "read-only"}), \
+            with mock.patch.dict(os.environ, {"CORTEX_TELEMETRY_KEY": "read-only"}), \
                     redirect_stdout(output):
                 code = main(["models", "list", "--served", "--url",
                              f"http://127.0.0.1:{server.server_port}",
-                             "--credential-env", "STRATA_TELEMETRY_KEY", "--output", "json"])
+                             "--credential-env", "CORTEX_TELEMETRY_KEY", "--output", "json"])
             self.assertEqual(code, 0)
             self.assertEqual(json.loads(output.getvalue())["models"][0]["loaded"], False)
             self.assertEqual(seen, [("/v1/telemetry", "Bearer read-only")])

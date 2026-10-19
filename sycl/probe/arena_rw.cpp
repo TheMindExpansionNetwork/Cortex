@@ -9,7 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <vector>
-#include "strata/sycl_queue.hpp"
+#include "cortex/sycl_queue.hpp"
 
 static inline uint8_t pat(uint64_t off) {
     uint64_t x = off * 0x9E3779B97F4A7C15ull;
@@ -31,7 +31,7 @@ int main(int argc, char** argv) {
     if (!arena) { std::printf("alloc failed\n"); return 1; }
     arena = (uint8_t*) (((uintptr_t) arena + (2 << 20) - 1) & ~(uintptr_t) ((2 << 20) - 1));   // as the engine's: 2 MiB aligned
     std::printf("arena %p, %zu slots of %zu (stride %zu)\n", (void*) arena, n_slots, slot, stride);
-    if (zero) strata::big_fill_zero(q, arena, n_slots * stride);
+    if (zero) cortex::big_fill_zero(q, arena, n_slots * stride);
     uint8_t* pin = sycl::malloc_host<uint8_t>(2 * batch * stride, q);
     sycl::event done[2];
     size_t k = 0;

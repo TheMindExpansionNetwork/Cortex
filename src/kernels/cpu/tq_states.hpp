@@ -10,14 +10,14 @@
 #include <cstdint>
 #include <cstring>
 
-namespace strata::kernels::cpu::tq_detail {
+namespace cortex::kernels::cpu::tq_detail {
 
 inline constexpr uint32_t kTqStateMask = 0x7fffu;
 
 inline uint32_t tq_ld32(const uint8_t* p) {
     uint32_t v;
     std::memcpy(&v, p, 4);
-    return v;   // x86 (and every target Strata builds for) is little-endian
+    return v;   // x86 (and every target Cortex builds for) is little-endian
 }
 
 /// State t alone (t a constant after unrolling); `wrap` = tq_wrap<KB>(qs) for the TQK windows past the end.
@@ -85,4 +85,4 @@ inline uint16_t tq_ld16(const uint8_t* p) {
     return v;
 }
 
-}  // namespace strata::kernels::cpu::tq_detail
+}  // namespace cortex::kernels::cpu::tq_detail

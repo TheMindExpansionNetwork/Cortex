@@ -38,7 +38,7 @@ export function RunExpertEditor({ engine, config, text, onChange, onText, onRest
         const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
         const link = document.createElement('a');
         link.href = url;
-        link.download = 'strata-run-config.json';
+        link.download = 'cortex-run-config.json';
         link.click();
         URL.revokeObjectURL(url);
     }

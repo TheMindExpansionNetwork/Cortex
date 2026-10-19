@@ -21,7 +21,7 @@ import type { Task } from './tasks';
 import { postWithFolderFallback } from './folder-pick';
 import { setTranslationLanguage, tr, validLanguage, type Language } from './i18n';
 /**
- * Strata app store.
+ * Cortex app store.
  *
  * A single immutable state object + a tiny subscribe/emit pair, consumed through
  * useSyncExternalStore. Data comes from the engine host over /api; live updates
@@ -119,12 +119,12 @@ export interface AppState {
   busy: Record<string, boolean>;
 }
 
-const SESSION_KEY = 'strata.sessions.v1';
-const PREFS_KEY = 'strata.prefs.v2';
+const SESSION_KEY = 'cortex.sessions.v1';
+const PREFS_KEY = 'cortex.prefs.v2';
 /** What the model has been allowed to read, kept across restarts. */
-const TOUCHED_KEY = 'strata.touched.v1';
+const TOUCHED_KEY = 'cortex.touched.v1';
 /** Kept one release so downgrading does not lose the theme and sidebar state. */
-const PREFS_KEY_V1 = 'strata.prefs.v1';
+const PREFS_KEY_V1 = 'cortex.prefs.v1';
 
 const CONTENT_FS_MIN = 10;
 const CONTENT_FS_MAX = 22;
@@ -216,7 +216,7 @@ setTranslationLanguage(prefs.language);
 let state: AppState = {
   language: prefs.language,
   fontFamily: prefs.fontFamily,
-  configDraft: (() => { try { return sessionStorage.getItem('strata.config-draft.v1'); } catch { return null; } })(),
+  configDraft: (() => { try { return sessionStorage.getItem('cortex.config-draft.v1'); } catch { return null; } })(),
   navOpen: false,
   ready: false,
   connection: 'connecting',
@@ -295,8 +295,8 @@ export function getState(): AppState {
 export function setConfigDraft(configDraft: string | null) {
   set({ configDraft });
   try {
-    if (configDraft === null) sessionStorage.removeItem('strata.config-draft.v1');
-    else sessionStorage.setItem('strata.config-draft.v1', configDraft);
+    if (configDraft === null) sessionStorage.removeItem('cortex.config-draft.v1');
+    else sessionStorage.setItem('cortex.config-draft.v1', configDraft);
   } catch { /* Keep the session draft even when browser storage is unavailable. */ }
 }
 
@@ -310,7 +310,7 @@ export function selectRemoteModel(remoteModel: RemoteModelSelection | null) {
   set({ remoteModel });
   const id = state.activeSession;
   if (id) patchSession(id, s => ({ ...s, preferences: { ...s.preferences, remoteModel } }));
-  try { localStorage.removeItem('strata.remote-model.v1'); } catch { /* The old global choice is retired. */ }
+  try { localStorage.removeItem('cortex.remote-model.v1'); } catch { /* The old global choice is retired. */ }
 }
 function applyProviders(providers: ModelProviders) {
   // A chat whose API model was removed keeps its choice: the next send says the model is gone, rather
@@ -563,7 +563,7 @@ export async function addWorkspace(path: string) {
   try {
     const ws = await api.post<Workspace>('/api/workspaces', { path });
     set({ workspaces: [...state.workspaces, ws] });
-    pushToast('success', 'Workspace added', `Strata can now read files in ${ws.name}.`);
+    pushToast('success', 'Workspace added', `Cortex can now read files in ${ws.name}.`);
   } catch (err) {
     pushToast('error', "Couldn't add that folder", err instanceof Error ? err.message : String(err));
   }
@@ -1186,7 +1186,7 @@ export function plainTimeSkipError(raw: string | null | undefined): string {
   if (/too big/i.test(body)) return tr('This folder is too big to try a change on a copy. Open a smaller folder for this chat, then try again.');
   if (/folder of your own/i.test(body)) return tr('Time-skip works on a folder of your own. Choose a workspace folder for this chat, then try again.');
   if (/Load a model|model first/i.test(body)) return tr('Load a model first, then try Time-skip again.');
-  if (/needs the Strata app|could not be reached/i.test(body)) return tr('The assistant could not be reached. Try again.');
+  if (/needs the Cortex app|could not be reached/i.test(body)) return tr('The assistant could not be reached. Try again.');
   return body.length > 300 ? body.slice(0, 299) + '…' : body;
 }
 
@@ -1361,7 +1361,7 @@ export async function retryLast(messageId?: string) {
   const prompt = rewindTo(user.id);
   if (prompt !== null) {
     // Retry sends immediately; only Edit should leave the prompt in the composer.
-    sessionStorage.setItem(`strata.chat-draft.${state.activeSession}`, '');
+    sessionStorage.setItem(`cortex.chat-draft.${state.activeSession}`, '');
     await sendMessage(prompt);
   }
 }
@@ -1434,7 +1434,7 @@ export function rewindTo(messageId: string): string | null {
   const branchId = branchFrom(messageId);
   if (!branchId) return null;
   patchSession(branchId, s => ({ ...s, messages: s.messages.slice(0, -1), tokensIn: 0, tokensOut: s.messages.slice(0, -1).reduce((n, m) => n + (m.tokens ?? 0), 0) }));
-  sessionStorage.setItem(`strata.chat-draft.${branchId}`, prompt);
+  sessionStorage.setItem(`cortex.chat-draft.${branchId}`, prompt);
   return prompt;
 }
 
@@ -1800,8 +1800,8 @@ export function go(route: Route, param?: string) {
 /* ---------------------------------------------------------------- bootstrap */
 
 export function bootOnce() {
-  if ((globalThis as { __strataBooted?: boolean }).__strataBooted) return;
-  (globalThis as { __strataBooted?: boolean }).__strataBooted = true;
+  if ((globalThis as { __cortexBooted?: boolean }).__cortexBooted) return;
+  (globalThis as { __cortexBooted?: boolean }).__cortexBooted = true;
   for (const session of state.sessions) for (const run of session.timeSkips ?? []) { scheduleTimeSkip(session.id, run); if (run.job && !run.completedAt) { markTurn(session.id, { abort: new AbortController(), agent: false }); void followTimeSkip(session.id, run.id); } }
   void bootstrap();
   void reconcileAgentTools();

@@ -39,7 +39,7 @@ def start(fd: int, on_loss=None, grace: float = 60.0) -> None:
                 pass
             (on_loss or _stop_gracefully)()
 
-        threading.Thread(target=watch_windows, name="strata-owner-guard", daemon=True).start()
+        threading.Thread(target=watch_windows, name="cortex-owner-guard", daemon=True).start()
         return
     if os.name != "posix" or fd < 0 or os.getpgrp() != os.getpid():
         raise ValueError("--owner-fd requires a dedicated POSIX server process group")
@@ -67,4 +67,4 @@ def start(fd: int, on_loss=None, grace: float = 60.0) -> None:
         except OSError:
             pass
 
-    threading.Thread(target=watch, name="strata-owner-guard", daemon=True).start()
+    threading.Thread(target=watch, name="cortex-owner-guard", daemon=True).start()

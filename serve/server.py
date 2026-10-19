@@ -1,7 +1,7 @@
 """serve/server.py - plan v0.3 P8: OpenAI and Anthropic endpoints over any engine that maps token ids to tokens.
 
     python -m serve.server --engine mock --port 8095            (a scripted engine, for clients and tests)
-    python -m serve.server --engine strata --config strata.json --port 8080   (the real engine, resident)
+    python -m serve.server --engine cortex --config cortex.json --port 8080   (the real engine, resident)
 
 Endpoints: POST /v1/chat/completions (OpenAI, stream and non-stream), POST /v1/messages (Anthropic, stream and
 non-stream), GET /v1/models, GET /models, GET /props, GET /slots, GET /health, GET /mcp. One sequence at a time behind a FIFO (plan: one resident sequence).
@@ -9,9 +9,9 @@ Image generation (optional, when the config has an "images" section): POST /v1/i
 plus seed and steps) runs stable-diffusion.cpp's sd-cli for Qwen-Image-2.1-Turbo, one job at a time on the GPU the
 text engine uses (serve/images.py).
 Tools from MCP servers (serve/mcp.py, `"mcp_servers"` in the config or --mcp-config) are offered only to requests that
-ask for them with `"strata_mcp": true` - the web app does; other clients see exactly the API they always saw.
+ask for them with `"cortex_mcp": true` - the web app does; other clients see exactly the API they always saw.
 Images (optional, when the config has a "vision" entry): OpenAI image_url parts and Anthropic image blocks (base64
-data, http(s) URLs or local file paths) go through `strata-vision` (the model's mmproj file) and reach the engine as
+data, http(s) URLs or local file paths) go through `cortex-vision` (the model's mmproj file) and reach the engine as
 embeddings (`GENI`).  JPEG/PNG/BMP/GIF go straight in; WebP, TIFF, AVIF, ... (agents like omp send WebP) are
 converted to PNG first with Pillow.
 A request whose prompt alone does not fit the engine's context is REJECTED with 400, never truncated.  When the prompt
@@ -21,7 +21,7 @@ brings back the strict 400 of llama.cpp.
 An unset (or 0, or -1) max tokens means "unlimited": whatever the prompt leaves of the context.
 
 The engine boundary is `Engine.generate(prompt_ids, max_new, sampling, cancel) -> iterator of token ids`.
-`StrataEngine` keeps one `strata --serve` process resident (weights, expert arena and VRAM tier load once) and
+`CortexEngine` keeps one `cortex --serve` process resident (weights, expert arena and VRAM tier load once) and
 talks to it over stdin/stdout; `MockEngine` is a scripted stand-in that makes every API path testable without a GPU.
 """
 from __future__ import annotations
@@ -65,8 +65,8 @@ from serve.frontend import (THINK_END, ChatTemplate, Event, OutputParser, anthro
                             tool_choice_of, unmark_think_literals)
 from serve.mcp import McpCancelled, hub_from_config  # noqa: E402
 from serve import runconfig  # noqa: E402
-from strata_control import engine_component  # noqa: E402
-from strata_control import vision_reader  # noqa: E402
+from cortex_control import engine_component  # noqa: E402
+from cortex_control import vision_reader  # noqa: E402
 from serve import ready as ready_file  # noqa: E402
 from serve import owner_guard  # noqa: E402
 from serve import launch_identity  # noqa: E402
@@ -101,18 +101,18 @@ ENGINE_QUIT_WAIT_S, ENGINE_TERM_WAIT_S, ENGINE_KILL_WAIT_S = 20, 5, 20
 
 
 def end_leftover_engines(exe: str) -> None:
-    """Before an engine starts: end the ones a lost server left running (strata_control/procs.py). Only a process
+    """Before an engine starts: end the ones a lost server left running (cortex_control/procs.py). Only a process
     this install recorded whose starter is gone, or an orphan of exactly this executable running --serve, and only
     after its PID, start time and command line are checked again at the moment of the signal. Never raises."""
-    if os.environ.get("STRATA_KEEP_LEFTOVERS") == "1":
+    if os.environ.get("CORTEX_KEEP_LEFTOVERS") == "1":
         return
     try:
-        from strata_control import procs
+        from cortex_control import procs
         say = lambda text: print(text, flush=True)        # noqa: E731
         procs.end_leftovers(say=say)
         procs.end_orphans(exe, say=say)
     except Exception as e:  # noqa: BLE001 - a failed check must not stop a start
-        print(f"[strata] could not check for engines left by an earlier run: {type(e).__name__}", flush=True)
+        print(f"[cortex] could not check for engines left by an earlier run: {type(e).__name__}", flush=True)
 
 
 def listen_problem(host: str, port: int, e: OSError) -> str:
@@ -121,14 +121,14 @@ def listen_problem(host: str, port: int, e: OSError) -> str:
     import errno
     code = getattr(e, "winerror", None) or e.errno
     if code in (errno.EADDRINUSE, 10048):
-        return (f"port {port} is already in use - is Strata (or another server) already running? "
+        return (f"port {port} is already in use - is Cortex (or another server) already running? "
                 f"Close it, or start this one with a different --port")
     what = e.strerror or str(e)
     if code in (10013, errno.EACCES):
         hint = ("Windows may keep this port for itself (see `netsh int ipv4 show excludedportrange protocol=tcp`) "
                 "or a firewall rule forbids it: start this one with a different --port")
     elif code in (10049, errno.EADDRNOTAVAIL):
-        hint = f"{host} is not an address of this PC: check \"host\" in the model's strata-<model>.json or --host"
+        hint = f"{host} is not an address of this PC: check \"host\" in the model's cortex-<model>.json or --host"
     else:
         hint = "check --host and --port"
     return f"cannot listen on {host}:{port}: {what} [{code}]. {hint}"
@@ -145,7 +145,7 @@ def combined_embeddings_path(vision_dir: Path, nbytes: int) -> Path:
     if os.name != "nt" and shm.is_dir() and os.access(shm, os.W_OK):
         try:
             if shutil.disk_usage(shm).free > 2 * nbytes + (16 << 20):
-                return shm / f"strata-vision-{os.getpid()}-{name}"
+                return shm / f"cortex-vision-{os.getpid()}-{name}"
         except OSError:
             pass
     return Path(vision_dir) / name
@@ -244,7 +244,7 @@ KEEPALIVE_S = 10.0          # a held-back tool argument leaves the stream quiet:
 # Anthropic clients add /v1/messages to their base URL themselves. A base URL that already ends in /v1 (copied from an OpenAI-style
 # setup) makes them post /v1/v1/messages; these two paths mean the same as the real ones. Nothing else is aliased.
 V1_V1_ALIASES = {"/v1/v1/messages": "/v1/messages", "/v1/v1/messages/count_tokens": "/v1/messages/count_tokens"}
-CTX_SLACK = 8               # `strata --serve` rejects prompt + max_new + 8 > context: keep the same margin here
+CTX_SLACK = 8               # `cortex --serve` rejects prompt + max_new + 8 > context: keep the same margin here
 # The live tok/s is a rate over a window, not a mean since the first token: a mean reads ~1/elapsed at the first
 # token (the Monitor showed five-digit numbers) and then undershoots for the first second of every answer.
 RATE_WINDOW_S = 2.0
@@ -267,7 +267,7 @@ PP_SLACK = 3.0
 # fire and every later request queued behind it (the "lost step" class of #481).  Generous on purpose: a cold model
 # load, a slow disk or a slow CPU encode is not a hang.  Only a process that says nothing at all for this long is
 # ended; the next request starts it again.
-# STRATA_ENGINE_READY_S / STRATA_VISION_READY_S / STRATA_VISION_ENCODE_S override them (0 = wait for ever, as before).
+# CORTEX_ENGINE_READY_S / CORTEX_VISION_READY_S / CORTEX_VISION_ENCODE_S override them (0 = wait for ever, as before).
 
 
 def _timeout_env(name: str, default: float) -> float | None:
@@ -283,17 +283,17 @@ def _timeout_env(name: str, default: float) -> float | None:
 # moves no bytes of I/O in that time is not slow, it is idle or frozen (a deadlock in a CUDA call, a driver stall, a lost
 # step), and waiting longer cannot help: it is ended, and the next request starts it again.  An engine that is silent but
 # still working is never ended by this, only reported once (the recommendation: engine_silence_s, or this variable).
-# STRATA_ENGINE_STALL_S overrides it (0 = off).  Needs psutil (setup installs it); without it nothing is ended.
-ENGINE_STALL_S = _timeout_env("STRATA_ENGINE_STALL_S", 90.0)
+# CORTEX_ENGINE_STALL_S overrides it (0 = off).  Needs psutil (setup installs it); without it nothing is ended.
+ENGINE_STALL_S = _timeout_env("CORTEX_ENGINE_STALL_S", 90.0)
 # --batch: new requests take the control lines (one prompt read at a time) short prompts first: a prompt of at most
-# STRATA_ADMIT_SHORT_FIRST tokens goes before longer ones (opt-in; unset or 0: whoever gets the lock first), and a
-# longer one that waited STRATA_ADMIT_MAX_WAIT_S (default 30) counts as short.  A chat question then waits for the one
+# CORTEX_ADMIT_SHORT_FIRST tokens goes before longer ones (opt-in; unset or 0: whoever gets the lock first), and a
+# longer one that waited CORTEX_ADMIT_MAX_WAIT_S (default 30) counts as short.  A chat question then waits for the one
 # read in progress, not for every agent read that came before it.
 try:
-    ADMIT_SHORT_FIRST = max(0, int(os.environ.get("STRATA_ADMIT_SHORT_FIRST") or 0))
+    ADMIT_SHORT_FIRST = max(0, int(os.environ.get("CORTEX_ADMIT_SHORT_FIRST") or 0))
 except ValueError:
     ADMIT_SHORT_FIRST = 0
-ADMIT_MAX_WAIT_S = _timeout_env("STRATA_ADMIT_MAX_WAIT_S", 30.0) or 0.0
+ADMIT_MAX_WAIT_S = _timeout_env("CORTEX_ADMIT_MAX_WAIT_S", 30.0) or 0.0
 STALL_CPU_EPS_S = 0.5       # CPU seconds the engine may use in the whole stall window and still count as frozen
 STALL_IO_EPS_B = 1 << 20    # bytes read or written in that window
 
@@ -303,9 +303,9 @@ def engine_frozen(base: tuple[float, int], now: tuple[float, int]) -> bool:
     return (now[0] - base[0]) <= STALL_CPU_EPS_S and (now[1] - base[1]) <= STALL_IO_EPS_B
 
 
-VISION_READY_S = _timeout_env("STRATA_VISION_READY_S", 300.0)
-VISION_ENCODE_S = _timeout_env("STRATA_VISION_ENCODE_S", 300.0)
-ENGINE_READY_S = _timeout_env("STRATA_ENGINE_READY_S", 900.0)
+VISION_READY_S = _timeout_env("CORTEX_VISION_READY_S", 300.0)
+VISION_ENCODE_S = _timeout_env("CORTEX_VISION_ENCODE_S", 300.0)
+ENGINE_READY_S = _timeout_env("CORTEX_ENGINE_READY_S", 900.0)
 
 
 # ------------------------------------------------------------------------------------------------ engines
@@ -443,7 +443,7 @@ ENGINE_REQUEST = re.compile(
     r"(?P<gen>\d+) generated in (?P<gen_ms>[\d.]+) ms \((?P<tg>[\d.]+) tok/s\)")
 
 
-_echoing: set[str] = set()      # the logs echo_requests already follows (restart() runs StrataEngine.__init__ again)
+_echoing: set[str] = set()      # the logs echo_requests already follows (restart() runs CortexEngine.__init__ again)
 
 DRAFT_HEAD_FAIL = "the draft head does not fit"
 DRAFT_HEAD_HINT = ("a smaller draft vocabulary needs less VRAM: --draft-vocab cyrillic (English, code and the Cyrillic "
@@ -454,7 +454,7 @@ DRAFT_HEAD_HINT = ("a smaller draft vocabulary needs less VRAM: --draft-vocab cy
 
 def start_failure_hint(log: str | None, offset: int) -> str:
     """#474: what to change when the engine stopped at the start because the MTP draft head did not fit the VRAM
-    left: the engine's own `strata mtp:` lines after that failure (0.1.36+: what it needs, what is free, the smaller
+    left: the engine's own `cortex mtp:` lines after that failure (0.1.36+: what it needs, what is free, the smaller
     subsets), else the same advice in words for an older engine.  "" for any other failure: the log says why."""
     if not log:
         return ""
@@ -466,8 +466,8 @@ def start_failure_hint(log: str | None, offset: int) -> str:
         return ""
     if DRAFT_HEAD_FAIL not in text:
         return ""
-    said = [x.strip()[len("strata mtp: "):] for x in text.splitlines()
-            if x.strip().startswith("strata mtp: ") and ("draft head over" in x or "hint:" in x)]
+    said = [x.strip()[len("cortex mtp: "):] for x in text.splitlines()
+            if x.strip().startswith("cortex mtp: ") and ("draft head over" in x or "hint:" in x)]
     return ". mtp: " + DRAFT_HEAD_FAIL + ". " + (" ".join(said) if said else "Hint: " + DRAFT_HEAD_HINT)
 
 
@@ -585,9 +585,9 @@ def start_log_marks(log: str | None, offset: int) -> list:
 # A start that ends at once with the GPU runtime's own failure and none of the engine's lines: on ROCm, a start right
 # after the previous engine exited can fail inside the runtime's device/queue set-up while the old process's queues are
 # still being torn down ("terminate called after throwing an instance of 'rocr::AMD::hsa_exception'", or an exit with
-# nothing in the log).  Such a start is tried again after a short wait (STRATA_START_RETRIES, default 3; 0: never).
+# nothing in the log).  Such a start is tried again after a short wait (CORTEX_START_RETRIES, default 3; 0: never).
 TRANSIENT_START_MARKS = ("hsa_exception", "HSA_STATUS_ERROR", "hsaKmt")
-START_RETRIES = max(0, int(os.environ.get("STRATA_START_RETRIES", "3") or 0))
+START_RETRIES = max(0, int(os.environ.get("CORTEX_START_RETRIES", "3") or 0))
 
 
 def transient_start_failure(log: str | None, offset: int, elapsed_s: float, rc: int | None = None) -> bool:
@@ -603,7 +603,7 @@ def transient_start_failure(log: str | None, offset: int, elapsed_s: float, rc: 
     except (OSError, ValueError):
         return False
     lines = [x.strip() for x in text.splitlines() if x.strip()]
-    engine_lines = [x for x in lines if not x.startswith("[strata]")]
+    engine_lines = [x for x in lines if not x.startswith("[cortex]")]
     if any(m in text for m in TRANSIENT_START_MARKS):
         return all(x.startswith("terminate called") or x.startswith("what()") or
                    any(m in x for m in TRANSIENT_START_MARKS) for x in engine_lines)
@@ -615,7 +615,7 @@ def transient_start_failure(log: str | None, offset: int, elapsed_s: float, rc: 
 
 
 def echo_requests(log_path: str, offset: int) -> None:
-    """STRATA_REQUEST_LINES=1: one stdout line per finished request, from the engine's own summary in its log.
+    """CORTEX_REQUEST_LINES=1: one stdout line per finished request, from the engine's own summary in its log.
 
     The engine's stderr goes to the log file (the start narrator reads it), so a supervisor that only sees this
     process's output - a tray, llama-swap - has no per-request numbers. This re-states the engine's line with the
@@ -632,7 +632,7 @@ def echo_requests(log_path: str, offset: int) -> None:
             m = ENGINE_REQUEST.search(line)
             if m:
                 read_ms, gen_ms = float(m["read"]), float(m["gen_ms"])
-                print("[strata] request prompt %s cached %s output %s prompt_read %.0f ms total %.0f ms prefill %s "
+                print("[cortex] request prompt %s cached %s output %s prompt_read %.0f ms total %.0f ms prefill %s "
                       "tok/s decode %s tok/s" % (m["prompt"], m["reused"], m["gen"], read_ms, read_ms + gen_ms, m["pp"],
                                                  m["tg"]), flush=True)
 
@@ -683,7 +683,7 @@ def narrate_start(log_path: str, offset: int, args: list, done: threading.Event,
             last = time.time()
             print(text, flush=True)
 
-    say("weights", "[strata] starting the engine: reading the model's weights ...")
+    say("weights", "[cortex] starting the engine: reading the model's weights ...")
     pos = offset
     while not done.wait(0.5):
         try:
@@ -697,25 +697,25 @@ def narrate_start(log_path: str, offset: int, args: list, done: threading.Event,
             pos += cut
             for line in chunk[:cut].decode("utf-8", "replace").splitlines():
                 if "PLE on" in line or "expert arena:" in line or "experts via mmap" in line:   # #505: mapped
-                    say("arena", f"[strata] {loading}\n"
+                    say("arena", f"[cortex] {loading}\n"
                                  "         YOUR PC CAN BE SLOW OR STOP RESPONDING FOR 1-3 MINUTES NOW - this is normal.\n"
                                  "         Please wait and don't close this window"
                                  + ("; the browser opens when it is ready." if OPENS_BROWSER else "; the server says when it is ready."))
                 elif " loaded " in line and "GiB at" in line:
-                    say("loaded", "[strata] experts loaded: " + line.split(" loaded ", 1)[1].strip() +
+                    say("loaded", "[cortex] experts loaded: " + line.split(" loaded ", 1)[1].strip() +
                         f" ({time.time() - t0:.0f} s so far)")
                 elif "expert cache " in line and " slots, " in line and "auto" not in line:
                     n = line.split("expert cache ", 1)[1].split(";")[0].replace(" slots,", " experts,").strip()
-                    say("cache", f"[strata] filling the GPU's expert cache ({n}) ...")
+                    say("cache", f"[cortex] filling the GPU's expert cache ({n}) ...")
                 elif "session is up" in line:
-                    say("up", "[strata] almost ready ...")
+                    say("up", "[cortex] almost ready ...")
         if time.time() - last > heartbeat:
             last = time.time()
-            print(f"[strata] still starting ({time.time() - t0:.0f} s) - please wait ...", flush=True)
+            print(f"[cortex] still starting ({time.time() - t0:.0f} s) - please wait ...", flush=True)
 
 
 class ConvCacheLog:
-    """#596: the engine's conversation cache as its log tells it (the engine writes "strata serve: conversation
+    """#596: the engine's conversation cache as its log tells it (the engine writes "cortex serve: conversation
     cache: parked N tokens ...; parked=P bytes=B evictions=E" and "restored N tokens ...; parked=P bytes=B" to stderr,
     which is the log): read on from where it was last read, from the start of the engine's current run."""
     EVENT = re.compile(r"conversation cache: (parked|skipped|restored) (\d+) tokens.*?parked=(\d+) bytes=(\d+)"
@@ -797,7 +797,7 @@ def conversation_cache_view(info: dict, hist: list, totals: dict, parked: dict) 
             "last_prompt": last.get("prompt_tokens") if last else None}
 
 
-_BTRACE = bool(os.environ.get("STRATA_BATCH_TRACE"))
+_BTRACE = bool(os.environ.get("CORTEX_BATCH_TRACE"))
 
 
 def btrace(*a):
@@ -816,7 +816,7 @@ FATAL_PREFIXES = ("ERR verify: timed out at layer ", "ERR verify batch: timed ou
 
 def parse_engine_stage_line(line: str) -> list[dict] | None:
     """Accept only the engine's final, contiguous stage plan (inclusive layer ends)."""
-    prefix = "strata serve: layer split: layers "
+    prefix = "cortex serve: layer split: layers "
     suffix = ", one hand-off per window"
     if not line.startswith(prefix) or not line.rstrip("\r\n").endswith(suffix):
         return None
@@ -875,9 +875,9 @@ def configure_batch_telemetry_env(env: dict, cfg: dict, override: bool | None) -
     """Only an explicit setting changes the inherited opt-in engine environment."""
     choice = override if override is not None else cfg.get("batch_telemetry")
     if choice is True:
-        env["STRATA_BATCH_TELEMETRY"] = "1"
+        env["CORTEX_BATCH_TELEMETRY"] = "1"
     elif choice is False:
-        env.pop("STRATA_BATCH_TELEMETRY", None)
+        env.pop("CORTEX_BATCH_TELEMETRY", None)
 
 
 def parse_batch_window_sample(line: str) -> dict | None:
@@ -909,8 +909,8 @@ def parse_stage_in_flight_sample(line: str) -> dict | None:
     return {"elapsed_us": elapsed_us, "in_flight_us": in_flight_us}
 
 
-class StrataEngine:
-    """The resident engine: `strata --serve` reads `GEN <max_new> <ids>` lines and streams `T <id>` lines, then
+class CortexEngine:
+    """The resident engine: `cortex --serve` reads `GEN <max_new> <ids>` lines and streams `T <id>` lines, then
     `DONE ...`.  Requests are serialized by the service's FIFO, so one pipe is enough.
 
     Per-request sampling rides the same line as engine-side keys between max_new and the ids
@@ -978,12 +978,12 @@ class StrataEngine:
             threading.Thread(target=narrate_start, args=(log, os.path.getsize(log), args, loading),
                              daemon=True).start()
             # once per log: the follower keeps reading the same (appended) log across restarts and reloads
-            if os.environ.get("STRATA_REQUEST_LINES") and os.path.abspath(log) not in _echoing:
+            if os.environ.get("CORTEX_REQUEST_LINES") and os.path.abspath(log) not in _echoing:
                 _echoing.add(os.path.abspath(log))
                 threading.Thread(target=echo_requests, args=(log, os.path.getsize(log)), daemon=True).start()
         if log:                                          # #779: when an engine started (a crash report has the time)
             try:
-                self.log.write(f"[strata] {time.strftime('%Y-%m-%d %H:%M:%S')} engine started: {exe} --serve "
+                self.log.write(f"[cortex] {time.strftime('%Y-%m-%d %H:%M:%S')} engine started: {exe} --serve "
                                f"{' '.join(args)}\n")
                 self.log.flush()
             except OSError:
@@ -994,7 +994,7 @@ class StrataEngine:
             pin["preexec_fn"] = lambda: os.sched_setaffinity(0, cpus)
         end_leftover_engines(exe)                        # one an earlier run lost still holds the GPU and the memory
         spawned_at = time.monotonic()
-        self.proc = popen("the Strata engine", [exe, "--serve", *args], cwd=cwd, stdin=subprocess.PIPE,
+        self.proc = popen("the Cortex engine", [exe, "--serve", *args], cwd=cwd, stdin=subprocess.PIPE,
                           stdout=subprocess.PIPE, stderr=self.log, text=True, encoding="utf-8", bufsize=1, env=env, **pin)
         # the READY read has a timeout (#1317): the lines come from a thread, up to READY, so the rest of the stream
         # stays for _pump (one reader at a time)
@@ -1042,17 +1042,17 @@ class StrataEngine:
                 wait_s = 2.0 * (2 ** _attempt)              # 2, 4, 8 s: the previous process's GPU queues go away
                 exit_words = engine_exit_words(self.proc.returncode)
                 if start_log_marks(log, log_start):         # the runtime said so itself (hsa_exception ...)
-                    print(f"[strata] the engine stopped while the GPU runtime was starting (most often right after "
+                    print(f"[cortex] the engine stopped while the GPU runtime was starting (most often right after "
                           f"another engine exited, whose GPU queues were still being released"
                           f"{'; ' + exit_words if exit_words else ''}): starting it again in {wait_s:.0f} s "
                           f"(try {_attempt + 2} of {START_RETRIES + 1})", flush=True)
                 else:                                       # an exit with nothing in the log: say only what is known
-                    print(f"[strata] the engine exited before it wrote anything to its log"
+                    print(f"[cortex] the engine exited before it wrote anything to its log"
                           f"{' (' + exit_words + ')' if exit_words else ''}; it may be a GPU runtime that was not "
                           f"ready yet: starting it again in {wait_s:.0f} s (try {_attempt + 2} of {START_RETRIES + 1})",
                           flush=True)
                 time.sleep(wait_s)
-                StrataEngine.__init__(self, exe, args, cwd, log, env, lazy, cpus, _attempt + 1)
+                CortexEngine.__init__(self, exe, args, cwd, log, env, lazy, cpus, _attempt + 1)
                 return
             why = (f"the engine did not report READY within {ENGINE_READY_S:.0f} s" if timed_out else
                    "the engine exited before it was ready")
@@ -1061,7 +1061,7 @@ class StrataEngine:
             note = "" if timed_out else start_exit_note(self.proc.returncode, exe)
             tail = start_log_tail(log, log_start)
             lines = [x for x in tail.split("\n")[2:] if x.strip()]
-            if tail and lines and all(x.strip().startswith("[strata]") for x in lines):
+            if tail and lines and all(x.strip().startswith("[cortex]") for x in lines):
                 tail += "\n  (those are the launcher's own lines: the engine itself wrote nothing)"
             raise EngineDied(why + (f" (see {log})" if log else "") + note +
                              start_failure_hint(log, log_start) + tail)
@@ -1079,7 +1079,7 @@ class StrataEngine:
         asked = next((int(args[args.index(k) + 1]) for k in ("--batch", "--slots") if k in args), 0)
         self.batch = int(self.info.get("batch_slots") or 0)
         if asked and self.batch != asked:
-            print(f"[strata] parallel requests: {asked} asked, the engine runs {self.batch or 'one at a time'} "
+            print(f"[cortex] parallel requests: {asked} asked, the engine runs {self.batch or 'one at a time'} "
                   "(its log says why)", flush=True)
         _bg = args[args.index("--batch-groups") + 1] if "--batch-groups" in args else "default"
         # no `--batch-groups` (the default on a layer split) or `auto`: the engine picks the groups and says so
@@ -1182,7 +1182,7 @@ class StrataEngine:
             tail = wide[-4096:]
         except (OSError, TypeError):
             pass
-        # #1705: STRATA_VERIFY_TRACE dumps are ~30 KB and push the watchdog's line out of a 4 KB tail
+        # #1705: CORTEX_VERIFY_TRACE dumps are ~30 KB and push the watchdog's line out of a 4 KB tail
         for line in reversed(wide.splitlines()):
             if "issue #29" in line:
                 return ("The engine stopped itself because it had stopped making progress - a hang it caught. Its log "
@@ -1192,7 +1192,7 @@ class StrataEngine:
         if rc is not None and rc >= 0 and self.last_err:  # its own last words on stdout: they say why
             return (f"The engine exited (code {rc}) after it reported: {self.last_err} - please report it at "
                     "github.com/Niko1221/Strata/issues with the log.")
-        last = next((x.strip() for x in reversed(tail.splitlines()) if x.strip().startswith(("strata", "ERR"))), "")
+        last = next((x.strip() for x in reversed(tail.splitlines()) if x.strip().startswith(("cortex", "ERR"))), "")
         if rc is not None and rc >= 0 and last:          # it ended by itself: its own last words say why (#215)
             return (f"The engine exited (code {rc}). Its last log line: {last} - if that does not explain it, please "
                     "report it at github.com/Niko1221/Strata/issues with the log.")
@@ -1259,7 +1259,7 @@ class StrataEngine:
                         pass
                     if i == tries - 1:
                         raise
-                    print(f"[strata] the engine did not start (try {i + 1} of {tries}); again in "
+                    print(f"[cortex] the engine did not start (try {i + 1} of {tries}); again in "
                           f"{self.RESTART_RETRY_S:g} s", flush=True)
                     time.sleep(self.RESTART_RETRY_S)
         finally:
@@ -1362,7 +1362,7 @@ class StrataEngine:
         if isinstance(seed, int) and seed > 0:
             keys += f" seed={seed}"
         # setup's calibration (tools/calibrate.py): engine settings for this request only, measured without a restart
-        tune = sampling.get("strata_tune")
+        tune = sampling.get("cortex_tune")
         if isinstance(tune, dict):
             for k in ("pcie_frac", "spec_min_p"):
                 v = tune.get(k)
@@ -1378,23 +1378,23 @@ class StrataEngine:
             ac = tune.get("aux_cpus")
             if isinstance(ac, bool) or (isinstance(ac, (int, float)) and ac in (0, 1)):
                 keys += f" aux_cpus={int(ac)}"
-        # "strata_checkpoint": false - a one-shot call (a classification, a probe) whose turn no later request
+        # "cortex_checkpoint": false - a one-shot call (a classification, a probe) whose turn no later request
         # extends: no conversation checkpoint for it (#830).  It still reuses a cached prefix.  Absent = as before.
-        if sampling.get("strata_checkpoint") is False:
+        if sampling.get("cortex_checkpoint") is False:
             keys += " ckpt=0"
         # #2228: the pictures' keys (hex, in prompt order): the engine matches a picture by them, not by its embeddings
-        ik = sampling.get("strata_img_keys")
+        ik = sampling.get("cortex_img_keys")
         if isinstance(ik, list) and ik and all(isinstance(k, str) and k and all(c in "0123456789abcdef" for c in k)
                                                for k in ik):
             keys += " img_keys=" + ",".join(ik)
-        # "strata_prefix" (resolved by Service.resolve_prefix to {"tokens": N}): the first N prompt tokens are a shared
+        # "cortex_prefix" (resolved by Service.resolve_prefix to {"tokens": N}): the first N prompt tokens are a shared
         # prefix - the engine pins the checkpoint there.  Absent or unresolved = as before.
-        prefix = sampling.get("strata_prefix")
+        prefix = sampling.get("cortex_prefix")
         if isinstance(prefix, dict):
             pn = prefix.get("tokens")
             if isinstance(pn, int) and not isinstance(pn, bool) and pn > 0:
                 keys += f" pin={pn}"
-        return keys + StrataEngine.projection_key(sampling) + bias_api.engine_key(sampling.get("logit_bias"))
+        return keys + CortexEngine.projection_key(sampling) + bias_api.engine_key(sampling.get("logit_bias"))
 
     @staticmethod
     def projection_key(sampling: dict) -> str:
@@ -1608,7 +1608,7 @@ class StrataEngine:
             else:
                 self._orphan_seen.pop(b, None)
         if freed:
-            print(f"[strata] parallel: slot(s) {', '.join(map(str, freed))} were marked busy with no request using them "
+            print(f"[cortex] parallel: slot(s) {', '.join(map(str, freed))} were marked busy with no request using them "
                   "(issue #1603); freed, the waiting request goes on", flush=True)
             self.slot_cv.notify_all()
         return freed
@@ -1618,15 +1618,15 @@ class StrataEngine:
     def _take_control(self, cancel, plen: int, after_epoch: int | None = None, new: bool = False):
         """Waits for the control lines (one prompt read at a time), yielding None heartbeats; False when cancelled.
         `after_epoch`: a request whose read gave way lets the requests waiting then go first.
-        `new`: the request's first admission (STRATA_ADMIT_SHORT_FIRST orders only these)."""
-        entry = [plen, time.monotonic(), new]           # (length, arrival, ordered: STRATA_ADMIT_SHORT_FIRST)
+        `new`: the request's first admission (CORTEX_ADMIT_SHORT_FIRST orders only these)."""
+        entry = [plen, time.monotonic(), new]           # (length, arrival, ordered: CORTEX_ADMIT_SHORT_FIRST)
         with self.slot_cv:
             self.waiting += 1
             self.wait_lens.append(entry)
         beat = time.monotonic()
         try:
             while True:
-                deadline = getattr(cancel, "_strata_queue_deadline", None)
+                deadline = getattr(cancel, "_cortex_queue_deadline", None)
                 if deadline is not None and time.monotonic() >= deadline:
                     raise QueueWaitExpired("the inference queue wait deadline expired; retry later")
                 if not self.alive() and not getattr(self, "starting", False):
@@ -1674,9 +1674,9 @@ class StrataEngine:
         return True
 
     def _admit_next(self):
-        """STRATA_ADMIT_SHORT_FIRST=<tokens> (the caller holds slot_cv): the new request that takes the control lines
+        """CORTEX_ADMIT_SHORT_FIRST=<tokens> (the caller holds slot_cv): the new request that takes the control lines
         next - one whose prompt is at most that long (it reads little) before a longer one, in arrival order within
-        each; a longer one that has waited STRATA_ADMIT_MAX_WAIT_S counts as short (it is never held back for good).
+        each; a longer one that has waited CORTEX_ADMIT_MAX_WAIT_S counts as short (it is never held back for good).
         Off (unset or 0): whoever gets the lock first, as before.  Only the order changes, never what is read."""
         now = time.monotonic()
         ordered = [e for e in self.wait_lens if len(e) > 2 and e[2]]
@@ -1691,9 +1691,9 @@ class StrataEngine:
     def _may_go_solo(self, left: int, times: int, embeddings) -> bool:
         """A request decoding in a slot that is alone now (no other slot busy, nobody waiting) goes back to the solo
         path with its MTP drafts: the engine continues it from the slot's sessions (its slot cache; INFO
-        slot_cache=1).  STRATA_PARALLEL_SOLO=0 keeps it in the slot."""
+        slot_cache=1).  CORTEX_PARALLEL_SOLO=0 keeps it in the slot."""
         if (embeddings or times >= self.SOLO_AGAIN_MAX or left < self.SOLO_AGAIN_MIN_LEFT or
-                not (self.info or {}).get("slot_cache") or os.environ.get("STRATA_PARALLEL_SOLO") == "0"):
+                not (self.info or {}).get("slot_cache") or os.environ.get("CORTEX_PARALLEL_SOLO") == "0"):
             return False
         with self.slot_cv:
             return sum(1 for b in self.slot_busy if b) == 1 and self.waiting == 0
@@ -1744,13 +1744,13 @@ class StrataEngine:
                 if alone and left > 1:
                     head = f"GENI {left}{keys} {embeddings}" if embeddings else f"GEN {left}{keys}"
                     self._last_done = None                  # (#879: this request's DONE decides below)
-                    deadline = getattr(cancel, "_strata_queue_deadline", None)
+                    deadline = getattr(cancel, "_cortex_queue_deadline", None)
                     if deadline is not None and time.monotonic() >= deadline:
                         raise QueueWaitExpired("the inference queue wait deadline expired; retry later")
                     self._send(f"{head} {','.join(str(int(t)) for t in prompt)}")
                     if deadline is not None:
-                        cancel._strata_queue_deadline = None
-                    started = getattr(cancel, "_strata_queue_started", None)
+                        cancel._cortex_queue_deadline = None
+                    started = getattr(cancel, "_cortex_queue_started", None)
                     if started is not None:
                         started()
                     phase = "solo"
@@ -1812,7 +1812,7 @@ class StrataEngine:
                         # that gave way (BYIELD) and needs them to go on, so waiting with them is a deadlock - long,
                         # long, short at 0.25 s steps under parallel: 2 (ENGINE_REVIEW finding 1, reproduced in 0.1.41).
                         while True:
-                            deadline = getattr(cancel, "_strata_queue_deadline", None)
+                            deadline = getattr(cancel, "_cortex_queue_deadline", None)
                             if deadline is not None and time.monotonic() >= deadline:
                                 raise QueueWaitExpired("the inference queue wait deadline expired; retry later")
                             with self.slot_cv:
@@ -1838,7 +1838,7 @@ class StrataEngine:
                                         if not admit_said:
                                             admit_said = True
                                             busy = [b for b, v in enumerate(self.slot_busy) if v]
-                                            print(f"[strata] parallel: a request has waited {time.monotonic() - admit_since:.0f} s "
+                                            print(f"[cortex] parallel: a request has waited {time.monotonic() - admit_since:.0f} s "
                                                   f"for a free slot (busy: {busy}, in use: {sorted(self.slot_claims)}, "
                                                   f"ending: {sorted(self.slot_releasing)}) (issue #1603)", flush=True)
                                     self._reap_orphan_slots()
@@ -1867,18 +1867,18 @@ class StrataEngine:
                     while not self.slot_q[slot].empty():
                         self.slot_q[slot].get_nowait()
                     head = f"BGENI {slot} {left}{keys} {embeddings}" if embeddings else f"BGEN {slot} {left}{keys}"
-                    live = {"slot": slot, "request_id": getattr(cancel, "_strata_request_id", None),
+                    live = {"slot": slot, "request_id": getattr(cancel, "_cortex_request_id", None),
                             "state": "reading", "prompt_tokens": len(prompt), "prompt_read": 0, "generated": 0,
                             "started": time.time(), "first_token": None}
-                    deadline = getattr(cancel, "_strata_queue_deadline", None)
+                    deadline = getattr(cancel, "_cortex_queue_deadline", None)
                     if deadline is not None and time.monotonic() >= deadline:
                         raise QueueWaitExpired("the inference queue wait deadline expired; retry later")
                     self.slot_live[slot] = live
                     self._last_done = None                  # (#879: this admission's DONE decides below)
                     self._send(f"{head} {','.join(str(int(t)) for t in prompt)}")
                     if deadline is not None:
-                        cancel._strata_queue_deadline = None
-                    started = getattr(cancel, "_strata_queue_started", None)
+                        cancel._cortex_queue_deadline = None
+                    started = getattr(cancel, "_cortex_queue_started", None)
                     if started is not None:
                         started()
                     self.slot_held[slot] = []               # the admission overwrites what the slot held
@@ -1915,7 +1915,7 @@ class StrataEngine:
                         if not (self._ctl_erred and str(e).startswith("BGEN:") and left >= 1 and not cancel.is_set()):
                             raise
                         refused += 1
-                        print(f"[strata] parallel: the engine refused slot {slot} ({e}); trying another slot "
+                        print(f"[cortex] parallel: the engine refused slot {slot} ({e}); trying another slot "
                               f"({refused}/{self.BGEN_REFUSALS_MAX}) (issue #1994)", flush=True)
                         if refused > self.BGEN_REFUSALS_MAX:
                             raise GpuBusy("the engine's batch slots are not free right now; try again in a moment",
@@ -2271,12 +2271,12 @@ class StrataEngine:
             gpu_working = False
         if now is not None and not gpu_working and engine_frozen(state["base"], now):
             raise self._silent(f"the engine said nothing for {age:.0f} s and used no CPU or disk in that time (frozen; "
-                               "STRATA_ENGINE_STALL_S sets this, 0 = off)")
+                               "CORTEX_ENGINE_STALL_S sets this, 0 = off)")
         if now is not None:   # working: look again after another window from here, and say so once
             state["base"], state["next"] = now, age + stall_s
             if not state.get("warned"):
                 state["warned"] = True
-                print(f"[strata] the engine has said nothing for {age:.0f} s but is still working; it is not ended (the "
+                print(f"[cortex] the engine has said nothing for {age:.0f} s but is still working; it is not ended (the "
                       "limit is engine_silence_s). If it is stuck, \"engine_silence_s\" can be set lower.", flush=True)
         else:
             state["next"] = float("inf")   # no reading (psutil missing): nothing to decide on
@@ -2418,7 +2418,7 @@ class StrataEngine:
             try:
                 self.proc.wait(timeout=ENGINE_KILL_WAIT_S)
             except subprocess.TimeoutExpired:
-                raise EngineStuck("Strata is still releasing GPU/RAM; retry unloading after it exits") from None
+                raise EngineStuck("Cortex is still releasing GPU/RAM; retry unloading after it exits") from None
         except OSError:
             pass
         finally:
@@ -2475,7 +2475,7 @@ def vision_start_error(line: str, log=None) -> str:
 
 
 class Vision:
-    """The resident image encoder: `strata-vision` (llama.cpp mtmd + the mmproj file) reads `ENC <image> <out>`
+    """The resident image encoder: `cortex-vision` (llama.cpp mtmd + the mmproj file) reads `ENC <image> <out>`
     lines and writes each image's embeddings; results are cached by the image's hash, so a conversation that
     sends the same picture again (every turn, with most clients) encodes it once."""
 
@@ -2488,7 +2488,7 @@ class Vision:
         resort (the encoder's own files are then named relative to it, see `_start`)."""
         for parent in (None, Path.cwd(), Path(os.environ.get("SystemDrive", "C:") + os.sep)):
             try:
-                d = Path(tempfile.mkdtemp(prefix="strata-vision-", dir=parent))
+                d = Path(tempfile.mkdtemp(prefix="cortex-vision-", dir=parent))
             except OSError:
                 continue                                       # not writable, or no such drive
             if " " not in str(d):
@@ -2497,13 +2497,13 @@ class Vision:
                 d.rmdir()                                      # just created, so still empty
             except OSError:
                 pass
-        return Path(tempfile.mkdtemp(prefix="strata-vision-"))
+        return Path(tempfile.mkdtemp(prefix="cortex-vision-"))
 
     def __init__(self, cfg: dict, log=None, env: dict | None = None, lazy: bool = False):
         args = self.reader_args(cfg)
         self.dir = self.work_dir()
         self.spawn = (args, log, env)                   # to start it again after an unload
-        # AMD: the GPU reader (strata-vision-hip) has the CPU reader (strata-vision, same program, no GPU runtime) to
+        # AMD: the GPU reader (cortex-vision-hip) has the CPU reader (cortex-vision, same program, no GPU runtime) to
         # fall back on when it does not start; _start switches to it by itself
         cpu = vision_reader.cpu_fallback(cfg)
         self.fallback = (self.reader_args(cpu), log, env) if cpu else None
@@ -2545,7 +2545,7 @@ class Vision:
             if fallback is None:
                 raise
             why = " ".join(str(e).split())[:240]
-            print(f"[strata] the GPU picture reader did not start ({why}); pictures are read on the CPU", flush=True)
+            print(f"[cortex] the GPU picture reader did not start ({why}); pictures are read on the CPU", flush=True)
             self.spawn, self.fallback = fallback, None
             self._start_reader()
 
@@ -2641,7 +2641,7 @@ class Vision:
         filled the memory.  One that cannot be read is a ValueError (a 400 that says so), not a dropped connection."""
         too_big = f"the image URL's file is over {IMAGE_URL_MAX >> 20} MiB"
         try:
-            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "strata"}), timeout=60) as r:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "cortex"}), timeout=60) as r:
                 size = r.headers.get("Content-Length") or ""
                 if size.isdigit() and int(size) > IMAGE_URL_MAX:
                     raise ValueError(too_big)
@@ -2666,7 +2666,7 @@ class Vision:
 
     @staticmethod
     def normalize(data: bytes) -> bytes:
-        """The formats strata-vision's decoder (stb_image) reads pass through; anything else is converted to PNG.
+        """The formats cortex-vision's decoder (stb_image) reads pass through; anything else is converted to PNG.
         A JPEG with an EXIF Orientation other than 1 is turned upright first (needs Pillow)."""
         jpeg = data[:3] == b"\xff\xd8\xff"
         if (jpeg and not Vision._exif_rotated(data)) or data[:8] == b"\x89PNG\r\n\x1a\n" or data[:2] == b"BM" or \
@@ -2779,12 +2779,12 @@ def gpu_list(cfg: dict) -> list[int]:
 
 def engine_binary(exe: str, cfg: dict | None = None) -> str:
     """The file that holds the engine's own option strings, for a feature check that reads it.  The Intel launcher
-    (sycl/serve/strata-sycl.sh) is a shell script that runs its repo's STRATA_SYCL_BIN (default build-sycl-aot/strata)
+    (sycl/serve/cortex-sycl.sh) is a shell script that runs its repo's CORTEX_SYCL_BIN (default build-sycl-aot/cortex)
     in a container, so the check reads that binary, not the script.  Any other `exe` is the engine itself."""
     p = Path(exe)
-    if p.name == "strata-sycl.sh":
-        rel = ((cfg or {}).get("env") or {}).get("STRATA_SYCL_BIN") or os.environ.get("STRATA_SYCL_BIN") \
-            or "build-sycl-aot/strata"
+    if p.name == "cortex-sycl.sh":
+        rel = ((cfg or {}).get("env") or {}).get("CORTEX_SYCL_BIN") or os.environ.get("CORTEX_SYCL_BIN") \
+            or "build-sycl-aot/cortex"
         b = p.resolve().parents[2] / rel
         if b.is_file():
             return str(b)
@@ -2808,10 +2808,10 @@ def effort_end_args(cfg: dict, exe: str, tok) -> list[str] | None:
         known = False
     role = tok.encode("system", parse_special=True)
     if not known or len(role) != 1:
-        print("[strata] effort_position \"end\" needs engine 0.1.39 or newer (--tail-role-token): the reasoning "
+        print("[cortex] effort_position \"end\" needs engine 0.1.39 or newer (--tail-role-token): the reasoning "
               "effort stays at the top of the prompt", flush=True)
         return None
-    print("[strata] effort_position end: a request's non-default reasoning effort goes right before the answer, so "
+    print("[cortex] effort_position end: a request's non-default reasoning effort goes right before the answer, so "
           "changing it keeps the cached conversation", flush=True)
     return ["--tail-role-token", str(role[0])]
 
@@ -2881,7 +2881,7 @@ def engine_args(cfg: dict) -> list[str]:
         if cfg["vision"].get("gpu") and "--vram-reserve-mib" not in args:
             args += ["--vram-reserve-mib", "700"]
             note += " and --vram-reserve-mib 700"
-        print(f'[strata] the config has a "vision" section but no --vision in its args: {note} (run setup again with '
+        print(f'[cortex] the config has a "vision" section but no --vision in its args: {note} (run setup again with '
               "--vision to write them)", flush=True)
     if layer_split_of(cfg) and "--layer-split" not in args:
         args += ["--layer-split", layer_split_value(cfg)]
@@ -2912,13 +2912,13 @@ def parallel_args(cfg: dict, args: list[str]) -> list[str]:
     if n is None or n is False:
         return []
     if isinstance(n, bool) or not isinstance(n, int):
-        print(f'[strata] "parallel" must be a whole number of requests (2..{PARALLEL_MAX}), not {n!r}: ignored',
+        print(f'[cortex] "parallel" must be a whole number of requests (2..{PARALLEL_MAX}), not {n!r}: ignored',
               flush=True)
         return []
     if n <= 1:
         return []
-    if n > PARALLEL_MAX and "--batch-mtp" not in args and os.environ.get("STRATA_BATCH_MTP", "0") in ("", "0"):
-        print(f'[strata] "parallel": {n} - the engine runs at most {PARALLEL_MAX} requests together; it will use '
+    if n > PARALLEL_MAX and "--batch-mtp" not in args and os.environ.get("CORTEX_BATCH_MTP", "0") in ("", "0"):
+        print(f'[cortex] "parallel": {n} - the engine runs at most {PARALLEL_MAX} requests together; it will use '
               f"{PARALLEL_MAX}", flush=True)
     return ["--batch", str(n)]
 
@@ -2966,7 +2966,7 @@ def hip_visible(cfg: dict) -> list[int]:
 
     On Linux setup's KFD order is HIP's order, so the config's "gpu" is it.  On Windows setup finds the cards in the
     display-adapter order, and an integrated Radeon that HIP also enumerates takes ordinal 0 and pushes the discrete
-    card to 1 (#325): setup records the ordinal `strata-device --list-devices` gave the card as "hip_ordinal", which
+    card to 1 (#325): setup records the ordinal `cortex-device --list-devices` gave the card as "hip_ordinal", which
     wins for a one-card config.  Without it (a config from before), the config's "gpu"."""
     ordinal = cfg.get("hip_ordinal")
     if ordinal is not None and str(ordinal).strip() != "" and len(gpu_list(cfg)) <= 1:
@@ -3072,11 +3072,11 @@ def ordered_gpus(cfg: dict, scores=None, vrams=None) -> list[int]:
     if out != gl:
         vram = vrams if vrams is not None else (None if scores is not None else gpu_vram_mib(gl, hip))
         if vram is not None and all(i in vram for i in gl) and vram[out[-1]] < vram[gl[-1]]:
-            print(f"[strata] layer split: keeping card order {','.join(map(str, gl))} - the faster card has "
+            print(f"[cortex] layer split: keeping card order {','.join(map(str, gl))} - the faster card has "
                   f"less VRAM than the one the split ends on ({vram[out[-1]]} vs {vram[gl[-1]]} MiB, #1576)",
                   flush=True)
             return gl
-        print(f"[strata] layer split: card order {','.join(map(str, out))} (the faster card last; "
+        print(f"[cortex] layer split: card order {','.join(map(str, out))} (the faster card last; "
               f'"gpu_order": "as_given" keeps {",".join(map(str, gl))}, #1352)', flush=True)
     return out
 
@@ -3097,12 +3097,12 @@ def child_env(cfg: dict, *, offline: bool = False) -> dict:
     # the policy by naming the same variable.
     if offline:
         try:
-            from strata_control import offline as offline_policy
+            from cortex_control import offline as offline_policy
             env.update(offline_policy.OFFLINE_ENV)
         except ImportError:
             # The policy module is part of the application; without it, refuse rather than silently
             # running a child with network access under a flag that promised otherwise.
-            env["STRATA_OFFLINE"] = "1"
+            env["CORTEX_OFFLINE"] = "1"
             env["HF_HUB_OFFLINE"] = "1"
             env["TRANSFORMERS_OFFLINE"] = "1"
     dirs = [d for d in cfg.get("lib_dirs") or [] if Path(d).is_dir()]
@@ -3151,7 +3151,7 @@ def hip_env_guard(env: dict, cfg: dict) -> list[str]:
         else:
             said.append(f"{', '.join(bad)} not writable (AMD's runtime needs a writable temporary folder)")
     for line in said:
-        print(f"strata serve: AMD: {line}", file=sys.stderr, flush=True)
+        print(f"cortex serve: AMD: {line}", file=sys.stderr, flush=True)
     return said
 
 
@@ -3189,7 +3189,7 @@ class ByteTokenizer:
         return self.encode_marked(text, parse_special, plain)[0]
 
     def encode_marked(self, text, parse_special=False, plain=()):
-        """encode() and its resume points (after each special), as strata_tokenizer's for PromptEncoder."""
+        """encode() and its resume points (after each special), as cortex_tokenizer's for PromptEncoder."""
         out, marks, i = [], [], 0
         while i < len(text):
             for k, s in enumerate(self.SPECIALS):
@@ -3372,10 +3372,10 @@ class Service:
         # #321: browser pages of these origins may call /v1/* (CORS; "*" = any page - only with an api_key that
         # matters); empty = no CORS headers at all, as before
         self.cors_origins: list[str] = []
-        # #321: origins that count as Strata's own page for /settings and MCP tools, e.g. the web app reached through a
+        # #321: origins that count as Cortex's own page for /settings and MCP tools, e.g. the web app reached through a
         # reverse proxy or tunnel whose Host differs ("https://strata.example.com"); never a wildcard
         self.trusted_origins: list[str] = []
-        # DNS rebinding: extra Host names this server answers to (the config's allowed_hosts, $STRATA_ALLOWED_HOSTS;
+        # DNS rebinding: extra Host names this server answers to (the config's allowed_hosts, $CORTEX_ALLOWED_HOSTS;
         # "*" = any), and every name it answers to, which serve() works out from the address it listens on
         self.allowed_hosts: list[str] = []
         self.host_names: set[str] = set(LOOPBACK_NAMES)
@@ -3446,11 +3446,11 @@ class Service:
         self.stop_ids = set(tokenizer.encode(IM_END, parse_special=True) +
                             tokenizer.encode("<|endoftext|>", parse_special=True))
         # #567: a prompt re-encodes only what follows the last special token it shares with a recent prompt (the
-        # same ids as a full encode: tools/strata_tokenizer.py PromptEncoder).  Tokenizers without resume points
+        # same ids as a full encode: tools/cortex_tokenizer.py PromptEncoder).  Tokenizers without resume points
         # encode in full.
         self.prompts = None
         if hasattr(tokenizer, "encode_marked") and hasattr(tokenizer, "max_special_len"):
-            from strata_tokenizer import PromptEncoder
+            from cortex_tokenizer import PromptEncoder
             # one kept prompt per conversation the engine's cache can hold (--conversation-cache-slots); the
             # encoder's own default without that setting
             slots = conversation_slots(engine)
@@ -3500,7 +3500,7 @@ class Service:
         """Cancel once; count only work that was still queued or active when the client left."""
         with self.status_lock:
             if not cancel.is_set():
-                request_id = getattr(cancel, "_strata_request_id", None)
+                request_id = getattr(cancel, "_cortex_request_id", None)
                 active = request_id in self.terminal_requests
                 cancel.set()
                 if active:
@@ -3690,10 +3690,10 @@ class Service:
             try:
                 out = self.engine.vram((self._engine_reserve() or 0) + v.elastic_mib)
                 self.vision_held = True
-                print(f"[strata] images: the expert cache keeps {v.elastic_mib} MiB free for the image encoder "
+                print(f"[cortex] images: the expert cache keeps {v.elastic_mib} MiB free for the image encoder "
                       f"({out.get('expert_cache_mib')} of {out.get('expert_cache_full_mib')} MiB left)", flush=True)
             except ValueError as e:
-                print(f"[strata] images: the expert cache did not make room for the image encoder ({e}); starting "
+                print(f"[cortex] images: the expert cache did not make room for the image encoder ({e}); starting "
                       "it anyway", flush=True)
         if self.vision_held:
             time.sleep(0.2)          # the driver's free-VRAM counter shows the cache's release a moment later
@@ -3701,7 +3701,7 @@ class Service:
         v.restart()
         free1 = self.free_vram_mib()
         took = f", {free0 - free1} MiB of VRAM" if free0 is not None and free1 is not None else ""
-        print(f"[strata] images: the image encoder started in {time.time() - t0:.1f} s{took}", flush=True)
+        print(f"[cortex] images: the image encoder started in {time.time() - t0:.1f} s{took}", flush=True)
 
     def _vision_idle_down(self, force: bool = False) -> str:
         """An elastic encoder idle for elastic_idle_s (or force) stops, and the expert cache takes its VRAM back:
@@ -3718,7 +3718,7 @@ class Service:
             v.unload()
             if self.vision_held and hasattr(self.engine, "vram") and self.loaded():
                 out = self.engine.vram(self._engine_reserve())
-                print(f"[strata] images: the image encoder stopped after {v.elastic_idle_s:g} s without a picture; "
+                print(f"[cortex] images: the image encoder stopped after {v.elastic_idle_s:g} s without a picture; "
                       f"the expert cache took its VRAM back ({out.get('expert_cache_mib')} of "
                       f"{out.get('expert_cache_full_mib')} MiB)", flush=True)
             self.vision_held = False
@@ -3730,7 +3730,7 @@ class Service:
         v = self.vision
         if not getattr(v, "elastic", False):
             return
-        print(f"[strata] images: the image encoder starts with the first picture and stops after {v.elastic_idle_s:g} s "
+        print(f"[cortex] images: the image encoder starts with the first picture and stops after {v.elastic_idle_s:g} s "
               f"without one; while it runs the expert cache keeps {v.elastic_mib} MiB free for it", flush=True)
 
         def loop():
@@ -3739,7 +3739,7 @@ class Service:
                 try:
                     self._vision_idle_down()
                 except Exception as e:                 # tried again at the next turn; the thread keeps running
-                    print(f"[strata] images: stopping the idle image encoder: {e}", flush=True)
+                    print(f"[cortex] images: stopping the idle image encoder: {e}", flush=True)
         threading.Thread(target=loop, daemon=True).start()
 
     def free_vram_mib(self) -> int | None:
@@ -3765,7 +3765,7 @@ class Service:
         hook_failed = None
         if self.before_load:
             cmd = self.before_load
-            print(f"[strata] before loading: {cmd if isinstance(cmd, str) else ' '.join(map(str, cmd))}", flush=True)
+            print(f"[cortex] before loading: {cmd if isinstance(cmd, str) else ' '.join(map(str, cmd))}", flush=True)
             why = None
             try:
                 r = subprocess.run(cmd, shell=isinstance(cmd, str), timeout=self.before_load_timeout_s,
@@ -3782,18 +3782,18 @@ class Service:
                 # does not refuse: the card's free VRAM decides (min_free_vram_mib, checked just below); "strict" always
                 # refuses, "ignore" always loads.
                 if self.before_load_strict and not self.before_load_ignore_failure:
-                    print(f"[strata] the before_load command failed ({why}); the model stays unloaded and this "
+                    print(f"[cortex] the before_load command failed ({why}); the model stays unloaded and this "
                           "request is answered 503 - try again (before_load_strict)", flush=True)
                     raise GpuBusy(f"the before_load command failed ({why}): the GPU was not given back, so the "
                                   "model was not loaded; try again in a moment", retry_after=15)
                 hook_failed = why
                 if self.before_load_ignore_failure or not self.min_free_vram_mib:
-                    print(f"[strata] the before_load command failed ({why}); loading anyway"
+                    print(f"[cortex] the before_load command failed ({why}); loading anyway"
                           + ("" if self.before_load_ignore_failure else
                              " (set min_free_vram_mib to have the free VRAM checked, or before_load_strict to refuse)"),
                           flush=True)
                 else:
-                    print(f"[strata] the before_load command failed ({why}); checking the free VRAM", flush=True)
+                    print(f"[cortex] the before_load command failed ({why}); checking the free VRAM", flush=True)
         if self.min_free_vram_mib and not (hook_failed and self.before_load_ignore_failure):
             free = self.free_vram_mib()
             deadline = time.time() + self.vram_free_wait_s   # memory another process just gave back can take a moment
@@ -3802,18 +3802,18 @@ class Service:
                 free = self.free_vram_mib()
             if free is not None and free < self.min_free_vram_mib:
                 if hook_failed and not self.before_load_ignore_failure:
-                    print(f"[strata] the before_load command failed ({hook_failed}) and only {free} MiB of VRAM is "
+                    print(f"[cortex] the before_load command failed ({hook_failed}) and only {free} MiB of VRAM is "
                           f"free (the model needs {self.min_free_vram_mib}): not loading; 503", flush=True)
                 raise GpuBusy(f"the GPU is in use by another program: {free} MiB of VRAM free, the model needs "
                               f"{self.min_free_vram_mib} (min_free_vram_mib) - it stays unloaded until that is free"
                               + (f"; the before_load command failed ({hook_failed})" if hook_failed else ""),
                               retry_after=15)
             if hook_failed and not self.before_load_ignore_failure:
-                print(f"[strata] the before_load command failed ({hook_failed}), but {free} MiB of VRAM is free: "
+                print(f"[cortex] the before_load command failed ({hook_failed}), but {free} MiB of VRAM is free: "
                       "loading", flush=True)
         vision_started = False
         if self._vision_down():                         # first, as at a start: a GPU encoder takes its VRAM before
-            print("[strata] starting the vision encoder ...", flush=True)   # the engine sizes its cache
+            print("[cortex] starting the vision encoder ...", flush=True)   # the engine sizes its cache
             try:
                 self.vision.restart()
             except Exception as e:
@@ -3822,10 +3822,10 @@ class Service:
         if self.loaded():
             return
         if getattr(self.engine, "unloaded", False):
-            print("[strata] loading the model again (it was unloaded) ...", flush=True)
+            print("[cortex] loading the model again (it was unloaded) ...", flush=True)
         else:
             code = self.engine.exit_code() if hasattr(self.engine, "exit_code") else None
-            print(f"[strata] the engine had stopped (exit code {code}); starting it again "
+            print(f"[cortex] the engine had stopped (exit code {code}); starting it again "
                   "(a minute or two) ...", flush=True)
         try:
             self.engine.restart()
@@ -3833,14 +3833,14 @@ class Service:
             if vision_started:
                 self.vision.unload()
             raise
-        print("[strata] the engine is running again", flush=True)
+        print("[cortex] the engine is running again", flush=True)
         if self.restore_after_load:                      # an image job unloaded it: its conversation comes back
             images_api.restore_session(self)
         if self.vram_reserve is not None and hasattr(self.engine, "vram"):   # #533: the reserve asked for last
             try:
                 self.engine.vram(self.vram_reserve)
             except (ValueError, EngineDied) as e:
-                print(f"[strata] the VRAM reserve ({self.vram_reserve} MiB) was not applied: {e}", flush=True)
+                print(f"[cortex] the VRAM reserve ({self.vram_reserve} MiB) was not applied: {e}", flush=True)
 
     vram_wait_s = 300.0                                  # #533: how long POST /v1/vram waits for a running request
 
@@ -3867,7 +3867,7 @@ class Service:
             # an elastic encoder that runs keeps its VRAM on top of the asked reserve
             out = self.engine.vram((reserve_mib or 0) + self.vision.elastic_mib if self.vision_held else reserve_mib)
             self.vram_reserve, self.vram_reserve_asked = reserve_mib, True
-            print(f"[strata] VRAM: {out.get('vram_free_mib')} MiB free, expert cache {out.get('expert_cache_mib')} of "
+            print(f"[cortex] VRAM: {out.get('vram_free_mib')} MiB free, expert cache {out.get('expert_cache_mib')} of "
                   f"{out.get('expert_cache_full_mib')} MiB ({out.get('expert_slots')} experts)", flush=True)
             return {"status": "ok", **out}
         finally:
@@ -3879,7 +3879,7 @@ class Service:
         """The server window's line for an engine that died (or was ended, #481) in the middle of a request."""
         note = self.engine.death_note() if hasattr(self.engine, "death_note") else ""
         log = getattr(self.engine, "log_path", None)
-        print(f"[strata] {e}. {note} The next request starts the engine again."
+        print(f"[cortex] {e}. {note} The next request starts the engine again."
               f"{' Its log: ' + log if log else ''}", flush=True)
 
     def load(self):
@@ -3946,7 +3946,7 @@ class Service:
             if self.vision is not None and hasattr(self.vision, "unload"):
                 self.vision.unload()
             self.vision_held = False
-            print(f"[strata] model unloaded{f' after {idle_for:.0f} s idle' if idle_for else ''}; "
+            print(f"[cortex] model unloaded{f' after {idle_for:.0f} s idle' if idle_for else ''}; "
                   "the next request loads it again", flush=True)
             return "unloaded"
         finally:
@@ -3955,7 +3955,7 @@ class Service:
     def start_idle_unload(self):
         if not self.idle_unload_s or not hasattr(self.engine, "unload"):
             return
-        print(f"[strata] the model unloads after {self.idle_unload_s} s without requests", flush=True)
+        print(f"[cortex] the model unloads after {self.idle_unload_s} s without requests", flush=True)
 
         def loop():
             while True:
@@ -3963,7 +3963,7 @@ class Service:
                 try:
                     self.unload(idle_for=self.idle_unload_s)
                 except EngineStuck as e:                # tried again at the next turn; the thread keeps running
-                    print(f"[strata] idle unload: {e}", flush=True)
+                    print(f"[cortex] idle unload: {e}", flush=True)
         threading.Thread(target=loop, daemon=True).start()
 
     def set_shared(self, defaults) -> dict:
@@ -3976,7 +3976,7 @@ class Service:
                 else:
                     Path(self.shared_path).unlink(missing_ok=True)
             except OSError as e:
-                print(f"[strata] could not save the shared settings: {e}", flush=True)
+                print(f"[cortex] could not save the shared settings: {e}", flush=True)
         return self.shared
 
     def effort_default(self) -> str | None:
@@ -4143,7 +4143,7 @@ class Service:
 
     def prometheus(self) -> str:
         """GET /metrics/prometheus: the totals and what is running in Prometheus' text format, under llama-server's
-        metric names (llamacpp:*) so its dashboards work unchanged; the drafts and requests as strata:*."""
+        metric names (llamacpp:*) so its dashboards work unchanged; the drafts and requests as cortex:*."""
         with self.status_lock:
             s, t = dict(self.status), dict(self.totals)
             running = len(self.live_reqs) or int(bool(s.get("busy")))
@@ -4169,10 +4169,10 @@ class Service:
              d_predicted_n / d_decode_s if d_decode_s > 0 else 0),
             ("llamacpp:requests_processing", "gauge", "Requests running", running),
             ("llamacpp:requests_deferred", "gauge", "Requests waiting their turn", s.get("queued") or 0),
-            ("strata:requests_total", "counter", "Requests finished", t["requests"]),
-            ("strata:drafts_offered_total", "counter", "Speculative draft tokens offered", t["drafts_offered"]),
-            ("strata:drafts_accepted_total", "counter", "Speculative draft tokens accepted", t["drafts_accepted"]),
-            ("strata:model_loaded", "gauge", "1 while the model is loaded", int(self.loaded())),
+            ("cortex:requests_total", "counter", "Requests finished", t["requests"]),
+            ("cortex:drafts_offered_total", "counter", "Speculative draft tokens offered", t["drafts_offered"]),
+            ("cortex:drafts_accepted_total", "counter", "Speculative draft tokens accepted", t["drafts_accepted"]),
+            ("cortex:model_loaded", "gauge", "1 while the model is loaded", int(self.loaded())),
         ]
         return "".join(f"# HELP {name} {help_}\n# TYPE {name} {kind}\n{name} {value}\n"
                        for name, kind, help_, value in rows)
@@ -4194,7 +4194,7 @@ class Service:
         busy, ctx = bool(s.get("busy")), self.reported_ctx()
         images = self.vision is not None
         return {
-            "service": "strata", "model": self.model,
+            "service": "cortex", "model": self.model,
             "loaded": self.loaded(), "auto_load": hasattr(self.engine, "restart"),
             "structured_output": {"formats": ["json_object", "json_schema"], "method": "prompt_and_validate",
                                   "constrained_decoding": False, "stream_buffered": True},
@@ -4300,7 +4300,7 @@ class Service:
                     except (ValueError, OSError) as e:
                         why = str(e)
                 if why is not None:
-                    print(f"[strata] a picture a tool returned was left out of the prompt: {why}", flush=True)
+                    print(f"[cortex] a picture a tool returned was left out of the prompt: {why}", flush=True)
                     content[n] = {"type": "text", "text": f"[image omitted: {why}]"}
         return fetched
 
@@ -4394,8 +4394,8 @@ class Service:
                                  f"prompt ({len(ids)} tokens) + max tokens ({max_new}) exceeds the context "
                                  f"({ctx}); requests are never truncated. Send a smaller "
                                  f"max_tokens (at most {max(0, room)} here), or add \"fit_max_tokens\": true to the "
-                                 "model's strata-<model>.json to shorten it to the room left (#545)")
-            print(f"[strata] max_tokens {max_new} shortened to {max(1, room)}: the prompt ({len(ids)} tokens) leaves that much "
+                                 "model's cortex-<model>.json to shorten it to the room left (#545)")
+            print(f"[cortex] max_tokens {max_new} shortened to {max(1, room)}: the prompt ({len(ids)} tokens) leaves that much "
                   f"of the context ({ctx}); \"fit_max_tokens\": false answers 400 instead", flush=True)
             max_new = max(1, room)          # a shorter completion beats a 400 (the default)
         if images:
@@ -4409,14 +4409,14 @@ class Service:
             # (an encoder restart, the cache's eviction) with other bits still matches its checkpoints
             self.embeddings.keys = [Path(p).stem[:16] for p, _ in encoded]
             write_temporary(combined, [p for p, _ in encoded])
-        if req is not None and req.get("strata_prefix") is not None:
-            req["strata_prefix"] = self.resolve_prefix(req["strata_prefix"], messages, tools, kwargs, ids, bool(images))
+        if req is not None and req.get("cortex_prefix") is not None:
+            req["cortex_prefix"] = self.resolve_prefix(req["cortex_prefix"], messages, tools, kwargs, ids, bool(images))
         return ids, kwargs.get("enable_thinking", True) is not False, max_new
 
-    PREFIX_END = "\u0001strata-prefix-end\u0001"          # marks where a message's shared part ends in the rendered prompt
+    PREFIX_END = "\u0001cortex-prefix-end\u0001"          # marks where a message's shared part ends in the rendered prompt
 
     def resolve_prefix(self, spec, messages, tools, kwargs, ids, has_images=False) -> dict:
-        """R1: `"strata_prefix"` marks the start of the prompt as a shared read-only prefix: a long document that many
+        """R1: `"cortex_prefix"` marks the start of the prompt as a shared read-only prefix: a long document that many
         short questions follow.  Three ways to say where it ends: `{"messages": K}` (the first K messages), `{"message":
         I, "chars": N}` (the first N characters of message I's text: a document and its question in one message) or
         `{"tokens": N}`.  The engine reads the prompt in two parts there, keeps the checkpoint at the boundary pinned
@@ -4427,13 +4427,13 @@ class Service:
         keys = ("messages", "message", "chars", "tokens")
         if (not isinstance(spec, dict) or not spec or any(k not in keys for k in spec) or
                 set(spec) not in ({"messages"}, {"tokens"}, {"message", "chars"})):
-            raise ValueError('strata_prefix: {"messages": K} (the first K messages), {"message": I, "chars": N} (the first '
+            raise ValueError('cortex_prefix: {"messages": K} (the first K messages), {"message": I, "chars": N} (the first '
                              'N characters of message I) or {"tokens": N}')
         for k, v in spec.items():
             if not isinstance(v, int) or isinstance(v, bool) or v < (0 if k == "message" else 1):
-                raise ValueError(f"strata_prefix.{k}: a whole number ({'0' if k == 'message' else '1'} or more)")
+                raise ValueError(f"cortex_prefix.{k}: a whole number ({'0' if k == 'message' else '1'} or more)")
         if has_images:
-            print("[strata] strata_prefix ignored: the request has images", flush=True)
+            print("[cortex] cortex_prefix ignored: the request has images", flush=True)
             return {}
         what = ",".join(f"{k}={v}" for k, v in spec.items())
 
@@ -4467,7 +4467,7 @@ class Service:
         elif "messages" in spec:
             k = spec["messages"]
             if k >= len(messages):
-                print(f"[strata] strata_prefix.messages={k} ignored: the request has {len(messages)} message(s) and the "
+                print(f"[cortex] cortex_prefix.messages={k} ignored: the request has {len(messages)} message(s) and the "
                       "prefix must leave at least the last one", flush=True)
                 return {}
             head = head_ids(messages[:k])
@@ -4476,13 +4476,13 @@ class Service:
             i, chars = spec["message"], spec["chars"]
             text = messages[i].get("content") if 0 <= i < len(messages) else None
             if not isinstance(text, str) or chars > len(text):
-                print(f"[strata] strata_prefix ignored: message {i} has no text of {chars} characters", flush=True)
+                print(f"[cortex] cortex_prefix ignored: message {i} has no text of {chars} characters", flush=True)
                 return {}
             cut = messages[:i] + [{**messages[i], "content": text[:chars] + self.PREFIX_END}]
             head = head_ids(cut)
             n = lcp(head, ids)
         if n < 1 or n >= len(ids) - 1:
-            print(f"[strata] strata_prefix {what} ignored: it leaves no usable prefix of the {len(ids)}-token prompt "
+            print(f"[cortex] cortex_prefix {what} ignored: it leaves no usable prefix of the {len(ids)}-token prompt "
                   f"(common start {n})", flush=True)
             return {}
         return {"tokens": n}
@@ -4524,13 +4524,13 @@ class Service:
         if s.get("first_token") is None:
             pr = getattr(self.engine, "progress", None)   # (position reached, prompt tokens): a reused prefix counts
             done = f"{pr[0]:,} of {pr[1]:,}" if pr and pr[1] else f"{s.get('prompt_tokens', 0):,}"   # as read (#29)
-            print(f"[strata] reading the prompt: {done} tokens, {el:.0f} s so far", flush=True)
+            print(f"[cortex] reading the prompt: {done} tokens, {el:.0f} s so far", flush=True)
         else:
             rate = s["generated"] / max(1e-6, now - s["first_token"])
             # #984: while a thinking budget applies, the thinking line shows it, not the request's max_tokens
             limit = (f"budget {s['thinking_budget']} (max {s.get('max_tokens')})"
                      if s["phase"] == "thinking" and s.get("thinking_budget") else f"max {s.get('max_tokens')}")
-            print(f"[strata] {s['phase']}: {s['generated']} of {limit} tokens, {rate:.1f} tok/s, "
+            print(f"[cortex] {s['phase']}: {s['generated']} of {limit} tokens, {rate:.1f} tok/s, "
                   f"{el:.0f} s", flush=True)
         return now
 
@@ -4563,14 +4563,14 @@ class Service:
             # the answer its quarter of the cap (the budget's wrap-up: a short closing sentence, </think>, the answer).
             # A request with a budget of its own, or max_tokens below ANSWER_ROOM_MIN_CAP, is left as it was.
             budget = max_new - min(max(ANSWER_RESERVE_MIN, max_new // 4), max_new // 2)
-            if max_new <= 32768: print(f"[strata] thinking limited to {budget} of max_tokens {max_new} so the answer has room "
+            if max_new <= 32768: print(f"[cortex] thinking limited to {budget} of max_tokens {max_new} so the answer has room "
                   "(\"answer_room\": false in the config turns this off)", flush=True)
         if budget and max_new and max_new > 0:
             # #984: a budget at or near max_tokens never fires before the reply is cut off while still thinking, so
             # it has no answer.  Close the thinking early enough to leave room for one.
             reserve = min(max(ANSWER_RESERVE_MIN, max_new // 4), max_new // 2)
             if budget > max_new - reserve:
-                print(f"[strata] thinking capped at {max_new - reserve} of max_tokens {max_new} to leave room for "
+                print(f"[cortex] thinking capped at {max_new - reserve} of max_tokens {max_new} to leave room for "
                       f"the answer (budget {budget})", flush=True)
                 budget = max(1, max_new - reserve)
         parser = OutputParser(thinking=thinking, tools=tools, stream_tools=True, recover=self.tool_call_recovery)
@@ -4607,11 +4607,11 @@ class Service:
         timings, before = None, None                    # this request's timings; the engine's `last` before it
         recovery_count, reasoning_text, repeat_coverage = 0, "", 0.0
         looped, next_loop_check = False, LOOP_CHECK_EVERY       # #728: reasoning that repeats whole passages
-        raw_ids = []                                    # every generated id (STRATA_DEBUG: dump raw model text)
+        raw_ids = []                                    # every generated id (CORTEX_DEBUG: dump raw model text)
         emb, self.embeddings.path = getattr(self.embeddings, "path", None), None   # this run's to delete now
         img_keys, self.embeddings.keys = getattr(self.embeddings, "keys", None), None
         if emb and img_keys:
-            sampling = {**(sampling or {}), "strata_img_keys": img_keys}   # #2228: sent beside the embeddings file
+            sampling = {**(sampling or {}), "cortex_img_keys": img_keys}   # #2228: sent beside the embeddings file
         # Only a DONE line replaces engine.last, so a request that died, errored or was disconnected must not have
         # the PREVIOUS request's decode figures recorded as its own: each pass keeps its own DONE (a segment) if
         # one arrived.  A reasoning-budget continuation is another native generation, not another API request,
@@ -4627,23 +4627,23 @@ class Service:
         st = {} if par else self.status
         rate = collections.deque(maxlen=32) if par else self.rate
         request_id = uuid.uuid4().hex[:12]
-        setattr(cancel, "_strata_request_id", request_id)
+        setattr(cancel, "_cortex_request_id", request_id)
         deadline = time.monotonic() + self.queue_timeout_s if self.queue_timeout_s is not None else None
         if deadline is not None:
-            setattr(cancel, "_strata_queue_deadline", deadline)
+            setattr(cancel, "_cortex_queue_deadline", deadline)
         def queue_started():
             with self.status_lock:
                 row = self.terminal_requests.get(request_id)
                 if row is not None and row["state"] != "reading":
                     row["state"] = "reading"
                     self._terminal_event_locked(request_id, "reading")
-        setattr(cancel, "_strata_queue_started", queue_started)
+        setattr(cancel, "_cortex_queue_started", queue_started)
         def replica_selected(index: int) -> None:
             with self.status_lock:
                 row = self.terminal_requests.get(request_id)
                 if row is not None:
                     row["replica"] = index
-        setattr(cancel, "_strata_replica_selected", replica_selected)
+        setattr(cancel, "_cortex_replica_selected", replica_selected)
         with self.status_lock:
             self.status["queued"] += 1
             self.terminal_requests[request_id] = {"id": request_id, "state": "queued",
@@ -4652,7 +4652,7 @@ class Service:
             self._terminal_event_locked(request_id, "queued")
         queued_counted = True
         try:
-            # --batch: the engine runs several requests at once (StrataEngine.generate_batched orders them)
+            # --batch: the engine runs several requests at once (CortexEngine.generate_batched orders them)
             turn = contextlib.ExitStack()
             if not par:
                 # #1619: a request waiting for the single turn sends a keep-alive every QUEUE_BEAT_S, so a client with
@@ -4819,7 +4819,7 @@ class Service:
                             raise
                         except ValueError as e:             # the engine's ERR line (it may have ended after it)
                             finish = "error"
-                            print(f"[strata] the engine reported an error: {e}", flush=True)
+                            print(f"[cortex] the engine reported an error: {e}", flush=True)
                             raise
                         except GeneratorExit:               # the client went away: an engine that never acknowledges
                             leaving = True                  # the STOP below is ended, but no error replaces this
@@ -4844,17 +4844,17 @@ class Service:
                                 nf_retried = True
                                 # the retry reads from token 0: its DONE, not this one's, says what was reused
                                 del segments[segments_before:]
-                                print("[strata] the engine's logits became non-finite before the first token (#879); it "
+                                print("[cortex] the engine's logits became non-finite before the first token (#879); it "
                                       "dropped its cached state: sending the request again once", flush=True)
                                 continue
                             if n == 0:
                                 finish = "error"
-                                print("[strata] the engine's logits became non-finite again on the retry (#879): the "
+                                print("[cortex] the engine's logits became non-finite again on the retry (#879): the "
                                       "request ends with an error", flush=True)
                                 raise EngineNonFinite("the model's output became non-finite (NaN) twice in a row "
                                                       "(#879); the engine has dropped its cached state - send the "
                                                       "request again")
-                            print(f"[strata] the engine's logits became non-finite after {n} tokens (#879): the reply "
+                            print(f"[cortex] the engine's logits became non-finite after {n} tokens (#879): the reply "
                                   "ends here as \"length\"; the engine dropped its cached state, so the next request "
                                   "reads its prompt from the start", flush=True)
                             finish = "length"
@@ -4875,7 +4875,7 @@ class Service:
                             if trace is not None:
                                 trace["reasoning_recoveries"] = recovery_count
                                 trace["reasoning_repeat_coverage"] = round(repeat_coverage, 3)
-                            print(f"[strata] repeated reasoning detected at {n} tokens "
+                            print(f"[cortex] repeated reasoning detected at {n} tokens "
                                   f"(coverage={repeat_coverage:.3f}); resuming the same output with the low-effort "
                                   "instruction (reasoning_loop_recovery)", flush=True)
                             continue
@@ -4888,7 +4888,7 @@ class Service:
                             close_retried = True
                             extra = self.tok.encode(REASONING_CLOSE, parse_special=True)
                             if max_new - n - len(extra) >= 1:
-                                print("[strata] the reply ended inside its thinking with no answer: closing the "
+                                print("[cortex] the reply ended inside its thinking with no answer: closing the "
                                       "thinking once and continuing (reasoning_close_retry)", flush=True)
                                 for t in extra:
                                     n += 1
@@ -4918,7 +4918,7 @@ class Service:
                         if max_new - n - len(extra) < 1:
                             break                       # no room left to answer: "length", as without a budget
                         if wrap:
-                            print(f"[strata] thinking budget reached ({thought} tokens): wrapping up the thinking",
+                            print(f"[cortex] thinking budget reached ({thought} tokens): wrapping up the thinking",
                                   flush=True)
                         for t in extra:
                             n += 1
@@ -4935,13 +4935,13 @@ class Service:
                     if cancel.is_set():
                         finish = "cancel"
                     elif looped:
-                        print(f"[strata] the thinking repeated the same passages (coverage={repeat_coverage:.3f}) at "
+                        print(f"[cortex] the thinking repeated the same passages (coverage={repeat_coverage:.3f}) at "
                               f"{n} tokens: ended as \"length\" (reasoning_loop_recovery: \"stop\" in "
-                              "strata-<model>.json; remove it to turn this off)", flush=True)
+                              "cortex-<model>.json; remove it to turn this off)", flush=True)
                     elif repeated:
-                        print(f"[strata] the reply repeated one token ({self.tok.decode([run_tok])!r}) "
+                        print(f"[cortex] the reply repeated one token ({self.tok.decode([run_tok])!r}) "
                               f"{run_len} times in a row: ended as \"length\" (repeat_stop_tokens in "
-                              "strata-<model>.json; 0 turns this off). If a new request with a short prompt does the "
+                              "cortex-<model>.json; 0 turns this off). If a new request with a short prompt does the "
                               "same, restart the server and report it (#606)", flush=True)
                 except GeneratorExit:                   # the client disconnected mid-stream
                     finish = "disconnect"
@@ -5006,14 +5006,14 @@ class Service:
                             hit_msg = f", expert cache {hit_rate*100:.1f}% hit" if hit_rate is not None else ""
                             if hit_msg and pcie_share:
                                 hit_msg += f" (+{pcie_share*100:.1f}% of the routed experts over PCIe)"
-                            print(f"[strata] done: {n} tokens in {el:.0f} s ({rate:.1f} tok/s) "
+                            print(f"[cortex] done: {n} tokens in {el:.0f} s ({rate:.1f} tok/s) "
                                   f"({finish}, cancel={cancel.is_set()}){hit_msg}", flush=True)
                             if finish == "length" and parser.state in ("reasoning", "rcall"):   # #530
-                                print("[strata] the reply reached max tokens while still thinking, so it has no "
+                                print("[cortex] the reply reached max tokens while still thinking, so it has no "
                                       "answer: a thinking budget (reasoning_budget_tokens, in the request or in "
-                                      "strata-<model>.json for every request) leaves room to answer", flush=True)
-                            if os.environ.get("STRATA_DEBUG") and raw_ids:
-                                print(f"[strata] raw: {self.tok.decode(raw_ids)!r}", flush=True)
+                                      "cortex-<model>.json for every request) leaves room to answer", flush=True)
+                            if os.environ.get("CORTEX_DEBUG") and raw_ids:
+                                print(f"[cortex] raw: {self.tok.decode(raw_ids)!r}", flush=True)
                         st["busy"] = False
                         st.pop("tail", None)                     # #212: the answer's end is not kept once it is done
                         st.pop("tool", None)
@@ -5052,7 +5052,7 @@ class Service:
             yield "event", ev
         if parser.rescued or parser.refused:
             self.totals["tool_calls_from_reasoning"] = self.totals.get("tool_calls_from_reasoning", 0) + parser.rescued
-            print(f"[strata] tool calls inside the thinking: {parser.rescued} read as calls, {parser.refused} kept as "
+            print(f"[cortex] tool calls inside the thinking: {parser.rescued} read as calls, {parser.refused} kept as "
                   f"reasoning (quoted, or the turn did not end on a stop)", flush=True)
         if stops is not None and stops.hit is None and stops.held:
             yield "event", Event("content", stops.flush())     # the held tail was not a stop string after all
@@ -5098,7 +5098,7 @@ def add_carry(carry: dict, last: dict) -> dict:
 
 def request_timings(prompt_tokens: int, generated: int, last: dict) -> dict | None:
     """One request's `timings` in llama.cpp's names (what its clients show as speed), from the engine's own clock
-    (StrataEngine.last): prompt_n is what was read, cache_n what the conversation cache already held.  None when the
+    (CortexEngine.last): prompt_n is what was read, cache_n what the conversation cache already held.  None when the
     engine keeps no clock (MockEngine)."""
     if last.get("prompt_ms") is None:
         return None
@@ -5138,15 +5138,15 @@ def request_stats(segments: list[dict]) -> dict:
 
 
 def _debug_req(api, req, messages, tools, max_new, thinking, prompt_tokens):
-    """One compact line per request while diagnosing blank/empty turns. Set STRATA_DEBUG=1 to enable."""
-    if not os.environ.get("STRATA_DEBUG"):
+    """One compact line per request while diagnosing blank/empty turns. Set CORTEX_DEBUG=1 to enable."""
+    if not os.environ.get("CORTEX_DEBUG"):
         return
     last = messages[-1] if messages else {}
     body = last.get("content")
     if isinstance(body, list):
         body = " ".join(p.get("text", "") for p in body if isinstance(p, dict))
     preview = (str(body or "")[:80]).replace("\n", " ")
-    print(f"[strata] req {api}: msgs={len(messages)} tools={len(tools or [])} "
+    print(f"[cortex] req {api}: msgs={len(messages)} tools={len(tools or [])} "
           f"max_tokens_raw={req.get('max_tokens')!r}/{req.get('max_completion_tokens')!r} "
           f"max_new={max_new} thinking={thinking} stream={bool(req.get('stream'))} "
           f"prompt_tokens={prompt_tokens} last={last.get('role')!r}:{preview!r}", flush=True)
@@ -5225,7 +5225,7 @@ def run_with_mcp(svc: Service, hub, messages, tools, kw, ids, thinking, max_new,
             if "r" not in box:
                 break
             r = box["r"]
-            print(f"[strata] tool {c.name}: {'ok' if r['ok'] else 'error'}, {r['chars']:,} characters in "
+            print(f"[cortex] tool {c.name}: {'ok' if r['ok'] else 'error'}, {r['chars']:,} characters in "
                   f"{r['ms'] / 1000:.1f} s{' (truncated for the model)' if r['truncated'] else ''}", flush=True)
             results.append(r["text"])
             yield "mcp", {"event": "result", "id": c.id, **{k: r[k] for k in ("ok", "text", "chars", "truncated", "ms")}}
@@ -5274,11 +5274,11 @@ def prompt_progress(svc: Service):
 
 def openai_chunks(svc: Service, req: dict, ids, thinking, tools, max_new, cancel, run=None, force=None):
     """`run`: the events to send instead of Service.run's (run_with_mcp); its ("mcp", {...}) items become chunks with
-    an empty delta and a `strata_mcp` field, which only the web app reads.  `force`: see Service.run."""
+    an empty delta and a `cortex_mcp` field, which only the web app reads.  `force`: see Service.run."""
     cid, created = "chatcmpl-" + uuid.uuid4().hex[:24], int(time.time())
     model = svc.model_for(req)
     # llama.cpp's flag, and its default: a client that wants prompt progress asks for it, and nothing changes for one
-    # that does not.  Strata already sends a keep-alive comment on every PP line, so this only fills that line in.
+    # that does not.  Cortex already sends a keep-alive comment on every PP line, so this only fills that line in.
     want_progress = bool(req.get("return_progress"))
 
     def chunk(delta, finish=None):
@@ -5297,7 +5297,7 @@ def openai_chunks(svc: Service, req: dict, ids, thinking, tools, max_new, cancel
             yield None if pp is None else {**chunk({}), "prompt_progress": pp}
         elif kind == "mcp":
             c = chunk({})
-            c["strata_mcp"] = x
+            c["cortex_mcp"] = x
             yield c
         elif kind == "event":
             ev: Event = x
@@ -5347,8 +5347,8 @@ def openai_collect(chunks) -> dict:
     for c in chunks:
         if c is None:                              # a heartbeat
             continue
-        if c.get("strata_mcp"):
-            mcp.append(c["strata_mcp"])
+        if c.get("cortex_mcp"):
+            mcp.append(c["cortex_mcp"])
         d = c["choices"][0]["delta"]
         content.append(d.get("content") or "")
         reasoning.append(d.get("reasoning_content") or "")
@@ -5369,7 +5369,7 @@ def openai_collect(chunks) -> dict:
     if calls:
         msg["tool_calls"] = calls
     if mcp:
-        msg["strata_mcp"] = mcp
+        msg["cortex_mcp"] = mcp
     out = {"id": last["id"], "object": "chat.completion", "created": last["created"], "model": last["model"],
            "choices": [{"index": 0, "message": msg, "finish_reason": last["choices"][0]["finish_reason"]}],
            "usage": last["usage"]}
@@ -5512,10 +5512,10 @@ CHUNKED_BODY_MAX = 256 << 20                # #893: the most a Transfer-Encoding
 
 def body_limit() -> int:
     """The most a request body may hold, in bytes (read into memory): 256 MiB, which is a million-token conversation
-    with room to spare; STRATA_MAX_BODY_MIB changes it (0 or an unreadable value: the default).  A larger one is
+    with room to spare; CORTEX_MAX_BODY_MIB changes it (0 or an unreadable value: the default).  A larger one is
     answered 413 before it is read (a Content-Length of 10 TB used to be read until the client gave up)."""
     try:
-        mib = int(os.environ.get("STRATA_MAX_BODY_MIB", "0"))
+        mib = int(os.environ.get("CORTEX_MAX_BODY_MIB", "0"))
     except ValueError:
         mib = 0
     return mib << 20 if mib > 0 else CHUNKED_BODY_MAX
@@ -5614,7 +5614,7 @@ def make_handler(svc: Service):
             if length > limit:
                 self.close_connection = True               # the body is not read: the connection ends with the answer
                 raise BadBody(413, f"the request body is larger than {limit >> 20} MiB "
-                                   "(STRATA_MAX_BODY_MIB raises the limit)")
+                                   "(CORTEX_MAX_BODY_MIB raises the limit)")
             return self.rfile.read(length)
 
         def _drain_body(self):
@@ -5659,13 +5659,13 @@ def make_handler(svc: Service):
             host = self.headers.get("Host")
             if svc.api_key or host_allowed(host, svc.host_names, "*" in svc.allowed_hosts):
                 return True
-            print(f"[strata] refused a request for Host {host!r} from {self.client_address[0]}: not a name this server "
-                  f"answers to (add it to \"allowed_hosts\" in the config or STRATA_ALLOWED_HOSTS, or set an API key)",
+            print(f"[cortex] refused a request for Host {host!r} from {self.client_address[0]}: not a name this server "
+                  f"answers to (add it to \"allowed_hosts\" in the config or CORTEX_ALLOWED_HOSTS, or set an API key)",
                   flush=True)
             self._json(403, {"error": {"type": "forbidden", "message":
-                             f"Host {host!r} is not allowed (DNS rebinding protection). Reaching Strata under this "
-                             f"name on purpose? Add it to \"allowed_hosts\" in the config (strata-<model>.json) or to "
-                             f"the STRATA_ALLOWED_HOSTS environment variable, or set an API key (\"api_key\"), which "
+                             f"Host {host!r} is not allowed (DNS rebinding protection). Reaching Cortex under this "
+                             f"name on purpose? Add it to \"allowed_hosts\" in the config (cortex-<model>.json) or to "
+                             f"the CORTEX_ALLOWED_HOSTS environment variable, or set an API key (\"api_key\"), which "
                              f"turns this check off"}})
             return False
 
@@ -5678,7 +5678,7 @@ def make_handler(svc: Service):
                 return False
             if not origin_allowed(origin, self.headers.get("Host"), svc.host_names,
                                   [*svc.trusted_origins, *svc.cors_origins]):
-                print(f"[strata] refused an API request from the web page {origin!r} (no API key; add its host to "
+                print(f"[cortex] refused an API request from the web page {origin!r} (no API key; add its host to "
                       f"\"allowed_hosts\" or its origin to \"cors_origins\" in the config)", flush=True)
                 self._json(403, {"error": {"type": "forbidden", "message":
                                  f"web pages of {origin} may not use this server without an API key; set \"api_key\", "
@@ -5724,7 +5724,7 @@ def make_handler(svc: Service):
                         svc.note_client_disconnect(cancel)
                         return
 
-            threading.Thread(target=watch, daemon=True, name="strata-client-watch").start()
+            threading.Thread(target=watch, daemon=True, name="cortex-client-watch").start()
 
         def _note(self, **values):
             """#332: what the monitor shows about this request (nothing when the monitor is off)."""
@@ -5863,7 +5863,7 @@ def make_handler(svc: Service):
                 return
             if path == "/v1/telemetry":
                 if self._authorized_telemetry():
-                    from strata_cli.client import normalize_legacy
+                    from cortex_cli.client import normalize_legacy
                     snapshot = normalize_legacy(svc.metrics(), svc.v1_status())
                     snapshot["source"] = "server-v1"
                     snapshot["work"]["slots_requested"] = getattr(svc, "requested_slots", None)
@@ -6069,7 +6069,7 @@ def make_handler(svc: Service):
                 self._json(200, {"status": "ok", "max_context": svc.reported_ctx(), "model": svc.model,
                                  "images": svc.vision is not None, "api_key": bool(svc.api_key),
                                  "image_generation": svc.images is not None,
-                                 "loaded": svc.loaded(), "service": "strata"})
+                                 "loaded": svc.loaded(), "service": "cortex"})
             elif path.startswith("/v1/images/files/"):
                 # response_format url: the name (32 random hex digits) is the access, as an OpenAI image URL is
                 f = svc.images.file(path[len("/v1/images/files/"):]) if svc.images is not None else None
@@ -6125,7 +6125,7 @@ def make_handler(svc: Service):
                         busy = bool(svc.status.get("busy"))
                         # llama.cpp's name for what the slot's context holds: the running request's prompt size,
                         # kept after it ends (the conversation cache carries it on).  A front-end's context meter
-                        # divides it by n_ctx; without the key it reads 0 % against Strata forever (#562).
+                        # divides it by n_ctx; without the key it reads 0 % against Cortex forever (#562).
                         in_use = int(svc.status.get("prompt_tokens") or 0)
                     if getattr(svc.engine, "batch", 0) and hasattr(svc.engine, "slots_view"):
                         # --batch: one entry per slot (the same view /metrics has), not one for the whole engine
@@ -6164,7 +6164,7 @@ def make_handler(svc: Service):
                 return
             if path in ("/unload", "/load") and not self._control_body():
                 return
-            # JSON from Strata's own page only, as /settings: else a plain form POST from any site unloads the model
+            # JSON from Cortex's own page only, as /settings: else a plain form POST from any site unloads the model
             if path in ("/unload", "/load") and not self._own_page("the model can be loaded or unloaded"):
                 return
             # the same for the slot files: else any site could overwrite a saved conversation or replace the live one
@@ -6275,11 +6275,11 @@ def make_handler(svc: Service):
                 else:
                     self._json(404, {"error": {"message": "not found"}})
             except EngineNonFinite as e:                    # #879, twice: not the request's fault
-                print(f"[strata] 503: {e}", flush=True)
+                print(f"[cortex] 503: {e}", flush=True)
                 self._json(503, responses_error_body(str(e), "server_error") if path == "/v1/responses"
                            else {"error": {"type": "server_error", "message": str(e)}})
             except ValueError as e:
-                print(f"[strata] 400 invalid request: {e}", flush=True)
+                print(f"[cortex] 400 invalid request: {e}", flush=True)
                 if path == "/v1/responses":
                     self._json(400, responses_error_body(str(e)))
                 else:
@@ -6305,7 +6305,7 @@ def make_handler(svc: Service):
                 if getattr(self, "answer_started", False):
                     raise
                 import traceback
-                print(f"[strata] 400 malformed request ({type(e).__name__}: {e}):\n" + traceback.format_exc(),
+                print(f"[cortex] 400 malformed request ({type(e).__name__}: {e}):\n" + traceback.format_exc(),
                       flush=True)
                 body = {"error": {"type": "invalid_request_error",
                                   "message": f"the request is malformed ({type(e).__name__}: {e})"}}
@@ -6349,7 +6349,7 @@ def make_handler(svc: Service):
             svc.last_request_at = time.time()
             cancel = threading.Event()
             self._watch_client(cancel)
-            print(f"[strata] image: {job['width']}x{job['height']}, n={job['n']}, {job['steps']} steps, "
+            print(f"[cortex] image: {job['width']}x{job['height']}, n={job['n']}, {job['steps']} steps, "
                   f"seed {job['seed']}", flush=True)
             try:
                 with images_api.gpu_turn(svc, gen, job, cancel) as policy:
@@ -6359,7 +6359,7 @@ def make_handler(svc: Service):
                                            "message": str(e)}})
                 return
             figures["gpu_policy"] = policy
-            print(f"[strata] image done in {figures['seconds']:.1f} s ({policy})", flush=True)
+            print(f"[cortex] image done in {figures['seconds']:.1f} s ({policy})", flush=True)
             host = self.headers.get("Host") or f"{self.server.server_address[0]}:{self.server.server_address[1]}"
             scheme = "https" if (self.headers.get("X-Forwarded-Proto") or "").lower() == "https" else "http"
             self._json(200, gen.response(images, job, figures, f"{scheme}://{host}"))
@@ -6388,7 +6388,7 @@ def make_handler(svc: Service):
                 props["model_path"] = svc.engine.model_path
             version = getattr(svc.engine, "info", {}).get("version")
             if version:
-                props["build_info"] = "Strata " + str(version)
+                props["build_info"] = "Cortex " + str(version)
             self._json(200, props)
 
         def _control_body(self) -> bool:
@@ -6433,7 +6433,7 @@ def make_handler(svc: Service):
                 self._json(415, {"error": {"message": "send application/json"}})
                 return False
             if self._foreign_origin():
-                self._json(403, {"error": {"message": f"{what} only from Strata's own page (or an origin in the "
+                self._json(403, {"error": {"message": f"{what} only from Cortex's own page (or an origin in the "
                                                       f"config's trusted_origins)"}})
                 return False
             return True
@@ -6450,7 +6450,7 @@ def make_handler(svc: Service):
             self._json(200, runconfig.view(cfg, svc.config_path))
 
         def _config_post(self):
-            """#564: change a few documented keys of the run config - JSON from Strata's own page only, as
+            """#564: change a few documented keys of the run config - JSON from Cortex's own page only, as
             /settings (the key is checked before); every other key of the file stays as it is."""
             body = self._body()
             if not self._own_page("the run config can be changed"):
@@ -6472,7 +6472,7 @@ def make_handler(svc: Service):
                 self._json(500, {"error": {"type": "server_error", "message": f"the run config cannot be written: {e}"}})
                 return
             if changed:
-                print(f"[strata] the Settings view changed {', '.join(changed)} in {Path(svc.config_path).name} "
+                print(f"[cortex] the Settings view changed {', '.join(changed)} in {Path(svc.config_path).name} "
                       f"(the earlier file: {bak.name}); used from the next start", flush=True)
             self._json(200, {**runconfig.view(new, svc.config_path), "changed": changed})
         def _foreign_origin(self) -> bool:
@@ -6488,7 +6488,7 @@ def make_handler(svc: Service):
             """A web page of another origin must not have a file on this computer read as an image.  Without an
             api_key, _foreign_page refuses such a page unless cors_origins lets it in - and a page cors_origins lets
             in (["*"]: every page) could name any file and, CORS allowing, read what the model says about it.  data:
-            and http(s) images are the page's own to send; files come from Strata's own page, a trusted origin or a
+            and http(s) images are the page's own to send; files come from Cortex's own page, a trusted origin or a
             client that is no browser.  ValueError (a 400)."""
             if self._foreign_origin() and any(not src.startswith(("data:", "http://", "https://"))
                                               for src in images_of(messages)):
@@ -6512,8 +6512,8 @@ def make_handler(svc: Service):
             except ValueError as e:
                 self._json(400, {"error": {"type": "invalid_request_error", "message": str(e)}})
                 return
-            print("[strata] other apps now use the Chat settings: " + ", ".join(f"{k}={v}" for k, v in shared.items())
-                  if shared else "[strata] other apps use their own settings again", flush=True)
+            print("[cortex] other apps now use the Chat settings: " + ", ".join(f"{k}={v}" for k, v in shared.items())
+                  if shared else "[cortex] other apps use their own settings again", flush=True)
             self._json(200, {"shared": bool(shared), "defaults": shared})
 
         def _sse(self):
@@ -6573,12 +6573,12 @@ def make_handler(svc: Service):
                 tools = None
             force = forced_call(req.get("tool_choice"), tools)      # a bad value is a 400 before anything is sent
             messages, validator = prepare_format(req.get("response_format"), messages)
-            if validator is not None and (tools or req.get("strata_mcp")):
+            if validator is not None and (tools or req.get("cortex_mcp")):
                 raise ValueError("structured response_format with tools/MCP is not supported")
             svc.load()
             max_req = max_new = int(req.get("max_completion_tokens") or req.get("max_tokens") or 0)   # 0/-1: the rest
             bias_api.validate_request(req, svc.engine, len(getattr(svc.tok, "tokens", ())) or None)
-            use_mcp = req.get("strata_mcp") is True and svc.mcp is not None      # the web app's opt-in (serve/mcp.py)
+            use_mcp = req.get("cortex_mcp") is True and svc.mcp is not None      # the web app's opt-in (serve/mcp.py)
             own = {t.get("name") for t in tools or [] if isinstance(t, dict)}   # #592: a second line of defence
             if use_mcp:
                 if not self._own_page("MCP tools can be used"):   # tools run with the user's rights on this PC
@@ -6762,7 +6762,7 @@ def make_handler(svc: Service):
                 raise ResponsesError(str(e).replace("response_format", "text.format"), "text.format") from None
             noted = svc.__dict__.setdefault("hosted_tools_noted", set())   # said once per tool, not per request
             if set(skipped) - noted:
-                print(f"[strata] /v1/responses: left out the hosted tools {', '.join(sorted(set(skipped) - noted))} "
+                print(f"[cortex] /v1/responses: left out the hosted tools {', '.join(sorted(set(skipped) - noted))} "
                       f"(this server cannot run them)", flush=True)
                 noted.update(skipped)
             if req.get("max_output_tokens") is None and "max_tokens" in svc.shared:   # the shared Chat settings
@@ -6873,8 +6873,8 @@ class Server(ThreadingHTTPServer):
     allow_reuse_address = os.name != "nt"
     # socketserver listens with a backlog of 5: a burst of 30-40 clients at once got "connection reset by peer" on the
     # first ones (measured on 4 x R9700, also with one request at a time); the requests wait in the server, not the kernel
-    # (STRATA_HTTP_BACKLOG overrides it)
-    request_queue_size = max(5, int(os.environ.get("STRATA_HTTP_BACKLOG") or 256))
+    # (CORTEX_HTTP_BACKLOG overrides it)
+    request_queue_size = max(5, int(os.environ.get("CORTEX_HTTP_BACKLOG") or 256))
 
     def handle_error(self, request, client_address):
         if not isinstance(sys.exc_info()[1], ConnectionError):   # a client that hangs up needs no stack trace
@@ -6902,7 +6902,7 @@ def warn_tight_ram(arena_mib) -> None:
         return
     left = total / 2**30 - arena_mib / 1024
     if left < 6:
-        print(f"[strata] WARNING: RAM is tight - the model's experts take {arena_mib / 1024:.1f} GB of this PC's "
+        print(f"[cortex] WARNING: RAM is tight - the model's experts take {arena_mib / 1024:.1f} GB of this PC's "
               f"{total / 2**30:.0f} GB, leaving {left:.1f} GB for everything else. "
               + ("Linux may stop the engine in the middle of an answer. " if os.name != "nt" else
                  "Windows will slow down (paging to disk). ")
@@ -6928,7 +6928,7 @@ def warn_budget_over_ram(args) -> str | None:
     msg = (f"WARNING: the RAM budget for experts is {budget:g} GiB (--resident-budget-gib), but this PC has "
            f"{free:.0f} GiB free of {total:.0f} GiB: what does not fit goes to swap or is read from disk, which can make "
            "decoding very slow. Lower it (setup sizes it for this PC) or remove the argument to let the engine choose.")
-    print("[strata] " + msg, flush=True)
+    print("[cortex] " + msg, flush=True)
     return msg
 
 
@@ -6955,7 +6955,7 @@ def desktop_vram_note(backend, vram_free_mib, args: list, desktop: bool) -> str:
         reserve = 700
     if reserve >= DESKTOP_RESERVE_MIB:
         return ""
-    return (f"[strata] note: {vram_free_mib} MiB of VRAM free with the model loaded. If this AMD card also drives your "
+    return (f"[cortex] note: {vram_free_mib} MiB of VRAM free with the model loaded. If this AMD card also drives your "
             "desktop and the desktop or apps crash after the start (the driver moves the expert cache to RAM and "
             "the OOM killer ends the session), keep more VRAM free: ./setup.sh --vram-reserve-mib "
             f"{DESKTOP_RESERVE_MIB} (remembered; the expert cache gets "
@@ -7013,7 +7013,7 @@ def _name_in(name: str, names) -> bool:
 
 
 def allowed_hosts_of(value, env: str = "") -> list[str]:
-    """The config's allowed_hosts (a name or a list) plus $STRATA_ALLOWED_HOSTS (comma-separated): host names, "*" or
+    """The config's allowed_hosts (a name or a list) plus $CORTEX_ALLOWED_HOSTS (comma-separated): host names, "*" or
     ".example.com" (it and every name below it).  A scheme, port or path is dropped ("https://a.example.com:8443/"
     -> "a.example.com"); a wrong entry stops the start (ValueError)."""
     items = [] if value in (None, "") else [value] if isinstance(value, str) else value
@@ -7068,7 +7068,7 @@ def host_allowed(host, names, any_host=False) -> bool:
 
 
 def key_list(value) -> list[str]:
-    """#1344: the keys a server accepts.  --api-key / STRATA_API_KEY / "api_key" take llama.cpp's form, several keys
+    """#1344: the keys a server accepts.  --api-key / CORTEX_API_KEY / "api_key" take llama.cpp's form, several keys
     separated by commas ("k1,k2"; spaces around each are dropped), or a list in the config ("api_key": ["k1", "k2"],
     the way to give a key that contains a comma).  A list is taken as it is."""
     if value is None or value == "":
@@ -7147,7 +7147,7 @@ def origins_of(value, key: str, wildcard: bool) -> list[str]:
         return []
     items = [value] if isinstance(value, str) else value
     if not isinstance(items, list) or not all(isinstance(x, str) for x in items):
-        raise SystemExit(f"[strata] {key}: expected an origin or a list of origins")
+        raise SystemExit(f"[cortex] {key}: expected an origin or a list of origins")
     out = []
     for x in items:
         x = x.strip().rstrip("/")
@@ -7156,7 +7156,7 @@ def origins_of(value, key: str, wildcard: bool) -> list[str]:
             continue
         scheme, sep, rest = x.partition("://")
         if scheme not in ("http", "https") or not sep or not rest or "/" in rest or "*" in rest:
-            raise SystemExit(f"[strata] {key}: {x!r} is not an origin like https://chat.example.com"
+            raise SystemExit(f"[cortex] {key}: {x!r} is not an origin like https://chat.example.com"
                              + ("" if wildcard else " (no wildcards here)"))
         out.append(x)
     return out
@@ -7228,7 +7228,7 @@ def split_joined_args(cfg: dict) -> None:
         changed.append(a)
     if changed:
         cfg["args"] = out
-        print("[strata] the config's args hold " + ", ".join(repr(c) for c in changed) + " as one element each: split into the "
+        print("[cortex] the config's args hold " + ", ".join(repr(c) for c in changed) + " as one element each: split into the "
               'flag and its value (write them as two elements, e.g. "--ple-io", "mmap")', flush=True)
 
 
@@ -7243,7 +7243,7 @@ def parse_config_text(text: str, path) -> dict:
     try:
         return json.loads(text)
     except json.JSONDecodeError as e:
-        raise SystemExit(f"[strata] {path} is not valid JSON: {e.msg} at line {e.lineno}, column {e.colno}. Check the commas "
+        raise SystemExit(f"[cortex] {path} is not valid JSON: {e.msg} at line {e.lineno}, column {e.colno}. Check the commas "
                          'between the entries of "args" (each option and each value is its own quoted entry, e.g. '
                          '"--ple-io", "mmap",) and that no entry is followed by a comma at the end of a list.') from None
 
@@ -7271,7 +7271,7 @@ def lift_reasoning_effort_arg(cfg: dict) -> None:
     cfg["args"] = out
     if cfg.get("reasoning_effort") is None:
         cfg["reasoning_effort"] = value
-    print("[strata] '--reasoning-effort' in the config's args is not an engine option: taken out of them. The thinking "
+    print("[cortex] '--reasoning-effort' in the config's args is not an engine option: taken out of them. The thinking "
           "level is the config's 'reasoning_effort' key (outside 'args'); it is used as " +
           f"{cfg['reasoning_effort']!r}", flush=True)
 
@@ -7282,30 +7282,30 @@ SAMPLING_ALIASES = {"repeat_penalty": "repetition_penalty", "repeat_last_n": "pe
 
 
 def apply_saved_tuning(cfg: dict, *, say=None) -> dict:
-    """The run config with the active saved tuning for its choices put on top (strata_control/presets.py), with no measurement.
+    """The run config with the active saved tuning for its choices put on top (cortex_control/presets.py), with no measurement.
     Every start path runs this (the Terminal, `runtime start`, the app's load, a restart of the app, an unload and a load), so the
-    tuning is applied every time and never re-measured. A tune's own worker sets STRATA_NO_PRESET so that it measures the
+    tuning is applied every time and never re-measured. A tune's own worker sets CORTEX_NO_PRESET so that it measures the
     configuration it was given. Never fails a start: a store that cannot be read means the configuration as it is."""
-    if os.environ.get("STRATA_NO_PRESET"):
+    if os.environ.get("CORTEX_NO_PRESET"):
         return cfg
     say = say or (lambda line: print(line, flush=True))
     try:
-        from strata_control import presets as _presets
+        from cortex_control import presets as _presets
         out, applied = _presets.overlay(cfg)
         if applied.get("applied"):
             changes = {**(applied.get("args") or {}), **(applied.get("env") or {})}
             note = applied.get("notice") or ""
-            say(f"[strata] saved tuning '{applied['preset']['name']}' applied: "
+            say(f"[cortex] saved tuning '{applied['preset']['name']}' applied: "
                 f"{' '.join(f'{k} {v}' for k, v in changes.items()) or 'the standard settings (nothing to change)'}"
                 f"{'; ' + note if note and 'identical' not in note else ''}")
             if applied.get("state") == "soft":
-                say("[strata] this PC or engine changed since it was saved (" + "; ".join(applied["reasons"]) +
-                    "): a short re-check is available (strata presets recheck)")
+                say("[cortex] this PC or engine changed since it was saved (" + "; ".join(applied["reasons"]) +
+                    "): a short re-check is available (cortex presets recheck)")
         elif applied.get("why_not"):
-            say(f"[strata] saved tuning '{applied['preset']['name']}' {applied['why_not']}; re-tune with strata tune auto")
+            say(f"[cortex] saved tuning '{applied['preset']['name']}' {applied['why_not']}; re-tune with cortex tune auto")
         return out
     except Exception as e:  # noqa: BLE001
-        say(f"[strata] saved tuning could not be read ({type(e).__name__}); starting with the configuration as it is")
+        say(f"[cortex] saved tuning could not be read ({type(e).__name__}); starting with the configuration as it is")
         return cfg
 
 
@@ -7322,7 +7322,7 @@ def sampling_defaults_from_config(cfg: dict) -> dict:
     for alias, canon in SAMPLING_ALIASES.items():      # #1819: llama.cpp's names for the same two fields
         if block.get(alias) is not None:
             if block.get(canon) is not None:
-                raise SystemExit(f"[strata] config sampling: both {alias!r} and {canon!r} are set; they are the same "
+                raise SystemExit(f"[cortex] config sampling: both {alias!r} and {canon!r} are set; they are the same "
                                  f"setting, keep one")
             block[canon] = block.pop(alias)
     for key, value in block.items():
@@ -7331,62 +7331,62 @@ def sampling_defaults_from_config(cfg: dict) -> dict:
         number = isinstance(value, (int, float)) and not isinstance(value, bool)
         if key == "temperature":
             if not number or value < 0:
-                raise SystemExit(f"[strata] config sampling.temperature={value!r}: expected a number >= 0 (0 = greedy)")
+                raise SystemExit(f"[cortex] config sampling.temperature={value!r}: expected a number >= 0 (0 = greedy)")
             out[key] = float(value)
         elif key == "top_p":
             if not number or not 0 < value <= 1:
-                raise SystemExit(f"[strata] config sampling.top_p={value!r}: expected 0 < top_p <= 1")
+                raise SystemExit(f"[cortex] config sampling.top_p={value!r}: expected 0 < top_p <= 1")
             out[key] = float(value)
         elif key == "min_p":
             if not number or not 0 <= value <= 1:
-                raise SystemExit(f"[strata] config sampling.min_p={value!r}: expected 0 <= min_p <= 1")
+                raise SystemExit(f"[cortex] config sampling.min_p={value!r}: expected 0 <= min_p <= 1")
             out[key] = float(value)
         elif key == "top_k":
             if not number or value != int(value) or not 1 <= value <= 64:
-                raise SystemExit(f"[strata] config sampling.top_k={value!r}: the sampled path takes an integer 1..64")
+                raise SystemExit(f"[cortex] config sampling.top_k={value!r}: the sampled path takes an integer 1..64")
             out[key] = int(value)
         elif key == "presence_penalty":
             if not number or value < 0:
-                raise SystemExit(f"[strata] config sampling.presence_penalty={value!r}: expected a number >= 0")
+                raise SystemExit(f"[cortex] config sampling.presence_penalty={value!r}: expected a number >= 0")
             out[key] = float(value)
         elif key == "frequency_penalty":
             if not number or value < 0:
-                raise SystemExit(f"[strata] config sampling.frequency_penalty={value!r}: expected a number >= 0")
+                raise SystemExit(f"[cortex] config sampling.frequency_penalty={value!r}: expected a number >= 0")
             out[key] = float(value)
         elif key == "repetition_penalty":
             if not number or value <= 0:
-                raise SystemExit(f"[strata] config sampling.repetition_penalty={value!r}: expected a number > 0 (1 = off)")
+                raise SystemExit(f"[cortex] config sampling.repetition_penalty={value!r}: expected a number > 0 (1 = off)")
             out[key] = float(value)
         elif key == "penalty_last_n":
             if not number or value != int(value) or value < 0:
-                raise SystemExit(f"[strata] config sampling.penalty_last_n={value!r}: expected a non-negative integer")
+                raise SystemExit(f"[cortex] config sampling.penalty_last_n={value!r}: expected a non-negative integer")
             out[key] = int(value)
         elif key == "seed":
             if not number or value != int(value) or value <= 0:
-                raise SystemExit(f"[strata] config sampling.seed={value!r}: expected a positive integer")
+                raise SystemExit(f"[cortex] config sampling.seed={value!r}: expected a positive integer")
             out[key] = int(value)
-        elif key == "strata_tune":           # a saved tuning's per-request settings (strata_control/presets.py)
+        elif key == "cortex_tune":           # a saved tuning's per-request settings (cortex_control/presets.py)
             if not isinstance(value, dict):
-                raise SystemExit(f"[strata] config sampling.strata_tune={value!r}: expected an object")
+                raise SystemExit(f"[cortex] config sampling.cortex_tune={value!r}: expected an object")
             out[key] = {k: v for k, v in value.items() if k in ("pcie_frac", "spec_min_p", "aux_cpus")}
         elif key == "experimental_speed_projection":
             if not isinstance(value, bool):
-                raise SystemExit(f"[strata] config sampling.experimental_speed_projection={value!r}: expected true or "
+                raise SystemExit(f"[cortex] config sampling.experimental_speed_projection={value!r}: expected true or "
                                  "false (the default for requests that leave it out, when the engine has the vector)")
             out[key] = value
         else:
-            print(f"[strata] config sampling.{key}={value!r}: unknown key, ignored", flush=True)
+            print(f"[cortex] config sampling.{key}={value!r}: unknown key, ignored", flush=True)
     return out
 
 
 def start_replicas(cfg: dict, groups: list[list[int]], exe: str, effort_end: list[str], lazy: bool,
                    *, offline: bool = False):
-    """Opt-in data-parallel replicas (serve/replicas.py): one StrataEngine per card group, each with its own cards, log
+    """Opt-in data-parallel replicas (serve/replicas.py): one CortexEngine per card group, each with its own cards, log
     and CPU cores, started together; the ReplicaEngine in front spreads the requests."""
     from serve import replicas as rp
     n = len(groups)
     cpus = rp.cpu_sets(n, cfg.get("replica_cpus") is not False)
-    print(f"[strata] {n} replicas on the cards {' | '.join(','.join(map(str, g)) for g in groups)}"
+    print(f"[cortex] {n} replicas on the cards {' | '.join(','.join(map(str, g)) for g in groups)}"
           f"{' (own CPU cores each)' if cpus else ''}: requests go to the least busy one, a conversation back to its own",
           flush=True)
     engines: list = [None] * n
@@ -7395,13 +7395,13 @@ def start_replicas(cfg: dict, groups: list[list[int]], exe: str, effort_end: lis
     def one(i: int):
         rc = rp.replica_cfg(cfg, i, groups[i])
         try:
-            engines[i] = StrataEngine(exe, engine_args(rc) + effort_end, cwd=rc.get("cwd"), log=rc.get("log"),
+            engines[i] = CortexEngine(exe, engine_args(rc) + effort_end, cwd=rc.get("cwd"), log=rc.get("log"),
                                       env=child_env(rc, offline=offline), lazy=lazy, cpus=cpus[i] if cpus else None)
         except BaseException as e:        # noqa: BLE001
             errors.append((i, e))
     rc0 = rp.replica_cfg(cfg, 0, groups[0])
     warn_budget_over_ram(engine_args(rc0) if "args" in rc0 else [])
-    if os.environ.get("STRATA_REPLICA_START", "") == "serial":
+    if os.environ.get("CORTEX_REPLICA_START", "") == "serial":
         for i in range(n):
             one(i)
     else:
@@ -7418,7 +7418,7 @@ def start_replicas(cfg: dict, groups: list[list[int]], exe: str, effort_end: lis
                 except Exception:        # noqa: BLE001
                     pass
         i, e = errors[0]
-        raise SystemExit(f"[strata] replica {i} did not start: {e}")
+        raise SystemExit(f"[cortex] replica {i} did not start: {e}")
     load = int(cfg.get("replica_load_tokens") or rp.LOAD_TOKENS)
     return rp.ReplicaEngine(engines, load_tokens=load)
 
@@ -7488,7 +7488,7 @@ def default_model_name(cfg: dict) -> str:
 
 
 def with_component_engine(cfg: dict) -> dict:
-    """A run config that names "component:strata-engine" gets the engine package for this PC: the path in `exe`, and
+    """A run config that names "component:cortex-engine" gets the engine package for this PC: the path in `exe`, and
     the package's own folder first on the library path (the GPU runtime libraries ship beside the binary)."""
     if not engine_component.is_reference(cfg.get("exe")):
         return cfg
@@ -7499,18 +7499,18 @@ def with_component_engine(cfg: dict) -> dict:
 
 
 def _component_exe(reference: str, cfg: dict) -> str:
-    """The engine a run config names as "component:strata-engine". No engine for this PC is a clear notice and exit 5;
-    the server never goes looking on the internet for one (strata_control/engine_component.py)."""
+    """The engine a run config names as "component:cortex-engine". No engine for this PC is a clear notice and exit 5;
+    the server never goes looking on the internet for one (cortex_control/engine_component.py)."""
     try:
         return engine_component.expand(reference, cfg)
     except engine_component.EngineMissing as e:
-        print(f"[strata] {e}", file=sys.stderr, flush=True)
+        print(f"[cortex] {e}", file=sys.stderr, flush=True)
         raise SystemExit(e.exit_code) from None
 
 
 def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> int:
     try:                                               # files made by a run as administrator still belong to the user
-        from strata_control import private_files as _pf
+        from cortex_control import private_files as _pf
         _pf.adopt_user_defaults()
     except Exception:
         pass
@@ -7527,8 +7527,8 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
             event_sink = None
 
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--engine", choices=["mock", "strata"], default="mock")
-    ap.add_argument("--config", help="strata engine config (JSON: exe, args, cwd, tokenizer, model_name), "
+    ap.add_argument("--engine", choices=["mock", "cortex"], default="mock")
+    ap.add_argument("--config", help="cortex engine config (JSON: exe, args, cwd, tokenizer, model_name), "
                                      "written by setup.py")
     ap.add_argument("--host", default=None,
                     help="the address to listen on: 127.0.0.1 = this PC only (the default), 0.0.0.0 = also other devices "
@@ -7571,8 +7571,8 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
     ap.add_argument("--no-fit-max-tokens", action="store_true",
                     help="answer 400 when prompt + max_tokens does not fit the context, like llama.cpp "
                          "(also \"fit_max_tokens\": false in the config). A prompt that alone does not fit is always 400")
-    ap.add_argument("--api-key", default=os.environ.get("STRATA_API_KEY", ""),
-                    help="require this key on /v1/* (Authorization: Bearer ... or x-api-key); also $STRATA_API_KEY. "
+    ap.add_argument("--api-key", default=os.environ.get("CORTEX_API_KEY", ""),
+                    help="require this key on /v1/* (Authorization: Bearer ... or x-api-key); also $CORTEX_API_KEY. "
                          "Several keys: separate them with commas (key1,key2), as llama.cpp does")
     ap.add_argument("--mcp-config", help="a JSON file with MCP servers in Claude Desktop's format ({\"mcpServers\": "
                                          "{...}}); the web app's chat can use their tools (also \"mcp_servers\" in "
@@ -7626,9 +7626,9 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
     config_bytes = Path(a.config).read_bytes() if a.config else b""
     cfg = parse_config_text(config_bytes.decode("utf-8-sig"), a.config) if a.config else {}   # Notepad adds a BOM
     split_joined_args(cfg)
-    if a.config and a.engine == "strata":
+    if a.config and a.engine == "cortex":
         cfg = apply_saved_tuning(cfg)
-    attestation_key = os.environ.pop("STRATA_OWNER_ATTEST_KEY", None)
+    attestation_key = os.environ.pop("CORTEX_OWNER_ATTEST_KEY", None)
     launch_attestation = None
     if a.owner_fd is not None:
         if attestation_key is None or not re.fullmatch(r"[0-9a-f]{64}", attestation_key):
@@ -7672,18 +7672,18 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
         cfg["gpu"] = int(a.gpu) if a.gpu.strip().isdigit() else a.gpu
     a.host = a.host or cfg.get("host") or "127.0.0.1"   # issue #26: the run scripts pass no --host, the config can
     supplied_args = argv if argv is not None else sys.argv[1:]
-    if ("STRATA_API_KEY" in os.environ and not os.environ["STRATA_API_KEY"].strip()) or \
+    if ("CORTEX_API_KEY" in os.environ and not os.environ["CORTEX_API_KEY"].strip()) or \
             any((x == "--api-key" and i + 1 < len(supplied_args) and not supplied_args[i + 1].strip()) or
                 x.strip() == "--api-key=" for i, x in enumerate(supplied_args)):
-        print("[strata] an API key was given but it is empty: set a key, or leave it out", file=sys.stderr)
+        print("[cortex] an API key was given but it is empty: set a key, or leave it out", file=sys.stderr)
         return 2
     try:
         preflight_api_key = api_key_of(a.api_key or cfg.get("api_key", ""))
     except ValueError as e:
-        print(f"[strata] {e}: set a key, or leave it out", file=sys.stderr)
+        print(f"[cortex] {e}: set a key, or leave it out", file=sys.stderr)
         return 2
     if a.host not in ("127.0.0.1", "localhost", "::1") and not preflight_api_key:
-        print("[strata] a non-loopback bind requires an inference API key", file=sys.stderr, flush=True)
+        print("[cortex] a non-loopback bind requires an inference API key", file=sys.stderr, flush=True)
         return 2
     try:                                                # before the minutes of loading: is the port free?
         Server((a.host, a.port), BaseHTTPRequestHandler).server_close()
@@ -7693,10 +7693,10 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
         a.tokenizer = cfg["tokenizer"]
     tok = ByteTokenizer()
     tpath = Path(a.tokenizer)
-    if a.engine == "strata" and not (tpath / "vocab.json").exists():
+    if a.engine == "cortex" and not (tpath / "vocab.json").exists():
         ap.error(f"the model's tokenizer is missing ({tpath / 'vocab.json'}); run setup again")
     if (tpath / "vocab.json").exists():
-        import strata_tokenizer as ST
+        import cortex_tokenizer as ST
         vocab = json.loads((tpath / "vocab.json").read_text(encoding="utf-8"))
         tokens = [None] * len(vocab)
         for t, i in vocab.items():
@@ -7711,16 +7711,16 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
         # The same decision, reported through the policy module so the two cannot drift: a profile
         # that permits a network source is refused here rather than on its first request.
         try:
-            from strata_control import offline as offline_policy
+            from cortex_control import offline as offline_policy
             blocked = offline_policy.ensure_strictly_offline(cfg)
         except ImportError:
             blocked = []
         if blocked:
             ap.error("--offline cannot be strict for this profile: " + "; ".join(blocked))
     lazy = False
-    if a.engine == "strata":
+    if a.engine == "cortex":
         if not cfg:
-            ap.error("--engine strata needs --config")
+            ap.error("--engine cortex needs --config")
         cfg = with_component_engine(cfg)
         vision = None
         # The engine's own environment. It carries the offline policy too: an engine that fetched a
@@ -7730,7 +7730,7 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
         sampling_defaults = sampling_defaults_from_config(cfg)
         if sampling_defaults:
             pretty = ", ".join(f"{k}={v}" for k, v in sampling_defaults.items())
-            print(f"[strata] sampling defaults from the config: {pretty}", flush=True)
+            print(f"[cortex] sampling defaults from the config: {pretty}", flush=True)
         lazy = a.lazy or cfg.get("lazy_load") is True
         if cfg.get("vision"):
             elastic = cfg["vision"].get("elastic") is True and cfg.get("vram_elastic") is True
@@ -7744,7 +7744,7 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
             if engine_component.is_reference(cfg["vision"].get("exe")):     # the engine from the component folder
                 vcfg["exe"] = _component_exe(cfg["vision"]["exe"], cfg)
             if vcfg.get("elastic") is True and cfg.get("vram_elastic") is not True:
-                print('[strata] the vision section\'s "elastic" needs "vram_elastic": true (the expert cache gives the '
+                print('[cortex] the vision section\'s "elastic" needs "vram_elastic": true (the expert cache gives the '
                       "encoder its VRAM): the encoder starts with the model instead", flush=True)
                 vcfg["elastic"] = False
             vision = Vision(vcfg, log=open(cfg["log"], "a", encoding="utf-8") if cfg.get("log") else None,
@@ -7756,34 +7756,34 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
             try:
                 split = layer_split_value(cfg)          # #644: before the (minutes-long) start
             except ValueError as e:
-                raise SystemExit(f"[strata] config {e}")
-            print(f"[strata] layer split across GPUs {gpu_list(cfg)} ({split})", flush=True)
+                raise SystemExit(f"[cortex] config {e}")
+            print(f"[cortex] layer split across GPUs {gpu_list(cfg)} ({split})", flush=True)
         elif len(gpu_list(cfg)) > 1:
-            print(f"[strata] GPUs {gpu_list(cfg)}: the later card(s) serve as the peer expert tier (--peer-device)",
+            print(f"[cortex] GPUs {gpu_list(cfg)}: the later card(s) serve as the peer expert tier (--peer-device)",
                   flush=True)
-        # a relative "exe" is the config's cwd's: Windows' CreateProcess resolves "engine/strata.exe" against nothing
+        # a relative "exe" is the config's cwd's: Windows' CreateProcess resolves "engine/cortex.exe" against nothing
         # it is told about (WinError 2), so it is made absolute here
-        if engine_component.is_reference(cfg["exe"]):      # "component:strata-engine": the engine package for this PC
+        if engine_component.is_reference(cfg["exe"]):      # "component:cortex-engine": the engine package for this PC
             exe = _component_exe(cfg["exe"], cfg)
         else:
             exe = cfg["exe"] if os.path.isabs(cfg["exe"]) else os.path.abspath(os.path.join(cfg.get("cwd") or ".", cfg["exe"]))
         try:
             silence = engine_silence_s(cfg)             # #481: checked before the (minutes-long) start
         except ValueError as e:
-            raise SystemExit(f"[strata] config {e}")
+            raise SystemExit(f"[cortex] config {e}")
         try:
             effort_end = effort_end_args(cfg, exe, tok)  # #458
         except ValueError as e:
-            raise SystemExit(f"[strata] config {e}")
+            raise SystemExit(f"[cortex] config {e}")
         from serve import replicas as rp
         try:
             groups = rp.gpu_groups(cfg)
         except rp.ReplicaConfigError as e:
-            raise SystemExit(f"[strata] config {e}")
+            raise SystemExit(f"[cortex] config {e}")
         if groups:
             engine = start_replicas(cfg, groups, exe, effort_end or [], lazy, offline=a.offline)
         else:
-            engine = StrataEngine(exe, engine_args(cfg) + (effort_end or []), cwd=cfg.get("cwd"), log=cfg.get("log"),
+            engine = CortexEngine(exe, engine_args(cfg) + (effort_end or []), cwd=cfg.get("cwd"), log=cfg.get("log"),
                                   env=env, lazy=lazy)
         engine.silence_s = silence                      # an attribute of its own: restart() keeps it
         warn_tight_ram(engine.info.get("arena_mib"))
@@ -7807,7 +7807,7 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
     svc.offline = a.offline
     svc.max_queue = max_queue
     svc.queue_timeout_s = float(queue_timeout) if queue_timeout is not None else None
-    if a.engine == "strata":                            # the model card's sampling when nothing else is said (see MODEL_CARD_SAMPLING)
+    if a.engine == "cortex":                            # the model card's sampling when nothing else is said (see MODEL_CARD_SAMPLING)
         svc.model_arch = cfg.get("arch") or "qwen4exp"
         requested = cfg.get("parallel")
         if requested is None:
@@ -7830,61 +7830,61 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
         try:
             svc.images = images_api.ImageGen(icfg, log=open(cfg["log"], "a", encoding="utf-8") if cfg.get("log") else None)
         except ValueError as e:
-            raise SystemExit(f"[strata] config: {e}")
+            raise SystemExit(f"[cortex] config: {e}")
         gone = svc.images.missing()
         if gone:
-            print(f"[strata] image generation: missing {', '.join(gone)} - requests fail until setup --images has run "
+            print(f"[cortex] image generation: missing {', '.join(gone)} - requests fail until setup --images has run "
                   "again", flush=True)
-        print(f"[strata] image generation: {svc.images.model} {icfg.get('quant') or ''} on "
+        print(f"[cortex] image generation: {svc.images.model} {icfg.get('quant') or ''} on "
               f"{icfg.get('backend') or '?'} (POST /v1/images/generations; GPU policy {svc.images.policy})", flush=True)
     if cfg.get("prevent_sleep") is not None and not isinstance(cfg["prevent_sleep"], bool):
-        raise SystemExit(f"[strata] config \"prevent_sleep\" must be true or false, not {cfg['prevent_sleep']!r}")
+        raise SystemExit(f"[cortex] config \"prevent_sleep\" must be true or false, not {cfg['prevent_sleep']!r}")
     from serve.keepawake import KeepAwake
     svc.keep_awake = KeepAwake.create(cfg.get("prevent_sleep") is True)      # #1727: opt-in, Windows only
     if cfg.get("reasoning_effort") is not None:         # #1641: the thinking level of requests that name none
         try:
             svc.config_effort = clean_shared_defaults({"reasoning_effort": cfg["reasoning_effort"]}).get("reasoning_effort")
         except ValueError as e:
-            raise SystemExit(f"[strata] config {e}")
+            raise SystemExit(f"[cortex] config {e}")
         if svc.config_effort:
-            print(f"[strata] thinking level: {svc.config_effort} (reasoning_effort in the config; a request, or the "
+            print(f"[cortex] thinking level: {svc.config_effort} (reasoning_effort in the config; a request, or the "
                   "Chat settings shared with other apps, can set its own)", flush=True)
     svc.codex_thread_titles = cfg.get("codex_thread_titles") is True    # #923: opt-in, off by default
     svc.codex_compaction_cache = cfg.get("codex_compaction_cache") is True   # #924: opt-in, off by default
     try:
         svc.set_aliases(cfg.get("aliases"))             # #297: other names the model answers to
     except ValueError as e:
-        raise SystemExit(f"[strata] config {e}")
+        raise SystemExit(f"[cortex] config {e}")
     if svc.aliases:
-        print(f"[strata] model aliases: {', '.join(svc.aliases)}", flush=True)
+        print(f"[cortex] model aliases: {', '.join(svc.aliases)}", flush=True)
     svc.api_key = preflight_api_key
     try:
-        svc.telemetry_key = api_key_of(os.environ.get("STRATA_TELEMETRY_KEY") or cfg.get("telemetry_read_key", ""))
+        svc.telemetry_key = api_key_of(os.environ.get("CORTEX_TELEMETRY_KEY") or cfg.get("telemetry_read_key", ""))
     except ValueError as e:
-        print(f"[strata] invalid telemetry_read_key: {e}", file=sys.stderr)
+        print(f"[cortex] invalid telemetry_read_key: {e}", file=sys.stderr)
         return 2
     if set(key_list(svc.api_key)) & set(key_list(svc.telemetry_key)):
-        print("[strata] telemetry_read_key must differ from every inference API key", file=sys.stderr)
+        print("[cortex] telemetry_read_key must differ from every inference API key", file=sys.stderr)
         return 2
     if not svc.api_key and "api_key" in cfg:             # #569: written, but empty: the server has none (a warning, not a stop)
-        print("[strata] the api_key in the config is empty: this server has no API key (anyone who can reach it can "
+        print("[cortex] the api_key in the config is empty: this server has no API key (anyone who can reach it can "
               "use it); set one, or leave api_key out", file=sys.stderr, flush=True)
     svc.cors_origins = origins_of(cfg.get("cors_origins"), "cors_origins", wildcard=True)
     svc.trusted_origins = origins_of(cfg.get("trusted_origins"), "trusted_origins", wildcard=False)
     try:
-        svc.allowed_hosts = allowed_hosts_of(cfg.get("allowed_hosts"), os.environ.get("STRATA_ALLOWED_HOSTS", ""))
+        svc.allowed_hosts = allowed_hosts_of(cfg.get("allowed_hosts"), os.environ.get("CORTEX_ALLOWED_HOSTS", ""))
     except ValueError as e:
-        raise SystemExit(f"[strata] config {e}")
+        raise SystemExit(f"[cortex] config {e}")
     if svc.allowed_hosts:
-        print("[strata] Host check off: any name reaches this server (allowed_hosts \"*\")" if "*" in svc.allowed_hosts
-              else f"[strata] also answers to the host names {', '.join(svc.allowed_hosts)} (allowed_hosts)", flush=True)
+        print("[cortex] Host check off: any name reaches this server (allowed_hosts \"*\")" if "*" in svc.allowed_hosts
+              else f"[cortex] also answers to the host names {', '.join(svc.allowed_hosts)} (allowed_hosts)", flush=True)
     svc.api_monitor = a.api_monitor or cfg.get("api_monitor") is True
     if svc.api_monitor:
-        print("[strata] API request monitor on (/api-monitor): the last 100 requests' prompts and answers are kept in "
+        print("[cortex] API request monitor on (/api-monitor): the last 100 requests' prompts and answers are kept in "
               "memory" + ("" if svc.api_key else "; anyone who can reach this server can read them (no API key)"),
               flush=True)
     if svc.cors_origins:
-        print(f"[strata] CORS on /v1/* for {', '.join(svc.cors_origins)}"
+        print(f"[cortex] CORS on /v1/* for {', '.join(svc.cors_origins)}"
               + ("" if svc.api_key or "*" not in svc.cors_origins else
                  " - WARNING: any web page may use the model (no API key)"), flush=True)
     svc.idle_unload_s = a.idle_unload if a.idle_unload is not None else float(cfg.get("idle_unload_s") or 0)
@@ -7894,7 +7894,7 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
     try:
         svc.before_load_timeout_s = float(cfg.get("before_load_timeout_s") or svc.before_load_timeout_s)
     except (TypeError, ValueError):
-        print("[strata] \"before_load_timeout_s\" in the config is not a number; using "
+        print("[cortex] \"before_load_timeout_s\" in the config is not a number; using "
               f"{svc.before_load_timeout_s:g} s", flush=True)
     svc.before_load_ignore_failure = cfg.get("before_load_ignore_failure") is True
     svc.before_load_strict = cfg.get("before_load_strict") is True
@@ -7905,25 +7905,25 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
             svc.slot_save_path = slot_save_dir(a.slot_save_path) if a.slot_save_path else \
                 slot_save_dir(cfg["slot_save_path"], cfg.get("cwd"))
         except (ValueError, OSError) as e:
-            raise SystemExit(f"[strata] {e}")
-        print(f"[strata] slot save/restore on: {svc.slot_save_path} (session files are kept until deleted: "
+            raise SystemExit(f"[cortex] {e}")
+        print(f"[cortex] slot save/restore on: {svc.slot_save_path} (session files are kept until deleted: "
               "about 1.2 GB per 63K-token conversation; restore only files this server wrote)", flush=True)
     mode = str(cfg.get("anthropic_thinking") or "model")   # #278: "on_request" = only when the request asks
     if mode not in ("model", "on_request"):
-        raise SystemExit(f"[strata] config anthropic_thinking must be \"model\" or \"on_request\", not {mode!r}")
+        raise SystemExit(f"[cortex] config anthropic_thinking must be \"model\" or \"on_request\", not {mode!r}")
     svc.anthropic_think_unasked = mode == "model"
     recovery = cfg.get("tool_call_recovery", False)     # opt-in: see OutputParser's recover
     if not isinstance(recovery, bool):
-        raise SystemExit(f"[strata] config \"tool_call_recovery\" must be true or false, not {recovery!r}")
+        raise SystemExit(f"[cortex] config \"tool_call_recovery\" must be true or false, not {recovery!r}")
     svc.tool_call_recovery = recovery
     etu = cfg.get("env_to_user", False)                # opt-in: see frontend._env_to_user
     if not isinstance(etu, bool):
-        raise SystemExit(f"[strata] config \"env_to_user\" must be true or false, not {etu!r}")
+        raise SystemExit(f"[cortex] config \"env_to_user\" must be true or false, not {etu!r}")
     import serve.frontend as _frontend
     _frontend.ENV_TO_USER = etu
     rs = cfg.get("repeat_stop_tokens", REPEAT_STOP_TOKENS)   # #606: opt-out with 0
     if isinstance(rs, bool) or not isinstance(rs, int) or rs < 0:
-        raise SystemExit(f"[strata] config \"repeat_stop_tokens\" must be a whole number >= 0 (0 = off), not {rs!r}")
+        raise SystemExit(f"[cortex] config \"repeat_stop_tokens\" must be a whole number >= 0 (0 = off), not {rs!r}")
     svc.repeat_stop_tokens = rs
     svc.effort_end = bool(effort_end)                   # #458: "effort_position": "end" with an engine that has it
     if cfg.get("reasoning_budget_tokens") is not None:  # #123: a default thinking budget for every request
@@ -7931,28 +7931,28 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
             svc.reasoning_budget_tokens = cfg["reasoning_budget_tokens"]
             budget = svc.reasoning_budget({})
         except ValueError as e:
-            raise SystemExit(f"[strata] config {e}")
+            raise SystemExit(f"[cortex] config {e}")
         if budget:
-            print(f"[strata] thinking budget: {budget} tokens (reasoning_budget_tokens; a request can set its own)",
+            print(f"[cortex] thinking budget: {budget} tokens (reasoning_budget_tokens; a request can set its own)",
                   flush=True)
     recovery = cfg.get("reasoning_loop_recovery", False)   # #728: false (default) | "stop" | "recover" (true)
     if recovery is True:
         recovery = "recover"
     if recovery is not False and recovery not in ("stop", "recover"):
-        raise SystemExit("[strata] config \"reasoning_loop_recovery\" must be false, \"stop\" or \"recover\", "
+        raise SystemExit("[cortex] config \"reasoning_loop_recovery\" must be false, \"stop\" or \"recover\", "
                          f"not {recovery!r}")
     svc.reasoning_loop_recovery = recovery
     svc.gpu_index = (gpu_list(cfg) or [0])[0]           # the Monitor reads the card the engine runs on (issue #51)
     svc.gpu_indices = gpu_list(cfg)                     # ... or every card of a layer split (issue #112)
-    if a.engine == "strata" and groups:                 # replicas: every card of every group
+    if a.engine == "cortex" and groups:                 # replicas: every card of every group
         svc.gpu_indices = [c for g in groups for c in g]
         svc.gpu_index = svc.gpu_indices[0]
         svc.replica_gpu_groups = groups
-    svc.terminal_visibility_order = visible_device_order(env, cfg.get("backend")) if a.engine == "strata" else []
-    svc.terminal_topology_mode = ("replicas (configured)" if a.engine == "strata" and groups
-                                  else "layer split (configured)" if a.engine == "strata" and layer_split_of(cfg)
-                                  else "single GPU or CPU" if a.engine == "strata" else "mock")
-    svc.terminal_configured_split = (layer_split_value(cfg) if a.engine == "strata" and layer_split_of(cfg)
+    svc.terminal_visibility_order = visible_device_order(env, cfg.get("backend")) if a.engine == "cortex" else []
+    svc.terminal_topology_mode = ("replicas (configured)" if a.engine == "cortex" and groups
+                                  else "layer split (configured)" if a.engine == "cortex" and layer_split_of(cfg)
+                                  else "single GPU or CPU" if a.engine == "cortex" else "mock")
+    svc.terminal_configured_split = (layer_split_value(cfg) if a.engine == "cortex" and layer_split_of(cfg)
                                      else None)
     svc.backend = cfg.get("backend")                    # "hip": the AMD cards' readings come from sysfs (#301)
     if a.config:
@@ -7962,17 +7962,17 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
         try:
             svc.shared = clean_shared_defaults(json.loads(Path(svc.shared_path).read_text(encoding="utf-8")))
             if svc.shared:
-                print("[strata] other apps use the Chat settings: " +
+                print("[cortex] other apps use the Chat settings: " +
                       ", ".join(f"{k}={v}" for k, v in svc.shared.items()), flush=True)
         except (OSError, ValueError):
             svc.shared = {}
     if hub is not None:
         import atexit
         svc.mcp = hub
-        print(f"[strata] starting {len(hub.servers)} MCP server{'s' * (len(hub.servers) != 1)} for the web app's "
+        print(f"[cortex] starting {len(hub.servers)} MCP server{'s' * (len(hub.servers) != 1)} for the web app's "
               f"chat: {', '.join(hub.servers)}", flush=True)
         hub.start()
-        atexit.register(hub.close)                      # the servers Strata started end with it
+        atexit.register(hub.close)                      # the servers Cortex started end with it
     httpd = serve(svc, host=a.host, port=a.port)
     bound_port = httpd.server_address[1]               # --port 0: report the port the OS actually assigned
     svc.start_idle_unload()
@@ -7994,14 +7994,14 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
                   "to the config (clients send it as their API key; the web page asks for it)", flush=True)
         if os.name == "nt":
             print("       nothing arrives? Windows Firewall blocks it until allowed: accept its prompt for Python, or run "
-                  "in an admin PowerShell:\n         New-NetFirewallRule -DisplayName \"Strata " + str(bound_port) + "\" "
+                  "in an admin PowerShell:\n         New-NetFirewallRule -DisplayName \"Cortex " + str(bound_port) + "\" "
                   "-Direction Inbound -Protocol TCP -LocalPort " + str(bound_port) + " -Action Allow -Profile Private\n"
                   "       (and set this network to Private in Windows' network settings)", flush=True)
     if a.open and cfg.get("open_browser") is not False:   # #609: the config's "open_browser": false wins (an older
         import webbrowser                                  # run-<model>.bat still passes --open)
         # on its own thread: webbrowser.open waits for the browser launcher, which on Linux can run for as long as
         # the browser does, and the main thread must be free to take Ctrl+C and SIGTERM (#1872)
-        threading.Thread(target=webbrowser.open, daemon=True, name="strata-open-browser",
+        threading.Thread(target=webbrowser.open, daemon=True, name="cortex-open-browser",
                          args=(f"http://{'127.0.0.1' if a.host in ('0.0.0.0', '') else a.host}:{bound_port}/",)).start()
     if ready_path is not None or event_sink is not None:
         ready_host = f"[{here}]" if ":" in here and not here.startswith("[") else here
@@ -8013,7 +8013,7 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
         try:
             ready_file.publish(ready_path, record)
         except OSError as e:
-            print(f"[strata] could not write ready file ({type(e).__name__})", file=sys.stderr)
+            print(f"[cortex] could not write ready file ({type(e).__name__})", file=sys.stderr)
             for close in (httpd.shutdown, getattr(engine, "close", None), vision.shutdown if vision else None,
                           hub.close if hub is not None else None):
                 if close:
@@ -8029,7 +8029,7 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
     except KeyboardInterrupt:
         interrupted = True
         notify_lifecycle("stopping", {"reason": termination, "instance_id": svc.instance_id})
-        print("\n[strata] stopping (Ctrl+C again to end the engine at once) ...", flush=True)
+        print("\n[cortex] stopping (Ctrl+C again to end the engine at once) ...", flush=True)
     finally:
         cancelled = 0
         if a.shutdown_timeout is not None:
@@ -8038,12 +8038,12 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
                                           "pending_requests": pending,
                                           "deadline_s": a.shutdown_timeout})
             if pending:
-                print(f"[strata] draining {pending} inference call(s) for up to {a.shutdown_timeout:g} s ...",
+                print(f"[cortex] draining {pending} inference call(s) for up to {a.shutdown_timeout:g} s ...",
                       flush=True)
             pending = svc.wait_for_drain(a.shutdown_timeout)
             if pending:
                 cancelled = svc.cancel_owned_requests()
-                print(f"[strata] drain deadline expired; cancelling {cancelled} owned request(s) ...", flush=True)
+                print(f"[cortex] drain deadline expired; cancelling {cancelled} owned request(s) ...", flush=True)
                 svc.wait_for_drain(5)
                 drained = False
         closers = [httpd.shutdown, getattr(engine, "close", None), vision.shutdown if vision else None,
@@ -8057,15 +8057,15 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
                         engine.proc.kill()
                         try:
                             from serve import cache_drop
-                            cache_drop.drop_after_exit(engine)       # opt-in (STRATA_DROP_CACHE_ON_EXIT=1), default unchanged
+                            cache_drop.drop_after_exit(engine)       # opt-in (CORTEX_DROP_CACHE_ON_EXIT=1), default unchanged
                         except Exception as e:  # noqa: BLE001 - never block the exit
-                            print(f"[strata] could not release the model files' cache: {e}", flush=True)
+                            print(f"[cortex] could not release the model files' cache: {e}", flush=True)
         finally:
             if ready_path is not None:
                 ready_file.remove_if_owned(ready_path, svc.instance_id)
             finished.set()
         if interrupted:
-            print("[strata] stopped", flush=True)
+            print("[cortex] stopped", flush=True)
     exit_code = (8 if not drained else
                  interrupt_exit_code if interrupted and termination == "sigint" else 0)
     notify_lifecycle("stopped", {"instance_id": svc.instance_id, "reason": termination if interrupted else "normal",

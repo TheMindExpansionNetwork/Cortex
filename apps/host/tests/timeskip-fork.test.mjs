@@ -10,8 +10,8 @@ import { resolveHarness } from '../server/agent/harness-runtime.mjs';
 import { isViewStep, stepObjective } from '../server/agent/plan.mjs';
 import { UNATTENDED, createForkTimeskip, leverPrompt, parseLever, defaultLever, improvementPrompt, copyProject } from '../server/timeskip-fork.mjs';
 
-const HARNESS = process.env.STRATA_HARNESS_DIR;
-const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'STRATA_HARNESS_DIR is not set to a built Harness' : false;
+const HARNESS = process.env.CORTEX_HARNESS_DIR;
+const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'CORTEX_HARNESS_DIR is not set to a built Harness' : false;
 
 test('the lever answer is read strictly; a bad answer gets a fixed rule with its reason said plainly', () => {
   assert.deepEqual(parseLever('Sure! {"step": 3, "why": "The shape is set here."} done', 5), { step: 3, why: 'The shape is set here.' });
@@ -29,7 +29,7 @@ test('the lever answer is read strictly; a bad answer gets a fixed rule with its
 });
 
 test('copyProject leaves out dependency and VCS folders', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'strata-cp-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-cp-'));
   try {
     const from = join(dir, 'p'); mkdirSync(join(from, 'node_modules'), { recursive: true }); mkdirSync(join(from, 'src'), { recursive: true }); mkdirSync(join(from, '.git'));
     writeFileSync(join(from, 'node_modules', 'x.js'), 'x'); writeFileSync(join(from, 'src', 'a.txt'), 'a'); writeFileSync(join(from, '.git', 'h'), 'h');
@@ -40,7 +40,7 @@ test('copyProject leaves out dependency and VCS folders', () => {
 
 async function rig(t, slots, opts = {}) {
   const worker = await startScriptedWorker({});
-  const dir = mkdtempSync(join(tmpdir(), 'strata-tsf-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-tsf-'));
   const project = join(dir, 'project'); mkdirSync(project); writeFileSync(join(project, 'keep.txt'), 'original');
   const bridge = createAgentBridge({ dataDir: join(dir, 'data'), localInstances: () => [{ id: 'i', label: 'S', baseUrl: worker.url, modelId: 'scripted-model', context: 32768, slots }], connections: () => [], env: process.env, startTimeoutMs: 90_000 });
   const events = [];

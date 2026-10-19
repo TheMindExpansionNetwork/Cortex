@@ -1,11 +1,11 @@
-#include "strata/core/native_dense.hpp"
+#include "cortex/core/native_dense.hpp"
 #include <cstdlib>
-#include "strata/core/weights.hpp"
-#include "strata/artifact/gguf_reader.hpp"
-#include "strata/kernels/fused_gr.hpp"
-#include "strata/kernels/gfx_arch.hpp"
-#include "strata/kernels/native_mmvq.hpp"
-#include "strata/platform/memory.hpp"
+#include "cortex/core/weights.hpp"
+#include "cortex/artifact/gguf_reader.hpp"
+#include "cortex/kernels/fused_gr.hpp"
+#include "cortex/kernels/gfx_arch.hpp"
+#include "cortex/kernels/native_mmvq.hpp"
+#include "cortex/platform/memory.hpp"
 
 #include <cuda_runtime.h>
 #include <algorithm>
@@ -23,7 +23,7 @@
 #include <thread>
 #include <vector>
 
-namespace strata::core {
+namespace cortex::core {
 namespace {
 // `load` makes one cudaMalloc per projection matrix, and the driver backs each call with 2 MiB granules
 // (measured on the RTX 5060: 300 buffers of 6.73 MiB asked 2019 MiB and cost 2400).  So a stage's real
@@ -42,25 +42,25 @@ bool in_range(const std::string& name) {
     const int l = std::atoi(name.c_str() + 4);
     return l >= g_layer_lb && l < g_layer_le;
 }
-// S23 experiment (STRATA_HC_Q8=1): the hyper-connection projections' Q8_0 bytes for the verify read
+// S23 experiment (CORTEX_HC_Q8=1): the hyper-connection projections' Q8_0 bytes for the verify read
 bool hc_q8_env() {
-    // STRATA_HC_Q8: 1 = on (the GGUF's own Q8_0 projections, or - a bf16 pack - a Q8_0 copy quantized at load); 0 = off;
+    // CORTEX_HC_Q8: 1 = on (the GGUF's own Q8_0 projections, or - a bf16 pack - a Q8_0 copy quantized at load); 0 = off;
     // unset / auto = on for gfx12 (RDNA4: the R9700 decode +2.5 to +4%, KL 0.0003-0.0010 over its noise floor) unless
-    // STRATA_GFX12_DEFAULTS=0, off elsewhere
+    // CORTEX_GFX12_DEFAULTS=0, off elsewhere
     static const bool on = [] {
-        const char* v = std::getenv("STRATA_HC_Q8");
+        const char* v = std::getenv("CORTEX_HC_Q8");
         if (v != nullptr && v[0] == '1') return true;
         if (v != nullptr && v[0] != '\0' && std::strcmp(v, "auto") != 0) return false;
-#if defined(STRATA_USE_HIP)
-        const char* d = std::getenv("STRATA_GFX12_DEFAULTS");
+#if defined(CORTEX_USE_HIP)
+        const char* d = std::getenv("CORTEX_GFX12_DEFAULTS");
         if (d != nullptr && d[0] == '0') return false;
         int dev = 0;
         cudaDeviceProp p;
         const bool g12 = cudaGetDevice(&dev) == cudaSuccess && cudaGetDeviceProperties(&p, dev) == cudaSuccess &&
-                         strata::kernels::gfx_arch_is_gfx12(p.gcnArchName);
+                         cortex::kernels::gfx_arch_is_gfx12(p.gcnArchName);
         (void) cudaGetLastError();
-        if (g12) std::fprintf(stderr, "strata: gfx12 (RDNA4): the hyper-connection projections are read as Q8_0 (quantized at load, "
-                                      "decode faster, answers differ slightly); STRATA_HC_Q8=0 keeps the bf16 read\n");
+        if (g12) std::fprintf(stderr, "cortex: gfx12 (RDNA4): the hyper-connection projections are read as Q8_0 (quantized at load, "
+                                      "decode faster, answers differ slightly); CORTEX_HC_Q8=0 keeps the bf16 read\n");
         return g12;
 #else
         return false;
@@ -137,7 +137,7 @@ std::vector<uint8_t> q8_0_of_bf16(const uint16_t* x, uint64_t n) {
     for (auto& th : pool) th.join();
     return out;
 }
-bool eligible(const strata::TensorInfo& tensor, bool include_ple_key) {
+bool eligible(const cortex::TensorInfo& tensor, bool include_ple_key) {
     const auto& name = tensor.name;
     if (name.rfind("blk.", 0) != 0) return false;
     // Match the native PLE kernel: Q2_0, IQ3_XXS, IQ4_XS and Q8_0 (UD-Q4_K_XL). Other keys retain the packed BF16
@@ -157,7 +157,7 @@ struct Pending {
     int type;
     uint64_t bytes;
     DevicePtr data;
-    DevicePtr packed;   // STRATA_Q8_PACKED=1 copy, or null
+    DevicePtr packed;   // CORTEX_Q8_PACKED=1 copy, or null
 };
 }
 
@@ -165,9 +165,9 @@ bool NativeDense::served_names(const std::vector<std::string>& shards, bool incl
                                std::set<std::string>& out, std::string& err) {
     try {
         for (const auto& path : shards) {
-            strata::GgufFile gguf(path);
+            cortex::GgufFile gguf(path);
             for (const auto& tensor : gguf.tensors())
-                if (eligible(tensor, include_ple_key) && strata::kernels::native_mmvq_supported(tensor.type) &&
+                if (eligible(tensor, include_ple_key) && cortex::kernels::native_mmvq_supported(tensor.type) &&
                     tensor.shape.size() == 2)
                     out.insert(tensor.name);
         }
@@ -190,7 +190,7 @@ bool NativeDense::weight_bytes_for(const std::vector<std::string>& shards, Weigh
         std::set<std::string> seen;
         uint64_t total = 0;
         for (const auto& path : shards) {
-            strata::GgufFile gguf(path);
+            cortex::GgufFile gguf(path);
             for (const auto& tensor : gguf.tensors()) {
                 if (!eligible(tensor, include_ple_key)) continue;
                 if (tensor.name.rfind("blk.", 0) == 0) {
@@ -204,7 +204,7 @@ bool NativeDense::weight_bytes_for(const std::vector<std::string>& shards, Weigh
                     return false;
                 }
                 const auto& ref = found->second;
-                if (!strata::kernels::native_mmvq_supported(tensor.type)) continue;
+                if (!cortex::kernels::native_mmvq_supported(tensor.type)) continue;
                 if (tensor.name == "blk.1.ple_key.weight" && !ref.quantized()) continue;
                 if (!ref.quantized() || tensor.shape.size() != 2 ||
                     ref.ne0 <= 0 || ref.ne0 > INT_MAX || ref.ne1 <= 0 || ref.ne1 > INT_MAX ||
@@ -212,7 +212,7 @@ bool NativeDense::weight_bytes_for(const std::vector<std::string>& shards, Weigh
                     err = "native dense: incompatible matrix " + tensor.name;
                     return false;
                 }
-                total += alloc_bytes(strata::kernels::native_mmvq_weight_bytes(tensor.type, (int) ref.ne0, (int) ref.ne1));
+                total += alloc_bytes(cortex::kernels::native_mmvq_weight_bytes(tensor.type, (int) ref.ne0, (int) ref.ne1));
             }
         }
         out = total;
@@ -232,7 +232,7 @@ bool NativeDense::keep_unquantized_ple_key(const std::string& pack_dir, std::set
     return true;
 }
 
-// STRATA_HC_Q8 without a bf16 copy: the two dequantization scratches (one bf16 matrix each) of `hc_bf16_view`, per device,
+// CORTEX_HC_Q8 without a bf16 copy: the two dequantization scratches (one bf16 matrix each) of `hc_bf16_view`, per device,
 // allocated by `load` - never on first use, so a graph capture cannot meet the allocation
 static void* g_hc_scratch[64][2][2] = {};     // [device][class][slot]
 static cudaEvent_t g_hc_ev[64][2] = {};        // [device][slot]: the prompt path's last reader of the slot
@@ -243,7 +243,7 @@ NativeDense::~NativeDense() {
         for (auto& cl : dev)
             for (void*& b : cl)
                 if (b != nullptr && std::find(weights_.begin(), weights_.end(), b) != weights_.end()) b = nullptr;
-    for (const void* p : packed_keys_) strata::kernels::native_q8_0_packed_unregister(p);
+    for (const void* p : packed_keys_) cortex::kernels::native_q8_0_packed_unregister(p);
     if (scratch_) cudaFree(scratch_);
     for (void* p : weights_) cudaFree(p);
 }
@@ -266,13 +266,13 @@ bool NativeDense::load(const std::vector<std::string>& shards, WeightTable& tabl
         std::set<uint64_t> split_numbers;
         bool have_architecture = false;
         for (const auto& path : shards) {
-            strata::GgufFile gguf(path);
+            cortex::GgufFile gguf(path);
             const auto* count = gguf.get("split.count");
             const auto* number = gguf.get("split.no");
             const auto* tensors = gguf.get("split.tensors.count");
             if (gguf.get("general.architecture") && (!number || number->u == 0)) {
                 // splitter may copy general.architecture into every shard (Huihui abliterated re-split)
-                err = strata::check_engine_architecture(gguf);
+                err = cortex::check_engine_architecture(gguf);
                 if (!err.empty()) return false;
                 have_architecture = true;
                 if (count && number && tensors && number->u == 0 && count->u > 1) {
@@ -300,7 +300,7 @@ bool NativeDense::load(const std::vector<std::string>& shards, WeightTable& tabl
             for (const auto& tensor : gguf.tensors()) {
                 int block_elements = 0, block_bytes = 0;
                 uint64_t elements = 1;
-                if (tensor.shape.empty() || !strata::block_geometry(tensor.type, block_elements, block_bytes) ||
+                if (tensor.shape.empty() || !cortex::block_geometry(tensor.type, block_elements, block_bytes) ||
                     tensor.shape[0] % (uint64_t) block_elements != 0) {
                     err = "native dense: invalid block geometry " + tensor.name; return false;
                 }
@@ -324,8 +324,8 @@ bool NativeDense::load(const std::vector<std::string>& shards, WeightTable& tabl
                 }
                 // the uploads below read these: ask for them now so the reads overlap
                 if (eligible(tensor, include_ple_key) && !outside(tensor.name) &&
-                    strata::kernels::native_mmvq_supported(tensor.type))
-                    strata::platform::advise_willneed(gguf.tensor_data(tensor), bytes);
+                    cortex::kernels::native_mmvq_supported(tensor.type))
+                    cortex::platform::advise_willneed(gguf.tensor_data(tensor), bytes);
             }
             for (const auto& tensor : gguf.tensors()) {
                 if (!eligible(tensor, include_ple_key) || outside(tensor.name)) continue;
@@ -339,7 +339,7 @@ bool NativeDense::load(const std::vector<std::string>& shards, WeightTable& tabl
                 }
                 auto& ref = found->second;
                 if (ref.native_data) { err = "native dense: override already attached"; return false; }
-                if (!strata::kernels::native_mmvq_supported(tensor.type)) continue;
+                if (!cortex::kernels::native_mmvq_supported(tensor.type)) continue;
                 // #326: the pack keeps an unquantized (--compat-bf16) key, which the PLE reads from the arena
                 if (tensor.name == "blk.1.ple_key.weight" && !ref.quantized()) continue;
                 if (!ref.quantized() || tensor.shape.size() != 2 ||
@@ -347,7 +347,7 @@ bool NativeDense::load(const std::vector<std::string>& shards, WeightTable& tabl
                     tensor.shape[0] != (uint64_t) ref.ne0 || tensor.shape[1] != (uint64_t) ref.ne1) {
                     err = "native dense: incompatible matrix " + tensor.name; return false;
                 }
-                const auto bytes = strata::kernels::native_mmvq_weight_bytes(
+                const auto bytes = cortex::kernels::native_mmvq_weight_bytes(
                     tensor.type, (int) ref.ne0, (int) ref.ne1);
                 void* allocation = nullptr;
                 auto status = cudaMalloc(&allocation, bytes);
@@ -360,14 +360,14 @@ bool NativeDense::load(const std::vector<std::string>& shards, WeightTable& tabl
                 max_in = (std::max)(max_in, (int) ref.ne0);
                 total += bytes;
                 allocated += alloc_bytes(bytes);
-                // STRATA_Q8_PACKED=1: a second, packed copy of an eligible Q8_0 matrix for the decode MMVQ (the GGUF
+                // CORTEX_Q8_PACKED=1: a second, packed copy of an eligible Q8_0 matrix for the decode MMVQ (the GGUF
                 // copy stays: the prompt path's GEMMs read it).
                 DevicePtr packed;
                 if (tensor.type == 8 && tensor.name != "blk.1.ple_key.weight" &&   // the PLE has its own kernel
-                    strata::kernels::native_q8_0_packed_enabled() &&
-                    strata::kernels::native_q8_0_packed_eligible((int) ref.ne0, (int) ref.ne1)) {
+                    cortex::kernels::native_q8_0_packed_enabled() &&
+                    cortex::kernels::native_q8_0_packed_eligible((int) ref.ne0, (int) ref.ne1)) {
                     std::vector<uint8_t> host(bytes);
-                    strata::kernels::native_q8_0_pack_host(gguf.tensor_data(tensor), host.data(), (int) ref.ne0,
+                    cortex::kernels::native_q8_0_pack_host(gguf.tensor_data(tensor), host.data(), (int) ref.ne0,
                                                            (int) ref.ne1);
                     void* packed_allocation = nullptr;
                     auto packed_status = cudaMalloc(&packed_allocation, bytes);
@@ -384,15 +384,15 @@ bool NativeDense::load(const std::vector<std::string>& shards, WeightTable& tabl
             if (hc_q8_env())
                 for (const auto& tensor : gguf.tensors()) {
                     // S25: the F32 inject rows hold BF16-exact values: the read takes the pack's BF16 rows unless
-                    // STRATA_HC_Q8_INJECT=1 asks for a Q8_0 copy
-                    static const bool q8_inject = [] { const char* v = std::getenv("STRATA_HC_Q8_INJECT"); return v && v[0] == '1'; }();
+                    // CORTEX_HC_Q8_INJECT=1 asks for a Q8_0 copy
+                    static const bool q8_inject = [] { const char* v = std::getenv("CORTEX_HC_Q8_INJECT"); return v && v[0] == '1'; }();
                     const bool f32_inject = q8_inject && tensor.type == 0 && tensor.name.ends_with("_inject.weight");
                     if ((tensor.type != 8 && !f32_inject) || !hc_q8_name(tensor.name) || tensor.shape.size() != 2) continue;
                     auto found = table.table_.find(tensor.name);
                     if (found == table.table_.end() || found->second.hc_q8 != nullptr) continue;
                     auto& ref = found->second;
                     if (tensor.shape[0] != (uint64_t) ref.ne0 || tensor.shape[1] != (uint64_t) ref.ne1 || ref.ne0 % 32 != 0) {
-                        err = "native dense (STRATA_HC_Q8): incompatible matrix " + tensor.name; return false;
+                        err = "native dense (CORTEX_HC_Q8): incompatible matrix " + tensor.name; return false;
                     }
                     const uint64_t bytes = (uint64_t) ref.ne0 / 32 * 34 * (uint64_t) ref.ne1;
                     void* p = nullptr;
@@ -401,7 +401,7 @@ bool NativeDense::load(const std::vector<std::string>& shards, WeightTable& tabl
                     if (cudaMalloc(&p, bytes) != cudaSuccess ||
                         cudaMemcpy(p, f32_inject ? (const void*) q8.data() : gguf.tensor_data(tensor), bytes,
                                    cudaMemcpyHostToDevice) != cudaSuccess) {
-                        err = "native dense (STRATA_HC_Q8) upload " + tensor.name; return false;
+                        err = "native dense (CORTEX_HC_Q8) upload " + tensor.name; return false;
                     }
                     ref.hc_q8 = p;
                     weights_.push_back(p);
@@ -420,21 +420,21 @@ bool NativeDense::load(const std::vector<std::string>& shards, WeightTable& tabl
                 const bool skipped = ref.data == nullptr;
                 if (skipped && ref.resident) continue;
                 if (ref.ne0 % 32 != 0 || ref.elements != ref.ne0 * ref.ne1 || (!skipped && ref.bytes != (uint64_t) ref.elements * 2)) {
-                    err = "native dense (STRATA_HC_Q8): " + name + " is not a bf16 matrix"; return false;
+                    err = "native dense (CORTEX_HC_Q8): " + name + " is not a bf16 matrix"; return false;
                 }
                 const uint64_t nb = (uint64_t) ref.elements / 32, bytes = nb * 34;
                 void* p = nullptr;
-                if (cudaMalloc(&p, bytes) != cudaSuccess) { err = "native dense (STRATA_HC_Q8) alloc " + name; return false; }
+                if (cudaMalloc(&p, bytes) != cudaSuccess) { err = "native dense (CORTEX_HC_Q8) alloc " + name; return false; }
                 weights_.push_back(p);
                 if (skipped) {
                     std::vector<uint16_t> host;
                     if (!table.read_bf16_host(name, host, err)) return false;
                     const std::vector<uint8_t> q8 = q8_0_of_bf16(host.data(), (uint64_t) host.size());
                     if (cudaMemcpy(p, q8.data(), bytes, cudaMemcpyHostToDevice) != cudaSuccess) {
-                        err = "native dense (STRATA_HC_Q8) upload " + name; return false;
+                        err = "native dense (CORTEX_HC_Q8) upload " + name; return false;
                     }
                 } else {
-                    strata::kernels::fused_gr_quantize_q8_0((const uint16_t*) ref.data, (uint8_t*) p, (int64_t) nb, nullptr);
+                    cortex::kernels::fused_gr_quantize_q8_0((const uint16_t*) ref.data, (uint8_t*) p, (int64_t) nb, nullptr);
                 }
                 ref.hc_q8 = p;
                 hc_q8_bytes += bytes;
@@ -442,7 +442,7 @@ bool NativeDense::load(const std::vector<std::string>& shards, WeightTable& tabl
                 ++made;
             }
             if (made && (cudaGetLastError() != cudaSuccess || cudaDeviceSynchronize() != cudaSuccess)) {
-                err = "native dense (STRATA_HC_Q8): quantizing the projections failed"; return false;
+                err = "native dense (CORTEX_HC_Q8): quantizing the projections failed"; return false;
             }
         }
         if (hc_q8_env()) {   // the scratches of hc_bf16_view (rows without a bf16 copy), here and not on first use
@@ -454,19 +454,19 @@ bool NativeDense::load(const std::vector<std::string>& shards, WeightTable& tabl
                 for (int c = 0; c < 2; ++c)
                     for (int i = 0; i < 2; ++i) {
                         void* b = nullptr;
-                        if (cudaMalloc(&b, (size_t) elems * 2) != cudaSuccess) { err = "native dense (STRATA_HC_Q8): scratch alloc"; return false; }
+                        if (cudaMalloc(&b, (size_t) elems * 2) != cudaSuccess) { err = "native dense (CORTEX_HC_Q8): scratch alloc"; return false; }
                         weights_.push_back(b);
                         g_hc_scratch[dev][c][i] = b;
                     }
                 for (int i = 0; i < 2; ++i)
                     if (g_hc_ev[dev][i] == nullptr && cudaEventCreateWithFlags(&g_hc_ev[dev][i], cudaEventDisableTiming) != cudaSuccess) {
-                        err = "native dense (STRATA_HC_Q8): scratch event"; return false;
+                        err = "native dense (CORTEX_HC_Q8): scratch event"; return false;
                     }
             }
         }
         if (pending.empty()) { err = "native dense: no supported GDN/QSA matrices in supplied shards"; return false; }
         void* allocation = nullptr;
-        const auto status = cudaMalloc(&allocation, strata::kernels::native_q8_1_bytes(max_in));
+        const auto status = cudaMalloc(&allocation, cortex::kernels::native_q8_1_bytes(max_in));
         DevicePtr scratch(allocation);
         if (status != cudaSuccess) { err = std::string("native dense scratch: ") + cudaGetErrorString(status); return false; }
         // All checks and allocations finish before publishing any reference.
@@ -478,7 +478,7 @@ bool NativeDense::load(const std::vector<std::string>& shards, WeightTable& tabl
             item.ref->native_type = item.type;
             item.ref->native_q8_1 = scratch.get();
             if (item.packed) {
-                strata::kernels::native_q8_0_packed_register(item.data.get(), item.packed.get(), (int) item.ref->ne0,
+                cortex::kernels::native_q8_0_packed_register(item.data.get(), item.packed.get(), (int) item.ref->ne0,
                                                              (int) item.ref->ne1);
                 packed_keys_.push_back(item.data.get());
                 packed_bytes += item.bytes;
@@ -488,13 +488,13 @@ bool NativeDense::load(const std::vector<std::string>& shards, WeightTable& tabl
             weights_.push_back(item.data.release());
         }
         if (packed_count)
-            std::fprintf(stderr, "native dense: STRATA_Q8_PACKED=1 packed %zu Q8_0 matrices for decode (+%.1f MiB)\n",
+            std::fprintf(stderr, "native dense: CORTEX_Q8_PACKED=1 packed %zu Q8_0 matrices for decode (+%.1f MiB)\n",
                          packed_count, packed_bytes / 1048576.0);
         scratch_ = scratch.release();
         bytes_ = total + hc_q8_bytes;
         allocated_ = allocated;
         if (hc_q8_env())
-            std::fprintf(stderr, "strata: STRATA_HC_Q8=1: %.2f GiB of Q8_0 hyper-connection projections for the verify read\n",
+            std::fprintf(stderr, "cortex: CORTEX_HC_Q8=1: %.2f GiB of Q8_0 hyper-connection projections for the verify read\n",
                          (double) hc_q8_bytes / 1073741824.0);
         return true;
     } catch (const std::exception& error) {
@@ -528,7 +528,7 @@ const uint16_t* NativeDense::hc_bf16_view(const WeightRef& w, void* stream, int 
     if (buf == nullptr) return nullptr;
     // the prompt path: the scratch may still be read by a GEMM another stream enqueued (batch serving: several slots' prompts)
     if (cls == 0 && g_hc_ev_set[dev][slot]) cudaStreamWaitEvent((cudaStream_t) stream, g_hc_ev[dev][slot], 0);
-    strata::kernels::fused_gr_dequant_q8_0((const uint8_t*) w.hc_q8, (uint16_t*) buf, w.elements / 32, stream);
+    cortex::kernels::fused_gr_dequant_q8_0((const uint8_t*) w.hc_q8, (uint16_t*) buf, w.elements / 32, stream);
     return (const uint16_t*) buf;
 }
 
@@ -538,4 +538,4 @@ void NativeDense::hc_bf16_release(void* stream, int slot, int cls) {
     cudaEventRecord(g_hc_ev[dev][slot], (cudaStream_t) stream);
     g_hc_ev_set[dev][slot] = true;
 }
-} // namespace strata::core
+} // namespace cortex::core

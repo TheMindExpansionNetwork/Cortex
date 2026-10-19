@@ -1,7 +1,7 @@
 /** User bindings are separate from commands, so the dispatcher and labels agree. */
 import { useSyncExternalStore } from 'react';
 export interface Binding { key: string; mod: boolean; shift: boolean; alt: boolean; }
-const KEY='strata.shortcuts.v1';
+const KEY='cortex.shortcuts.v1';
 let overrides: Record<string,Binding|null> = {};
 try { const raw=JSON.parse(localStorage.getItem(KEY)??'{}'); for(const [id,b] of Object.entries(raw)) if(b===null || (typeof b==='object' && b && typeof (b as Binding).key==='string' && ['mod','shift','alt'].every(k=>typeof (b as Record<string,unknown>)[k]==='boolean'))) overrides[id]=b as Binding|null; } catch { /* Defaults remain available. */ }
 const listeners=new Set<()=>void>();

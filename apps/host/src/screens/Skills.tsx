@@ -32,9 +32,9 @@ export function SkillsScreen() {
         }
     }
     async function add() {
-        // The folder window opens on the computer that runs Strata. From a page on another computer there is nothing to see, so say so instead of waiting.
+        // The folder window opens on the computer that runs Cortex. From a page on another computer there is nothing to see, so say so instead of waiting.
         if (!pageIsOnThisComputer(window.location.hostname))
-            throw new Error(tr("Adding a skill opens a folder window on the computer that runs Strata. Open Strata on that computer to add one."));
+            throw new Error(tr("Adding a skill opens a folder window on the computer that runs Cortex. Open Cortex on that computer to add one."));
         const result = await postWithFolderFallback<{
             cancelled?: boolean;
             added?: string;
@@ -85,7 +85,7 @@ export function SkillsScreen() {
         <div className="skill-detail-grid"><div className="input-field"><span id="skill-scope-label">{tr("Available in")}</span><Select ariaLabel={tr("Skill workspace scope")} value={editing.onlyIn ?? 'all'} options={[{ value: 'all', label: 'All workspaces' }, ...workspaces.map(w => ({ value: w.id, label: w.name }))]} onChange={value => setEditing({ ...editing, onlyIn: value === 'all' ? null : value })}/></div>
         <label className="input-field"><span>{tr("Trigger phrases")}</span><input className="st-input" value={triggers} onChange={e => setTriggers(e.target.value)} placeholder={tr("review this, check my code")}/><small className="muted">{tr("Separate phrases with commas.")}</small></label></div>
         </> : <label className="input-field"><span>{tr("Instructions")}</span><textarea className="st-input skill-instructions" rows={10} maxLength={64000} value={editing.body ?? ''} onChange={e => setEditing({ ...editing, body: e.target.value })}/></label>)}
-        <p className="xs muted">{tr("Changes are saved in Strata. The original skill file stays intact.")}</p>{tr(error ? <ErrorNotice message={error} action={tr("Retry")} onRetry={() => void action('refresh', loadSkills)}/> : null)}</div></> : null)}
+        <p className="xs muted">{tr("Changes are saved in Cortex. The original skill file stays intact.")}</p>{tr(error ? <ErrorNotice message={error} action={tr("Retry")} onRetry={() => void action('refresh', loadSkills)}/> : null)}</div></> : null)}
     </Dialog>
   </Screen>;
 }

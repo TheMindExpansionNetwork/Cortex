@@ -40,7 +40,7 @@ Do these only if the task is otherwise done and the budget allows.
 | 3 | Low | `engine-*` | Two-column layout leaves right column empty below "Expected experience" | sticky summary card on the right |
 | 4 | Low | `engine-discard-confirmation` | "Return all three editors…" — user doesn't know there are three | "Discard all unsaved engine changes" |
 | 5 | Low | `engine-actions` | Recommended defaults / Validate / Speed test hidden in "More actions" | surface "Reset to recommended" and "Run speed test" as visible buttons |
-| 6 | Low | `engine-adapter-details` | "llama.cpp adapter… native Strata configuration requires a different adapter" | move to Expert › About engine |
+| 6 | Low | `engine-adapter-details` | "llama.cpp adapter… native Cortex configuration requires a different adapter" | move to Expert › About engine |
 
 ## How to check
 Run these and fix anything that fails:

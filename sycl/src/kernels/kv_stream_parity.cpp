@@ -13,11 +13,11 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/kernels/kv_q4.hpp"
-#include "strata/kernels/kv_q8.hpp"
-#include "strata/kernels/kv_stream.hpp"
-#include "strata/kernels/qsa.hpp"
-#include "strata/kernels/qsa_decode_attn.hpp"
+#include "cortex/kernels/kv_q4.hpp"
+#include "cortex/kernels/kv_q8.hpp"
+#include "cortex/kernels/kv_stream.hpp"
+#include "cortex/kernels/qsa.hpp"
+#include "cortex/kernels/qsa_decode_attn.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -27,7 +27,7 @@
 #include <set>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 int g_fail = 0;

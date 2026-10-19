@@ -13,17 +13,17 @@
 //   dense    qsa_decode_attn_batch over a 32768-cell window per row: the drafter's shape, which the hypothesis's
 //            "~240 us a query" comes from (the drafter runs it with ONE query per step: capture_round's record_rest)
 //
-// --rows: block_scores_rows_kernel (STRATA_QSA_ROWS=1, docs/QSAROWS.md) against the multi kernel, scores and ids bit for
+// --rows: block_scores_rows_kernel (CORTEX_QSA_ROWS=1, docs/QSAROWS.md) against the multi kernel, scores and ids bit for
 // bit, and its microseconds beside the reference's.
 //
 //   qsa_rows_bench [--device N] [--iters 100] [--ctx 131072] [--max-context 262144] [--rows] [--no-dense]
 //   exit 0 (77: no GPU; 1: a --rows parity failure)
-#include "strata/kernels/kv_q8.hpp"
-#include "strata/kernels/native_qsa_indexer.hpp"
-#include "strata/kernels/qsa.hpp"
-#include "strata/kernels/qsa_decode_attn.hpp"
-#include "strata/kernels/qsa_select.hpp"
-#include "strata/kernels/rope_scaling.hpp"
+#include "cortex/kernels/kv_q8.hpp"
+#include "cortex/kernels/native_qsa_indexer.hpp"
+#include "cortex/kernels/qsa.hpp"
+#include "cortex/kernels/qsa_decode_attn.hpp"
+#include "cortex/kernels/qsa_select.hpp"
+#include "cortex/kernels/rope_scaling.hpp"
 
 #include <cuda_runtime.h>
 
@@ -38,7 +38,7 @@
 #include <string>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 cudaStream_t st = nullptr;
@@ -140,7 +140,7 @@ int main(int argc, char** argv) {
                 "%lld), selection cap %lld, int8 pools over %lld cells%s\n",
                 device, prop.name, prop.major, prop.minor, iters, (long long) ctx, (long long) max_cells,
                 (long long) max_blocks, (long long) cap, (long long) cells,
-                std::getenv("STRATA_QSA_ROWS") ? ", STRATA_QSA_ROWS set" : "");
+                std::getenv("CORTEX_QSA_ROWS") ? ", CORTEX_QSA_ROWS set" : "");
     std::mt19937 rng(20261012u);
     std::normal_distribution<float> nd(0.0f, 1.0f);
 
@@ -275,9 +275,9 @@ int main(int argc, char** argv) {
 
     bool ok = true;
     if (rows) {
-        // QSAROWS: block_scores_rows_kernel (STRATA_QSA_ROWS=1) against block_scores_multi_kernel, bit for bit on the scores
+        // QSAROWS: block_scores_rows_kernel (CORTEX_QSA_ROWS=1) against block_scores_multi_kernel, bit for bit on the scores
         // and on the ids the top-k draws from them, at every T; then the microseconds of the two
-        std::puts("-- STRATA_QSA_ROWS: qsa_block_scores_rows against qsa_block_scores (multi), scores and ids bit for bit");
+        std::puts("-- CORTEX_QSA_ROWS: qsa_block_scores_rows against qsa_block_scores (multi), scores and ids bit for bit");
         float* scores_b = dalloc<float>((size_t) (MAXT * max_blocks));
         int32_t* ids_b = dalloc<int32_t>((size_t) (MAXT * cap));
         long long cases = 0, failed = 0;

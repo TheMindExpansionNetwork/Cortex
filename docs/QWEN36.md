@@ -1,8 +1,8 @@
 # Qwen3.6-35B-A3B: pictures, several requests at once and speed
 
-Strata runs [Qwen3.6-35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B) (35B mixture of experts, 3B active, 256 experts, top-8) from
+Cortex runs [Qwen3.6-35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B) (35B mixture of experts, 3B active, 256 experts, top-8) from
 [Unsloth's GGUFs with the MTP layer](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF) (UD-Q4_K_XL, UD-Q6_K_XL, Q8_0) on its own
-engine path (`src/qwen35`; `strata` switches to it from the file's architecture). Pick it in the app's model list, in `strata launch` or in setup (`--family qwen36`). Besides text it
+engine path (`src/qwen35`; `cortex` switches to it from the file's architecture). Pick it in the app's model list, in `cortex launch` or in setup (`--family qwen36`). Besides text it
 reads **pictures** and serves **several requests at once**, the same two options the Flash-Next models have.
 
 Measured on an AMD Radeon AI PRO R9700 32 GB (HIP, Linux, UD-Q4_K_XL, every expert in VRAM) and on an RTX 3060 12 GB (CUDA, 20 threads,
@@ -11,11 +11,11 @@ UD-Q4_K_XL in the hybrid mode: 22-37 of 256 experts per layer in VRAM, the rest 
 ## Pictures
 
 The vision encoder is Unsloth's `mmproj-F16.gguf` (0.9 GB, pinned revision, SHA-256 checked by setup): a 27-layer ViT with a 2x2 merger,
-the same projector family as the Flash-Next models' (`qwen3vl_merger`; only its output width differs: 2048 here, 2560 there). Strata runs
-it with the same helper (`strata-vision`, llama.cpp's `mtmd`), so the encoder choices are the Flash-Next ones
+the same projector family as the Flash-Next models' (`qwen3vl_merger`; only its output width differs: 2048 here, 2560 there). Cortex runs
+it with the same helper (`cortex-vision`, llama.cpp's `mtmd`), so the encoder choices are the Flash-Next ones
 ([Images](DETAILS.md#images-vision)). Pictures are on by default, the same rule as for every model on NVIDIA and AMD cards:
 the CPU reader under 24 GB of graphics memory (a few seconds per picture, no VRAM), the card's reader from 24 GB (GPU encoder,
-~1.2 GB of VRAM at up to 1,024 image tokens; on AMD it is `strata-vision-hip`, with the CPU reader as its fallback).
+~1.2 GB of VRAM at up to 1,024 image tokens; on AMD it is `cortex-vision-hip`, with the CPU reader as its fallback).
 `--vision yes|no|gpu|cpu` and `--vision-tokens N` work as there; what you ask for is kept, with a note. The Mac engine does
 not run this model.
 
@@ -33,7 +33,7 @@ A picture becomes up to 1,024 tokens of the context (the CPU default is 300). Th
 llama.cpp gives fed to both so the logits are compared step by step, 24 steps; the "floor" is llama.cpp's CPU backend against its own
 HIP run, the noise two correct engines have on this model):
 
-| Picture and question | Prompt tokens | First token | Mean KL, llama.cpp HIP vs Strata | Floor (llama.cpp CPU vs HIP) |
+| Picture and question | Prompt tokens | First token | Mean KL, llama.cpp HIP vs Cortex | Floor (llama.cpp CPU vs HIP) |
 | --- | ---: | --- | ---: | ---: |
 | 640x400, text in the image | 288 | same | 0.029 | 0.056 |
 | 640x400, list the shapes | 294 | same | 0.035 | 0.039 |
@@ -42,7 +42,7 @@ HIP run, the noise two correct engines have on this model):
 | 1024x1024, the title (1,024 image tokens, read in 3 chunks) | 1,042 | same | 0.0022 | 0.0026 |
 | two pictures in one request, the text in each | 655 | differs (a near tie: the floor's KL at this step is 0.16 too) | 0.014 | 0.022 |
 
-The answers are the same text as llama.cpp's: `STRATA 42` (with llama.cpp's own spelling ` STRATA42`), `CODE 4217`, `Red circle / Blue square
+The answers are the same text as llama.cpp's: `CORTEX 42` (with llama.cpp's own spelling ` CORTEX42`), `CODE 4217`, `Red circle / Blue square
 / Green triangle`, `A red square is positioned on the left ... A blue circle is positioned on the right ...`. With the picture options on,
 a request without pictures gives the same tokens as without them (10 prompts x 128 greedy tokens, identical).
 
@@ -52,21 +52,21 @@ picture); a different picture starts that conversation again.
 
 ## Several requests at once
 
-`"parallel": N` in the model's config (`strata-qwen36-<size>.json`, or `--parallel N` at setup) makes the engine keep N conversations open
+`"parallel": N` in the model's config (`cortex-qwen36-<size>.json`, or `--parallel N` at setup) makes the engine keep N conversations open
 (`--batch N`, up to 8) and decode them together: every window carries one token of each conversation, so the dense weights, the head and
 every routed expert two conversations share are read once for all of them. The server needs no change: it speaks the same engine protocol
 as for Flash-Next ([BATCHING.md](BATCHING.md)). A request that arrives while another is read waits only for that read: the prompt of a
 new request is read **between** the decode windows of the others, and a conversation continues in the slot that holds its start (or the
 engine copies the longer held start from another slot). A 3,008-token prompt read in 0.95 s (3,200 tok/s, 6 chunks) beside three decoding
 slots: each of them paused at most 160 ms (one chunk) instead of the whole read, and produced 20 tokens meanwhile (one window per chunk,
-the default); `STRATA_Q36_READ_WINDOWS=4` gives them 65 tokens during a 1.14 s read (more of the time, a slower read).
+the default); `CORTEX_Q36_READ_WINDOWS=4` gives them 65 tokens during a 1.14 s read (more of the time, a slower read).
 A request that runs alone (the solo path, with its MTP drafts) and is moved into a batch slot when another arrives, and back when it is
 alone again, gives the text it gives running alone (the server's hand-over reuses the held state).
 
 Aggregate decode speed, N requests at once, same prompts, greedy, 128 new tokens each, wall time from the first request to the last
-answer, **R9700 32 GB, UD-Q4_K_XL, llama.cpp `llama-server -np N`** (5 interleaved pairs, median; Strata `--batch 8 --mtp 0`):
+answer, **R9700 32 GB, UD-Q4_K_XL, llama.cpp `llama-server -np N`** (5 interleaved pairs, median; Cortex `--batch 8 --mtp 0`):
 
-| Requests at once | Strata | llama.cpp | Ratio | Pairs faster |
+| Requests at once | Cortex | llama.cpp | Ratio | Pairs faster |
 | ---: | ---: | ---: | ---: | ---: |
 | 1 | 83.9 tok/s | 73.8 | 1.14 | 5/5 |
 | 2 | 173.5 | 107.4 | 1.61 | 5/5 |
@@ -77,7 +77,7 @@ answer, **R9700 32 GB, UD-Q4_K_XL, llama.cpp `llama-server -np N`** (5 interleav
 `llama-server -np N -ncmoe 28 -t 8`, the best split of a sweep on this card; 5 interleaved pairs, medians; the box was shared with other
 jobs between runs, never during one):
 
-| Requests at once | Strata | llama.cpp | Ratio | Pairs faster |
+| Requests at once | Cortex | llama.cpp | Ratio | Pairs faster |
 | ---: | ---: | ---: | ---: | ---: |
 | 1 | 64.0 tok/s | 41.1 | 1.56 | 5/5 |
 | 2 | 85.1 | 52.5 | 1.62 | 5/5 |
@@ -123,14 +123,14 @@ speed gain is small. On a card that holds every expert (R9700 32 GB, 8K prompts)
 `--batch-mtp`). The engine says what the sessions take before it allocates them and refuses (with the numbers) a count that cannot fit.
 
 In the hybrid mode the text of a request can differ a little between running alone and running beside others: the experts that sit on the
-GPU or on the CPU change with the routing of all the requests, and the two compute with different rounding. With the slot tables fixed (`STRATA_Q36_FIXED_SLOTS=1`, a test setting) every slot equals its
+GPU or on the CPU change with the routing of all the requests, and the two compute with different rounding. With the slot tables fixed (`CORTEX_Q36_FIXED_SLOTS=1`, a test setting) every slot equals its
 solo run there too, with and without `--batch-mtp`.
 
 ## Speed (0.1.45)
 
 Decode and prompt kernels of this engine path were rewritten for speed; **every change on the decode path gives the old kernels' bits**
-(`STRATA_Q36_VERIFY=1 strata ... --no-graph` runs the old kernel beside each new one on the real activations and compares them bit for bit:
-0 mismatches in 18,360 / 8,187 / 6,399 comparisons on the R9700 and the RTX 3060; `STRATA_Q36_OLD_KERNELS=1` switches them all off). The
+(`CORTEX_Q36_VERIFY=1 cortex ... --no-graph` runs the old kernel beside each new one on the real activations and compares them bit for bit:
+0 mismatches in 18,360 / 8,187 / 6,399 comparisons on the R9700 and the RTX 3060; `CORTEX_Q36_OLD_KERNELS=1` switches them all off). The
 10 parity prompts (greedy 128) give the base engine's tokens, plain and with `--mtp 2`. Where the prompt's chunk size changes, the numbers
 change a little: see "Prompt chunk".
 
@@ -139,7 +139,7 @@ projections, head: 1.9 GB per token) run at 530 GB/s, the memory bound. The rest
 (140 per token) at 18 us, the Q4_K gate/up kernel at 250 GB/s, `k_moe_out` (one block) 17 us, `k_group` (one thread walking 256 experts) 9 us.
 Now: those products one warp per row (a launch of 2048 warps took 21 us on gfx1201 where 1024 warps took 5 us, so the grid is capped), shared
 gate+up+SwiGLU+q8_1 in one launch, the MoE end with 1024 threads and the next layer's q8_1 image, add+norm+q8_1 in one launch, router top-k and
-grouping in one launch, the router and the shared gate in one product, Q4_K gate/up on the V2K kernels (`STRATA_EXPERT_V2K`, gfx12 default).
+grouping in one launch, the router and the shared gate in one product, Q4_K gate/up on the V2K kernels (`CORTEX_EXPERT_V2K`, gfx12 default).
 The prompt's GDN conv runs in tiles of 16 tokens side by side and the delta rule loads one token ahead with two barriers per token (both exact).
 
 R9700 32 GB (p620, HIP gfx1201), UD-Q4_K_XL, base = the engine before this work, 5 interleaved pairs, 3 repetitions each, medians; llama.cpp
@@ -166,7 +166,7 @@ expert: R9700 pp4096 at chunk 512 / 1024 / 2048 / 4096 = 3,453 / 4,786 / 5,766 /
 largest of 4096 / 2048 / 1024 that fits beside the experts, the 0.77 GiB reserve and the sessions' caches without giving the packed decode
 copies back (8K-64K context: 4096, 100K: 2048, 131K: 512; `--batch 2..4`: 1024 at most so the other slots are not held for a whole chunk,
 `--batch 8`: 512). The hybrid mode keeps 2048 (a bigger chunk takes expert slots: RTX 3060 chunk 4096 reads prompts 5% faster and decodes 13%
-slower) and goes down to 1024 / 512 on a card with 7.5 / 5.5 GiB free. **`--prefill 512` (or `STRATA_Q36_CHUNK=512`) gives the old size, and
+slower) and goes down to 1024 / 512 on a card with 7.5 / 5.5 GiB free. **`--prefill 512` (or `CORTEX_Q36_CHUNK=512`) gives the old size, and
 then the text is the base engine's, bit for bit.** The chunk size changes the GEMM tiles the BLAS picks and with them the last bits of the
 prompt state: KL against the 512 chunk on six real 1.5-3.2K-token documents (48 teacher-forced rows each): chunk 1024 4.0e-3, 2048 4.2e-3,
 4096 3.6e-3 (per prompt 2.3e-3 .. 5.9e-3), top-1 agreement 44-48 of 48 rows - the size of the llama.cpp CPU-vs-HIP difference on the same

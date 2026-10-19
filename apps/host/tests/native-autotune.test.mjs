@@ -7,10 +7,10 @@ import { resultSentence } from '../server/native-autotune.mjs';
 
 const arg = (args, name) => { const i = args.indexOf(name); return i < 0 ? undefined : args[i + 1]; };
 
-/** A pretend `strata` command: records what it was asked, writes status-file steps, then prints its JSON. */
+/** A pretend `cortex` command: records what it was asked, writes status-file steps, then prints its JSON. */
 function handler(log, { result, hold = false, delayMs = 60 } = {}) {
   return (child, args) => {
-    log.push(args.slice(args.findIndex(a => String(a).endsWith('strata.py')) + 1));
+    log.push(args.slice(args.findIndex(a => String(a).endsWith('cortex.py')) + 1));
     const cmd = log.at(-1);
     const out = json => { child.stdout.emit('data', Buffer.from(JSON.stringify(json))); child.exitCode = 0; child.emit('exit', 0); child.emit('close', 0); };
     if (cmd[0] === 'presets' && cmd[1] === 'status') return out({ ok: true, active: null, suggested_name: 'IQ2_XS 32K – Full speed', presets: [], state: null, reasons: [] });
@@ -109,7 +109,7 @@ test('a tune is refused while a model is generating, and loaded models are unloa
   } finally { await f.cleanup(); }
 });
 
-test('saved tunings: status for the choices, list, and actions go to Strata Control by id', async () => {
+test('saved tunings: status for the choices, list, and actions go to Cortex Control by id', async () => {
   const log = [];
   const f = nativeFixture({ tuneHandler: handler(log, {}) });
   try {

@@ -1,4 +1,4 @@
-# strata launch preview: q asks: keep serving or stop
+# cortex launch preview: q asks: keep serving or stop
 # (text of the screen as drawn at the size named in tests/terminal/launch_previews.py)
 
 

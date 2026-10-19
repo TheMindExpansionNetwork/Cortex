@@ -1,9 +1,9 @@
-"""tools/image/install.py - image generation (Qwen-Image-2.1-Turbo) for an existing Strata install, or on its own:
+"""tools/image/install.py - image generation (Qwen-Image-2.1-Turbo) for an existing Cortex install, or on its own:
 compiles sd-cli for the backend (setup.py's build_image_engine), downloads and checks the three model files, and
 writes the "images" section into a run config (or prints it).  setup.py --images qwen-image does the same inside
 the normal setup; this is the way to add it without running the whole setup again.
 
-    python tools/image/install.py --config strata-q2_0.json                 (backend and size picked for this PC)
+    python tools/image/install.py --config cortex-q2_0.json                 (backend and size picked for this PC)
     python tools/image/install.py --backend vulkan --quant Q8_0 --models-dir ~/models --print
     python tools/image/install.py --backend hip --arch gfx1103 --build-only
 
@@ -48,11 +48,11 @@ def main(argv=None) -> int:
     ap.add_argument("--quant", choices=QI.QUANTS)
     ap.add_argument("--gpu-gb", type=float, help="the GPU memory the quant is picked for (default: detected)")
     ap.add_argument("--models-dir", help="where the model files go (default: the data folder's models)")
-    ap.add_argument("--config", help="a run config (strata-<model>.json) to write the \"images\" section into")
+    ap.add_argument("--config", help="a run config (cortex-<model>.json) to write the \"images\" section into")
     ap.add_argument("--gpu-policy", choices=["auto", "keep", "shrink", "unload"], default="auto")
     ap.add_argument("--gpu", type=int, help="the GPU's number for the image job (default: the backend's first)")
     ap.add_argument("--native", choices=["on", "off"], default="off",
-                    help="EXPERIMENTAL: Strata's own DiT runner on CUDA / HIP (the config's \"native\")")
+                    help="EXPERIMENTAL: Cortex's own DiT runner on CUDA / HIP (the config's \"native\")")
     ap.add_argument("--build-only", action="store_true", help="compile sd-cli only")
     ap.add_argument("--print", action="store_true", help="print the images section instead of writing it")
     ap.add_argument("--yes", action="store_true")

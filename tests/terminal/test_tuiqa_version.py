@@ -8,7 +8,7 @@ import sys
 import unittest
 from pathlib import Path
 
-import strata_cli
+import cortex_cli
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "packaging"))
@@ -21,15 +21,15 @@ class ProductVersion(unittest.TestCase):
         if not cargo.is_file():
             self.skipTest("no app source in this tree")
         m = re.search(r'^version\s*=\s*"([^"]+)"', cargo.read_text(encoding="utf-8"), re.MULTILINE)
-        self.assertEqual(strata_cli.PRODUCT_VERSION, m.group(1))
+        self.assertEqual(cortex_cli.PRODUCT_VERSION, m.group(1))
 
     def test_dash_dash_version_leads_with_it_and_keeps_the_build_number(self):
-        out = subprocess.run([sys.executable, str(ROOT / "strata.py"), "--version"], capture_output=True, text=True, check=True).stdout
-        self.assertTrue(out.startswith(f"strata {strata_cli.PRODUCT_VERSION} (build {strata_cli.version()};"), out)
+        out = subprocess.run([sys.executable, str(ROOT / "cortex.py"), "--version"], capture_output=True, text=True, check=True).stdout
+        self.assertTrue(out.startswith(f"cortex {cortex_cli.PRODUCT_VERSION} (build {cortex_cli.version()};"), out)
         self.assertIn(sys.executable, out)                                  # the packaging smoke test reads the interpreter back from this line
 
     def test_the_build_number_stays_numeric_for_the_engine_compatibility_checks(self):
-        self.assertRegex(strata_cli.version(), r"^[0-9]+(\.[0-9]+)+$")
+        self.assertRegex(cortex_cli.version(), r"^[0-9]+(\.[0-9]+)+$")
 
 
 class Readme(unittest.TestCase):
@@ -41,7 +41,7 @@ class Readme(unittest.TestCase):
         self.assertNotIn("Starting and serving never install or download anything", text)
         self.assertIn("Serving and watching", text)
         self.assertIn("Only two commands fetch files", text)
-        self.assertIn("`strata launch`", text)
+        self.assertIn("`cortex launch`", text)
 
     def test_the_launch_doc_it_points_at_is_in_the_archive(self):
         self.assertIn("docs/TERMINAL_LAUNCH.md", self.readme("linux-x86_64"))

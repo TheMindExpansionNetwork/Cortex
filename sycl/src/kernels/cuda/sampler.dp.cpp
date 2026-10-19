@@ -15,18 +15,18 @@
 // three implementations that pick the same token, bit for bit:
 //   - the SPLIT top_k (default): `sampler_split_part_kernel` cuts each row into 4,096-logit blocks over the whole
 //     GPU, each keeps its own top_k, and `sampler_split_merge_kernel` merges those lists and runs the tail;
-//   - `sampler_one_block_kernel` (`STRATA_SAMPLER_ONE_BLOCK=1`, and the fallback when the split cannot run): one
+//   - `sampler_one_block_kernel` (`CORTEX_SAMPLER_ONE_BLOCK=1`, and the fallback when the split cannot run): one
 //     block per token, `top_k` block-argmax rounds, each over the logits after the previous pick;
-//   - `sampler_kernel` (`STRATA_OLD_SAMPLER=1`), the kernel of engine 0.1.20, kept as the reference.
+//   - `sampler_kernel` (`CORTEX_OLD_SAMPLER=1`), the kernel of engine 0.1.20, kept as the reference.
 // The two new ones share `sampled_tail_warp` (top_p / min_p / temperature / draw on one warp).
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/sycl_queue.hpp"
-#include "strata/sycl_math.hpp"
-#include "strata/kernels/sampler.hpp"
-#include "strata/core/coupled_draft.hpp"
-#include "strata/core/emulate.hpp"
+#include "cortex/sycl_queue.hpp"
+#include "cortex/sycl_math.hpp"
+#include "cortex/kernels/sampler.hpp"
+#include "cortex/core/coupled_draft.hpp"
+#include "cortex/core/emulate.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -37,15 +37,15 @@
 #include <vector>
 
 namespace {
-// The sampler's accumulators are strata::samp_acc_t (float unless -DSTRATA_SYCL_SAMPLER_FP64=1), so its kernels need FP64
+// The sampler's accumulators are cortex::samp_acc_t (float unless -DCORTEX_SYCL_SAMPLER_FP64=1), so its kernels need FP64
 // only in that build. dpct left an `aspect::fp64` check before every launch; on an Arc Alchemist (A750, no FP64) it
 // threw "'double' is not supported" at the first sampled token unless Intel's FP64 emulation was switched on.
 inline void sampler_require_fp64([[maybe_unused]] const sycl::device& d) {
-    if constexpr (std::is_same_v<strata::samp_acc_t, double>) dpct::has_capability_or_fail(d, {sycl::aspect::fp64});
+    if constexpr (std::is_same_v<cortex::samp_acc_t, double>) dpct::has_capability_or_fail(d, {sycl::aspect::fp64});
 }
 }  // namespace
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
 // Philox 4x32-10, the counter-based generator the phase asks for.  Counter-based matters because it makes the
@@ -253,11 +253,11 @@ sampler_greedy_kernel(const float *__restrict__ logits, int n_vocab,
 constexpr int kAmCtas = 8;      // CTAs per token (the portable cluster size)
 constexpr int kAmThreads = 1024;
 #if defined(DPCT_COMPATIBILITY_TEMP) && DPCT_COMPATIBILITY_TEMP >= 900
-#define STRATA_AM_CLUSTER 1
+#define CORTEX_AM_CLUSTER 1
 #else
-#define STRATA_AM_CLUSTER 0     // older targets: a trap, never launched (sample_greedy_cluster checks)
+#define CORTEX_AM_CLUSTER 0     // older targets: a trap, never launched (sample_greedy_cluster checks)
 #endif
-#if STRATA_AM_CLUSTER
+#if CORTEX_AM_CLUSTER
 __dpct_inline__ void am_take(float s, int v, float &bv, int &best) {
     if (s > bv) { bv = s; best = v; }
 }
@@ -268,7 +268,7 @@ __dpct_inline__ void am_merge(float ov, int oi, float &bv, int &best) {
 // grid (kAmCtas, n_tokens), cluster (kAmCtas, 1, 1), kAmThreads threads
 void sampler_greedy_cluster_kernel(const float* __restrict__ logits,
                                                                             int n_vocab, int* __restrict__ out) {
-#if STRATA_AM_CLUSTER
+#if CORTEX_AM_CLUSTER
     auto item_ct1 = sycl::ext::oneapi::this_work_item::get_nd_item<3>();
 auto &sv = *sycl::ext::oneapi::group_local_memory_for_overwrite<float[32]>(
     sycl::ext::oneapi::this_work_item::get_work_group<3>());
@@ -418,7 +418,7 @@ auto &sv = *sycl::ext::oneapi::group_local_memory_for_overwrite<float[32]>(
 /// order - is unchanged; `top_p`'s cut reads that order in double arithmetic as before; temperature and the
 /// Philox draw apply after the cut.  `sampler_parity` pins all of it against the host reference.
 ///
-/// **KEPT AS THE REFERENCE, BEHIND `STRATA_OLD_SAMPLER=1`.**  Two costs remain in it: the `taken`
+/// **KEPT AS THE REFERENCE, BEHIND `CORTEX_OLD_SAMPLER=1`.**  Two costs remain in it: the `taken`
 /// sweep is O(k) per logit per round, O(k^2 x n_vocab) per row (47 M shared-memory compares at k = 20, 500 M at
 /// 64), and the double-precision tail runs on all 1,024 threads where one warp suffices - GeForce issues FP64 at
 /// 1/64 of FP32.  The kernels after this one remove both and select the same list in the same order.
@@ -594,16 +594,16 @@ __dpct_inline__ void sampler_kernel(const float *__restrict__ logits,
 #pragma unroll
     for (int i = 1; i < k; ++i) mx = sycl::fmax(mx, sel_logit[i]);
     if (p.top_p < 1.0f) {
-        strata::samp_acc_t sum = 0.0;
+        cortex::samp_acc_t sum = 0.0;
 #pragma unroll
         for (int i = 0; i < k; ++i) sum +=
-            sycl::exp((strata::samp_acc_t)sel_logit[i] - (strata::samp_acc_t)mx);
-        strata::samp_acc_t cum = 0.0;
+            sycl::exp((cortex::samp_acc_t)sel_logit[i] - (cortex::samp_acc_t)mx);
+        cortex::samp_acc_t cum = 0.0;
         int cut = k;
 #pragma unroll
         for (int i = 0; i < k; ++i) {
-            cum += sycl::exp((strata::samp_acc_t)sel_logit[i] - (strata::samp_acc_t)mx) / sum;
-            if (cum >= (strata::samp_acc_t) p.top_p) { cut = i + 1; break; }
+            cum += sycl::exp((cortex::samp_acc_t)sel_logit[i] - (cortex::samp_acc_t)mx) / sum;
+            if (cum >= (cortex::samp_acc_t) p.top_p) { cut = i + 1; break; }
         }
         if (cut < p.min_keep) cut = p.min_keep < k ? p.min_keep : k;
         n_keep = cut;
@@ -624,17 +624,17 @@ __dpct_inline__ void sampler_kernel(const float *__restrict__ logits,
     float smx = scaled(0);
 #pragma unroll
     for (int i = 1; i < n_keep; ++i) smx = sycl::fmax(smx, scaled(i));
-    strata::samp_acc_t sum = 0.0;
+    cortex::samp_acc_t sum = 0.0;
 #pragma unroll
     for (int i = 0; i < n_keep; ++i) sum +=
-        sycl::exp((strata::samp_acc_t)scaled(i) - (strata::samp_acc_t)smx);
+        sycl::exp((cortex::samp_acc_t)scaled(i) - (cortex::samp_acc_t)smx);
     const float u = philox_uniform(p.seed, p.counter + (uint64_t) t);
-    strata::samp_acc_t cum = 0.0;
+    cortex::samp_acc_t cum = 0.0;
     int pick = sel_ids[n_keep - 1];
 #pragma unroll
     for (int i = 0; i < n_keep; ++i) {
-        cum += sycl::exp((strata::samp_acc_t)scaled(i) - (strata::samp_acc_t)smx) / sum;
-        if ((strata::samp_acc_t) u < cum) { pick = sel_ids[i]; break; }
+        cum += sycl::exp((cortex::samp_acc_t)scaled(i) - (cortex::samp_acc_t)smx) / sum;
+        if ((cortex::samp_acc_t) u < cum) { pick = sel_ids[i]; break; }
     }
     if (item_ct1.get_local_id(2) == 0) out[t] = pick;
 }
@@ -700,7 +700,7 @@ __dpct_inline__ void warp_first(float &bv, int &bi) {
 template <bool kProb = false>
 inline void sampled_tail_warp(const int *sel_ids, const float *sel_logit, int k,
                               const SamplerParams &p, int t,
-                              int *__restrict__ out, strata::samp_acc_t *ex,
+                              int *__restrict__ out, cortex::samp_acc_t *ex,
                               float *prob_out = nullptr) {
     const int lane =
         (int)(sycl::ext::oneapi::this_work_item::get_nd_item<3>().get_local_id(
@@ -714,9 +714,9 @@ inline void sampled_tail_warp(const int *sel_ids, const float *sel_logit, int k,
     if (p.top_p < 1.0f) {
 #pragma unroll
         for (int i = lane; i < k; i += 32)
-            ex[i] = sycl::exp((strata::samp_acc_t)sel_logit[i] - (strata::samp_acc_t)mx);
+            ex[i] = sycl::exp((cortex::samp_acc_t)sel_logit[i] - (cortex::samp_acc_t)mx);
         sycl::group_barrier(sycl::ext::oneapi::this_work_item::get_sub_group());
-        strata::samp_acc_t sum = 0.0;
+        cortex::samp_acc_t sum = 0.0;
         if (lane == 0)
 #pragma unroll
             for (int i = 0; i < k; ++i) sum += ex[i];
@@ -736,11 +736,11 @@ inline void sampled_tail_warp(const int *sel_ids, const float *sel_logit, int k,
         sycl::group_barrier(sycl::ext::oneapi::this_work_item::get_sub_group());
         int cut = k;
         if (lane == 0) {
-            strata::samp_acc_t cum = 0.0;
+            cortex::samp_acc_t cum = 0.0;
 #pragma unroll
             for (int i = 0; i < k; ++i) {
                 cum += ex[i];
-                if (cum >= (strata::samp_acc_t) p.top_p) { cut = i + 1; break; }
+                if (cum >= (cortex::samp_acc_t) p.top_p) { cut = i + 1; break; }
             }
         }
         /*
@@ -770,9 +770,9 @@ inline void sampled_tail_warp(const int *sel_ids, const float *sel_logit, int k,
         smx = sycl::fmax(smx, sel_logit[i] * inv_t);
 #pragma unroll
     for (int i = lane; i < n_keep; i += 32)
-        ex[i] = sycl::exp((strata::samp_acc_t)(sel_logit[i] * inv_t) - (strata::samp_acc_t)smx);
+        ex[i] = sycl::exp((cortex::samp_acc_t)(sel_logit[i] * inv_t) - (cortex::samp_acc_t)smx);
     sycl::group_barrier(sycl::ext::oneapi::this_work_item::get_sub_group());
-    strata::samp_acc_t sum = 0.0;
+    cortex::samp_acc_t sum = 0.0;
     if (lane == 0)
 #pragma unroll
         for (int i = 0; i < n_keep; ++i) sum += ex[i];
@@ -789,13 +789,13 @@ inline void sampled_tail_warp(const int *sel_ids, const float *sel_logit, int k,
     sycl::group_barrier(sycl::ext::oneapi::this_work_item::get_sub_group());
     if (lane == 0) {
         const float u = philox_uniform(p.seed, p.counter + (uint64_t) t);
-        strata::samp_acc_t cum = 0.0;
+        cortex::samp_acc_t cum = 0.0;
         int pi = n_keep > 0 ? n_keep - 1 : 0;
         int pick = sel_ids[pi];
 #pragma unroll
         for (int i = 0; i < n_keep; ++i) {
             cum += ex[i];
-            if ((strata::samp_acc_t) u < cum) { pick = sel_ids[i]; pi = i; break; }
+            if ((cortex::samp_acc_t) u < cum) { pick = sel_ids[i]; pi = i; break; }
         }
         out[t] = pick;
         if constexpr (kProb) *prob_out = n_keep > 0 ? (float) ex[pi] : 1.0f;
@@ -808,7 +808,7 @@ inline void sampled_tail_warp(const int *sel_ids, const float *sel_logit, int k,
 /// what has not been picked.  The round is then the same block argmax with the same tie rule, so the list is the
 /// same list in the same order.  An empty round leaves (-inf, id 0) as before, and every round after it is empty
 /// in both versions (nothing after -inf beats -inf).  O(k x n_vocab) per row instead of O(k^2 x n_vocab), then warp
-/// 0 runs the tail.  `STRATA_SAMPLER_ONE_BLOCK=1`, and the fallback when the split path cannot run.
+/// 0 runs the tail.  `CORTEX_SAMPLER_ONE_BLOCK=1`, and the fallback when the split path cannot run.
 /*
 DPCT1110: The total declared local variable size in device function
 sampler_one_block_kernel exceeds 128 bytes and may cause high register pressure.
@@ -870,7 +870,7 @@ sampler_one_block_kernel(const float *__restrict__ logits, int n_vocab,
         *sycl::ext::oneapi::group_local_memory_for_overwrite<float[kSelMax]>(
             sycl::ext::oneapi::this_work_item::get_work_group<3>());
     auto &ex =
-        *sycl::ext::oneapi::group_local_memory_for_overwrite<strata::samp_acc_t[kSelMax]>(
+        *sycl::ext::oneapi::group_local_memory_for_overwrite<cortex::samp_acc_t[kSelMax]>(
             sycl::ext::oneapi::this_work_item::get_work_group<3>());
     auto &sv = *sycl::ext::oneapi::group_local_memory_for_overwrite<float[32]>(
         sycl::ext::oneapi::this_work_item::get_work_group<3>());
@@ -1157,7 +1157,7 @@ sampler_split_merge_kernel(const sycl::int2 *__restrict__ cand, int n_blocks,
         *sycl::ext::oneapi::group_local_memory_for_overwrite<float[kSelMax]>(
             sycl::ext::oneapi::this_work_item::get_work_group<3>());
     auto &ex =
-        *sycl::ext::oneapi::group_local_memory_for_overwrite<strata::samp_acc_t[kSelMax]>(
+        *sycl::ext::oneapi::group_local_memory_for_overwrite<cortex::samp_acc_t[kSelMax]>(
             sycl::ext::oneapi::this_work_item::get_work_group<3>());
     const sycl::int2 *src = cand + (size_t)t * n_blocks * k;
 #pragma unroll
@@ -1170,7 +1170,7 @@ sampler_split_merge_kernel(const sycl::int2 *__restrict__ cand, int n_blocks,
     sampled_tail_warp(sel_ids, sel_logit, k, p, t, out, ex);
 }
 
-// ---- COUPLED DRAFT SAMPLING (include/strata/core/coupled_draft.hpp): the MTP draft layer samples its draft with the
+// ---- COUPLED DRAFT SAMPLING (include/cortex/core/coupled_draft.hpp): the MTP draft layer samples its draft with the
 // target's chain and the target's Philox draw.  Everything that varies per request or per round - the chain's
 // parameters, the seed, the counter (from the cell's step record), the penalty history - is read from DEVICE memory:
 // these kernels are captured into the drafter's round/step graphs.  One row, `nv` logits: the draft head's
@@ -1189,7 +1189,7 @@ __dpct_inline__ void coupled_stage_kernel(const SamplerParams *__restrict__ mp,
     for (int i = item_ct1.get_local_id(2);
          i < (int)(sizeof(SamplerParams) / sizeof(int));
          i += item_ct1.get_local_range(2)) d[i] = s[i];
-    const int h = strata::core::coupled_hist_len(((const volatile SamplerParams*) mp)->penalty_last_n, cap);
+    const int h = cortex::core::coupled_hist_len(((const volatile SamplerParams*) mp)->penalty_last_n, cap);
     const volatile int* vh = (const volatile int*) mh;
 #pragma unroll
     for (int i = cap - h + (int)item_ct1.get_local_id(2); i < cap;
@@ -1206,9 +1206,9 @@ __dpct_inline__ void coupled_penalize_kernel(
     const int *__restrict__ ring, int cap, int j, uint8_t *dpct_local) {
     auto item_ct1 = sycl::ext::oneapi::this_work_item::get_nd_item<3>();
     const SamplerParams p = *dp;
-    const int h = strata::core::coupled_hist_len(p.penalty_last_n, cap);
+    const int h = cortex::core::coupled_hist_len(p.penalty_last_n, cap);
     if (h <= 0) return;
-    const int* hrow = ring + strata::core::coupled_hist_start(cap, j, h);
+    const int* hrow = ring + cortex::core::coupled_hist_start(cap, j, h);
     auto seen = (unsigned int *)dpct_local;
     const int words = (nv + 31) / 32;
 #pragma unroll
@@ -1246,7 +1246,7 @@ __dpct_inline__ void coupled_merge_kernel(
         (int)sycl::ext::oneapi::this_work_item::get_nd_item<3>().get_local_id(
             2);
     SamplerParams p = *dp;
-    p.counter = strata::core::coupled_draft_counter((int64_t) step_rec[0]);
+    p.counter = cortex::core::coupled_draft_counter((int64_t) step_rec[0]);
     const int k = sampled_k(p.top_k, nv);    // <= kpart: the first k of a union lie in the first k of each list
     auto &lists = *sycl::ext::oneapi::group_local_memory_for_overwrite<
         sycl::int2[kSplitMaxBlocks * kSelMax]>(
@@ -1258,7 +1258,7 @@ __dpct_inline__ void coupled_merge_kernel(
         *sycl::ext::oneapi::group_local_memory_for_overwrite<float[kSelMax]>(
             sycl::ext::oneapi::this_work_item::get_work_group<3>());
     auto &ex =
-        *sycl::ext::oneapi::group_local_memory_for_overwrite<strata::samp_acc_t[kSelMax]>(
+        *sycl::ext::oneapi::group_local_memory_for_overwrite<cortex::samp_acc_t[kSelMax]>(
             sycl::ext::oneapi::this_work_item::get_work_group<3>());
     auto &pick = *sycl::ext::oneapi::group_local_memory_for_overwrite<int[1]>(
         sycl::ext::oneapi::this_work_item::get_work_group<3>());
@@ -1286,8 +1286,8 @@ __dpct_inline__ void coupled_merge_kernel(
     }
 }
 
-// Which sampled path runs, read once: `STRATA_OLD_SAMPLER=1` is `sampler_kernel` (engine 0.1.20),
-// `STRATA_SAMPLER_ONE_BLOCK=1` the one-block kernel; by default the split top_k wherever it applies.
+// Which sampled path runs, read once: `CORTEX_OLD_SAMPLER=1` is `sampler_kernel` (engine 0.1.20),
+// `CORTEX_SAMPLER_ONE_BLOCK=1` the one-block kernel; by default the split top_k wherever it applies.
 enum class SampledPath { Split, OneBlock, Old };
 
 bool env_flag(const char* name) {
@@ -1296,8 +1296,8 @@ bool env_flag(const char* name) {
 }
 
 SampledPath sampled_path() {
-    static const SampledPath path = env_flag("STRATA_OLD_SAMPLER")         ? SampledPath::Old
-                                    : env_flag("STRATA_SAMPLER_ONE_BLOCK") ? SampledPath::OneBlock
+    static const SampledPath path = env_flag("CORTEX_OLD_SAMPLER")         ? SampledPath::Old
+                                    : env_flag("CORTEX_SAMPLER_ONE_BLOCK") ? SampledPath::OneBlock
                                                                            : SampledPath::Split;
     return path;
 }
@@ -1309,7 +1309,7 @@ bool stream_capturing(void *stream) try {
     sycl::ext::oneapi::experimental::queue_state st =
         sycl::ext::oneapi::experimental::queue_state::executing;
     if (DPCT_CHECK_ERROR(
-            (st = strata::q_of(stream)->ext_oneapi_get_state())) != 0) {
+            (st = cortex::q_of(stream)->ext_oneapi_get_state())) != 0) {
         /*
         DPCT1010: SYCL uses exceptions to report errors and does not use
         the error codes. The cudaGetLastError function call was replaced with 0.
@@ -1407,7 +1407,7 @@ bool sample_greedy_cluster(const float *logits, int n_tokens, int n_vocab,
     if (n_tokens <= 0 || n_vocab <= 0) return true;
     if (n_tokens > 65535) return false;
     // Per device (a layer split runs on several): 1 the cluster kernel runs here, 2 it does not - sm_90+ (the card's,
-    // or STRATA_EMULATE_CC's), code built for it (an older build's PTX holds a trap: the PTX version says which), and
+    // or CORTEX_EMULATE_CC's), code built for it (an older build's PTX holds a trap: the PTX version says which), and
     // room for one cluster of kAmCtas CTAs.
     static int ok[64] = {};
     int dev = 0;
@@ -1428,7 +1428,7 @@ bool sample_greedy_cluster(const float *logits, int n_tokens, int n_vocab,
     cfg.gridDim = dpct::dim3(kAmCtas, 1, 1);
     cfg.blockDim = dpct::dim3(kAmThreads, 1, 1);
     cfg.dynamicSmemBytes = 0;
-    cfg.stream = strata::q_of(stream);
+    cfg.stream = cortex::q_of(stream);
     cfg.attrs = at;
     cfg.numAttrs = 1;
     if (ok[dev] == 0) {
@@ -1437,7 +1437,7 @@ bool sample_greedy_cluster(const float *logits, int n_tokens, int n_vocab,
         const bool runs =
             DPCT_CHECK_ERROR(
                 major = dpct::get_device(dev).get_major_version()) == 0 &&
-            strata::cc_major_of(major) >= 9 &&
+            cortex::cc_major_of(major) >= 9 &&
             DPCT_CHECK_ERROR(dpct::get_kernel_function_info(
                 &fa, (const void *)sampler_greedy_cluster_kernel)) == 0 &&
             fa.ptxVersion >= 90 && fa.binaryVersion >= 90 &&
@@ -1488,9 +1488,9 @@ void sample_tokens(const float* logits, int n_tokens, int n_vocab, const int* hi
             : 0;
     if (p.greedy || p.temperature <= 0.0f) {
         // Without penalties (shmem == 0: no window) on sm_90+, a cluster of CTAs per token - the same token; see
-        // `sampler_greedy_cluster_kernel`.  STRATA_ARGMAX_MULTI=0: always the one-block kernel.
+        // `sampler_greedy_cluster_kernel`.  CORTEX_ARGMAX_MULTI=0: always the one-block kernel.
         static const bool multi = [] {
-            const char* v = std::getenv("STRATA_ARGMAX_MULTI");
+            const char* v = std::getenv("CORTEX_ARGMAX_MULTI");
             return !v || std::atoi(v) != 0;
         }();
         // One block per token, 1,024 threads over the vocabulary.  See `sampler_greedy_kernel`.
@@ -1506,7 +1506,7 @@ void sample_tokens(const float* logits, int n_tokens, int n_vocab, const int* hi
             auto exp_props = sycl::ext::oneapi::experimental::properties{
                 sycl::ext::oneapi::experimental::use_root_sync};
 
-            strata::q_of(stream)
+            cortex::q_of(stream)
                 ->submit([&](sycl::handler &cgh) {
                     sycl::local_accessor<uint8_t, 1> dpct_local_acc_ct1(
                         sycl::range(shmem), cgh);
@@ -1540,9 +1540,9 @@ void sample_tokens(const float* logits, int n_tokens, int n_vocab, const int* hi
         */
         auto exp_props = sycl::ext::oneapi::experimental::properties{
             sycl::ext::oneapi::experimental::use_root_sync};
-        sampler_require_fp64(strata::q_of(stream)->get_device());
+        sampler_require_fp64(cortex::q_of(stream)->get_device());
 
-        strata::q_of(stream)
+        cortex::q_of(stream)
             ->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<uint8_t, 1> dpct_local_acc_ct1(
                     sycl::range(shmem), cgh);
@@ -1579,7 +1579,7 @@ void sample_tokens(const float* logits, int n_tokens, int n_vocab, const int* hi
                 auto exp_props = sycl::ext::oneapi::experimental::properties{
                     sycl::ext::oneapi::experimental::use_root_sync};
 
-                strata::q_of(stream)
+                cortex::q_of(stream)
                     ->parallel_for<dpct_kernel_name<
                         class sampler_split_part_kernel_cc5673>>(
                         sycl::nd_range<3>(
@@ -1598,9 +1598,9 @@ void sample_tokens(const float* logits, int n_tokens, int n_vocab, const int* hi
             {
                 auto exp_props = sycl::ext::oneapi::experimental::properties{
                     sycl::ext::oneapi::experimental::use_root_sync};
-                sampler_require_fp64(strata::q_of(stream)->get_device());
+                sampler_require_fp64(cortex::q_of(stream)->get_device());
 
-                strata::q_of(stream)
+                cortex::q_of(stream)
                     ->parallel_for<dpct_kernel_name<
                         class sampler_split_merge_kernel_b17bd4>>(
                         sycl::nd_range<3>(
@@ -1623,9 +1623,9 @@ void sample_tokens(const float* logits, int n_tokens, int n_vocab, const int* hi
             */
             auto exp_props = sycl::ext::oneapi::experimental::properties{
                 sycl::ext::oneapi::experimental::use_root_sync};
-            sampler_require_fp64(strata::q_of(stream)->get_device());
+            sampler_require_fp64(cortex::q_of(stream)->get_device());
 
-            strata::q_of(stream)
+            cortex::q_of(stream)
                 ->submit([&](sycl::handler &cgh) {
                     sycl::local_accessor<uint8_t, 1> dpct_local_acc_ct1(
                         sycl::range(shmem), cgh);
@@ -1684,7 +1684,7 @@ void coupled_draft_stage(const SamplerParams* mapped_params, const int32_t* mapp
         auto exp_props = sycl::ext::oneapi::experimental::properties{
             sycl::ext::oneapi::experimental::use_root_sync};
 
-        strata::q_of(stream)
+        cortex::q_of(stream)
             ->parallel_for<dpct_kernel_name<class coupled_stage_kernel_113245>>(
                 sycl::nd_range<3>(sycl::range(1, 1, 256),
                                   sycl::range(1, 1, 256)),
@@ -1699,7 +1699,7 @@ void coupled_draft_stage(const SamplerParams* mapped_params, const int32_t* mapp
 void coupled_draft_sample(float* logits, int nv, const int32_t* sub_to_id, const int32_t* id_to_sub, int id_vocab,
                           const SamplerParams* params, int32_t* ring, int cap, int j, const int32_t* step_rec,
                           void* scratch, int32_t* out_id, float* out_prob, void* stream) {
-    const dpct::queue_ptr s = strata::q_of(stream);
+    const dpct::queue_ptr s = cortex::q_of(stream);
     const int n_blocks = coupled_blocks(nv), kpart = coupled_kpart(nv);
     if (nv <= 0 || n_blocks > kSplitMaxBlocks || scratch == nullptr) {
         std::fprintf(stderr, "coupled_draft_sample: %d logits need scratch and at most %d blocks\n", nv, kSplitMaxBlocks);
@@ -1774,4 +1774,4 @@ void coupled_draft_sample(float* logits, int nv, const int32_t* sub_to_id, const
     coupled_check("coupled_draft merge");
 }
 
-}  // namespace strata::kernels
+}  // namespace cortex::kernels

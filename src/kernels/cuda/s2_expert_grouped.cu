@@ -13,14 +13,14 @@
 // partials are reduced through shuffle; the CPU walks every chunk in order with its own accumulator shape.
 // The two agree to float rounding and not to the bit, which is the same contract `s_gemv_parity` carries for
 // the same reason.  `bench/micro/moe_hit_parity.cu` is the check.
-#include "strata/kernels/s2_expert_grouped.hpp"
-#include "strata/core/geometry.hpp"
-#include "strata/kernels/dp4a.hpp"
-#include "strata/kernels/f16_bits.hpp"
+#include "cortex/kernels/s2_expert_grouped.hpp"
+#include "cortex/core/geometry.hpp"
+#include "cortex/kernels/dp4a.hpp"
+#include "cortex/kernels/f16_bits.hpp"
 
-#include "strata/kernels/quantize_act.hpp"
-#include "strata/kernels/fuse_decode.hpp"
-#include "strata/kernels/verify_kernels.hpp"
+#include "cortex/kernels/quantize_act.hpp"
+#include "cortex/kernels/fuse_decode.hpp"
+#include "cortex/kernels/verify_kernels.hpp"
 
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
@@ -31,15 +31,15 @@
 #include <cstdlib>
 #include <cstring>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
-// THE BLOB'S OWN GEOMETRY, from `include/strata/kernels/cpu/expert.hpp`.  Restated as literals because that
+// THE BLOB'S OWN GEOMETRY, from `include/cortex/kernels/cpu/expert.hpp`.  Restated as literals because that
 // header is the CPU path's and this file must not silently follow it if the two ever disagree: the sizes below
 // are what the CPU kernel's indexing computes, and `moe_hit_parity` compares the two end to end.
 constexpr int H = 2560;
 constexpr int FF = 640;
-static_assert(H == strata::core::kCompiledGeometry.n_embd && FF == strata::core::kCompiledGeometry.n_ff, "s2_expert_grouped is compiled for core/geometry.hpp");
+static_assert(H == cortex::core::kCompiledGeometry.n_embd && FF == cortex::core::kCompiledGeometry.n_ff, "s2_expert_grouped is compiled for core/geometry.hpp");
 constexpr int QK = 64;                       // Q2_0's group: one fp16 scale per 64 weights
 constexpr int ROW_GU = H / 4;                // 640 B of codes per gate/up row (2 bits per element)
 constexpr int ROW_D = FF / 4;                // 160 B per down row
@@ -96,8 +96,8 @@ __device__ __forceinline__ float row_dot_s2_q8(const uint8_t* __restrict__ codes
             // it rather than reasoning about which cast happens to work.
             int xw;
             memcpy(&xw, xq + 4 * j, 4);
-            s = STRATA_DP4A(cw, xw, s);
-            hx = STRATA_DP4A(ones, xw, hx);
+            s = CORTEX_DP4A(cw, xw, s);
+            hx = CORTEX_DP4A(ones, xw, hx);
         }
         // One weight scale per 64 elements, so per TWO 32-element chunks.
         const float dw = f16_at(scales + (size_t) (c >> 1) * 2);
@@ -162,7 +162,7 @@ __global__ void gu_kernel(const uint8_t* __restrict__ blob_base, const int32_t* 
     gate_up[base + (size_t) r] = s;
 }
 
-// `silu(gate) * up` lives in `strata/kernels/swiglu.cuh` (the fused kernels call it in their epilogues);
+// `silu(gate) * up` lives in `cortex/kernels/swiglu.cuh` (the fused kernels call it in their epilogues);
 // the standalone pass it replaced is gone.  The scratch layout is unchanged: `[0, n_pairs)` ends up holding
 // the products, `[n_pairs, 2*n_pairs)` the raw up rows.
 /// `silu(gate) * up`, in place, over a GATE-MAJOR buffer: `[0, n_pairs)` is every hit's gate and
@@ -235,7 +235,7 @@ __global__ void down_kernel(const uint8_t* __restrict__ blob_base, const int32_t
     if (lane == 0) out[(size_t) dst_index[h] * H + r] = s;
 }
 
-// ---- THE SAME INTEGERS FROM FEWER INSTRUCTIONS.  `STRATA_OLD_GROUPED=1` keeps the kernels above.
+// ---- THE SAME INTEGERS FROM FEWER INSTRUCTIONS.  `CORTEX_OLD_GROUPED=1` keeps the kernels above.
 //
 // **INSIDE A CHUNK, WHICH CODE MEETS WHICH ACTIVATION IN A `dp4a` WORD IS FREE.**  `s = sum_e code_e * x_e` and
 // `hx = sum_e x_e` are exact integer sums (|s| <= 32 * 3 * 128), so any grouping of the 32 products into words
@@ -292,7 +292,7 @@ __device__ __forceinline__ int load_x_chunk(const uint8_t* __restrict__ xb, int 
         // natural word j: x[4j .. 4j+3]; a 64-bit shift (sh is 0, 8, 16 or 24) rather than __funnelshift_r, so the same
         // source needs no CUDA-only intrinsic.
         n[j] = (unsigned) ((((unsigned long long) v[j + 1] << 32) | v[j]) >> sh);
-        hx = STRATA_DP4A(0x01010101, (int) n[j], hx);
+        hx = CORTEX_DP4A(0x01010101, (int) n[j], hx);
     }
 #pragma unroll
     for (int h = 0; h < 2; ++h) {
@@ -312,7 +312,7 @@ __device__ __forceinline__ int load_x_chunk(const uint8_t* __restrict__ xb, int 
 __device__ __forceinline__ int chunk_s(const int m[8], const int X[8]) {
     int s = 0;
 #pragma unroll
-    for (int j = 0; j < 8; ++j) s = STRATA_DP4A(m[j], X[j], s);
+    for (int j = 0; j < 8; ++j) s = CORTEX_DP4A(m[j], X[j], s);
     return s;
 }
 
@@ -418,7 +418,7 @@ __device__ __forceinline__ int dot4(const uint8_t* codes, const int8_t* q) {
                           (((c >> 4) & 3u) << 16) | (((c >> 6) & 3u) << 24));
     int xw;
     memcpy(&xw, q, sizeof xw);
-    return STRATA_DP4A(cw, xw, 0);
+    return CORTEX_DP4A(cw, xw, 0);
 }
 
 __device__ __forceinline__ float row_dot_cpu_order(const uint8_t* codes, const uint8_t* scales,
@@ -519,7 +519,7 @@ void check(const char* who, void* stream) {
     (void) stream;
 }
 
-// The previous kernels stay selectable for A/B - `STRATA_OLD_GROUPED=1` in the environment, or
+// The previous kernels stay selectable for A/B - `CORTEX_OLD_GROUPED=1` in the environment, or
 // `moe_grouped_select_old` (the parity test runs both in one process).  The environment is read once, on first use;
 // the choice is made at each launch, so a captured graph keeps the kernels it was captured with.
 std::atomic<int> g_select_old{-1};
@@ -530,20 +530,20 @@ bool old_kernels() {
     const int s = g_select_old.load(std::memory_order_relaxed);
     if (s >= 0) return s != 0;
     static const bool env = [] {
-        const char* e = std::getenv("STRATA_OLD_GROUPED");
+        const char* e = std::getenv("CORTEX_OLD_GROUPED");
         return e != nullptr && e[0] == '1';
     }();
     return env;
 }
 
-// `STRATA_GROUPED_PAIR_MIN_HITS=N`: the per-hit path keeps the previous one-warp-per-row kernels below N hits of
+// `CORTEX_GROUPED_PAIR_MIN_HITS=N`: the per-hit path keeps the previous one-warp-per-row kernels below N hits of
 // capacity.  The new per-hit kernels launch half the warps (two rows each), so one hit's gate/up is 80 blocks - fewer
 // than an RTX 5090's SMs - and whether that costs time at one to three hits is what `--bench` measures.  Bitwise
 // the same either way; default 0 (always the new kernels).  Ignored while `moe_grouped_select_old` forces a choice.
 long long pair_min_hits() {
     if (g_select_old.load(std::memory_order_relaxed) >= 0) return 0;
     static const long long n = [] {
-        const char* e = std::getenv("STRATA_GROUPED_PAIR_MIN_HITS");
+        const char* e = std::getenv("CORTEX_GROUPED_PAIR_MIN_HITS");
         return e != nullptr ? std::atoll(e) : 0LL;
     }();
     return n;
@@ -636,13 +636,13 @@ void moe_hit_grouped_s2(const uint8_t* blob_base, const int32_t* slot_index, con
     // 2+3. silu(gate) * up, then the intermediate's own contract - ONE kernel where two ran.  The products
     //    land in the gate half exactly as `swiglu_kernel` left them (the parity test compares that scratch),
     //    and the q8_0 blocks are the same bytes `quantize_q8_0` produced.  `swilu_kind` 1 is this file's
-    //    `swiglu_kernel` expression (see `strata/kernels/swiglu.cuh`).
+    //    `swiglu_kernel` expression (see `cortex/kernels/swiglu.cuh`).
     //    The down weight is Q2_0, whose `vec_dot_type` is Q8_0 - `ggml_mul_mat`'s rule, not a choice.  With
     //    `x_scales` the intermediate takes the CPU's contract (`quantize_q8_0_scaled`), R4.2h.
     {
         const long long pairs = n_hits * (long long) FF;
-#if defined(STRATA_EXPERIMENTAL_SM60)
-        if (strata::kernels::fuse_decode()) {
+#if defined(CORTEX_EXPERIMENTAL_SM60)
+        if (cortex::kernels::fuse_decode()) {
         if (x_scales != nullptr)
             swilu_quantize_q8_0_scaled(gate_up, gate_up + pairs, gate_up, pairs, 1, h_q8_0, h_scales, stream);
         else
@@ -748,8 +748,8 @@ void moe_hit_grouped_s2_dev(const uint8_t* blob_base, const int32_t* slot_index,
     // sentinel rows included - the parity test compares that scratch).
     {
         const long long pairs = cap * (long long) FF;
-#if defined(STRATA_EXPERIMENTAL_SM60)
-        if (strata::kernels::fuse_decode()) {
+#if defined(CORTEX_EXPERIMENTAL_SM60)
+        if (cortex::kernels::fuse_decode()) {
         if (x_scales != nullptr)
             swilu_quantize_q8_0_scaled(gate_up, gate_up + pairs, gate_up, pairs, 1, h_q8_0, h_scales, stream);
         else
@@ -795,8 +795,8 @@ void moe_hit_grouped_s2_multi(const uint8_t* blob_base, const int32_t* slot_inde
     }
     {
         const long long pairs = cap * (long long) FF;
-#if defined(STRATA_EXPERIMENTAL_SM60)
-        if (strata::kernels::fuse_decode()) {
+#if defined(CORTEX_EXPERIMENTAL_SM60)
+        if (cortex::kernels::fuse_decode()) {
         if (x_scales != nullptr)
             swilu_quantize_q8_0_scaled(gate_up, gate_up + pairs, gate_up, pairs, 1, h_q8_0, h_scales, stream);
         else
@@ -841,8 +841,8 @@ __device__ __forceinline__ float chunk_dot(uint2 cb, const int* xw, float dw, fl
         const unsigned cbyte = cbytes[j];
         const int cw = (int) ((cbyte & 3u) | (((cbyte >> 2) & 3u) << 8) | (((cbyte >> 4) & 3u) << 16) |
                               (((cbyte >> 6) & 3u) << 24));
-        s = STRATA_DP4A(cw, xw[j], s);
-        hx = STRATA_DP4A(ones, xw[j], hx);
+        s = CORTEX_DP4A(cw, xw[j], s);
+        hx = CORTEX_DP4A(ones, xw[j], hx);
     }
     return dw * dx * (float) (s - hx);
 }
@@ -1188,9 +1188,9 @@ void moe_grouped_s2(const unsigned long long* grp_ptr, const int32_t* grp_start,
         check("moe_grouped_s2/gu", stream);
     }
     // #783 PR-k (stuchapin909): SwiGLU and the scaled Q8_0 quantize of its result in one kernel (gate_up still gets the
-    // activation written back, so the parity checks read the same buffer); STRATA_S2_SWIGLU_Q8=0 keeps the two launches
+    // activation written back, so the parity checks read the same buffer); CORTEX_S2_SWIGLU_Q8=0 keeps the two launches
     static const bool swiglu_q8 = [] {
-        const char* e = std::getenv("STRATA_S2_SWIGLU_Q8");
+        const char* e = std::getenv("CORTEX_S2_SWIGLU_Q8");
         return e == nullptr || e[0] != '0';
     }();
     static_assert(FF % 32 == 0, "the fused SwiGLU + Q8_0 kernel works in whole 32-value blocks");
@@ -1203,8 +1203,8 @@ void moe_grouped_s2(const unsigned long long* grp_ptr, const int32_t* grp_start,
         check("moe_grouped_s2/swiglu_q8", stream);
     } else {
         const long long pairs = cap_entries * (long long) FF;
-#if defined(STRATA_EXPERIMENTAL_SM60)
-        if (strata::kernels::fuse_decode()) {
+#if defined(CORTEX_EXPERIMENTAL_SM60)
+        if (cortex::kernels::fuse_decode()) {
         if (x_scales != nullptr)
             swilu_quantize_q8_0_scaled(gate_up, gate_up + pairs, gate_up, pairs, 1, h_q8_0, h_scales, stream);
         else
@@ -1281,4 +1281,4 @@ void moe_hit_grouped_s2_cpu_order(const uint8_t* blob_base, const int32_t* slot_
     check("cpu_order/down", stream);
 }
 
-}  // namespace strata::kernels
+}  // namespace cortex::kernels

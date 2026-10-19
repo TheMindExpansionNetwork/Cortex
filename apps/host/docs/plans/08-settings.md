@@ -96,7 +96,7 @@ Integration needs a host-owned version service, not renderer filesystem writes:
 
 - Read installed app/engine builds, compatible releases, checked-at state and
   saved previous installations. An unavailable catalog is different from Up to
-  date. Resolve engine builds through Strata's compatibility manifest.
+  date. Resolve engine builds through Cortex's compatibility manifest.
 - Check updates without changing the running model. Review the chosen build and
   release notes before installation; report download/progress/errors from the
   host. Wait for current requests or explicitly stop them before restarting.
@@ -116,12 +116,12 @@ Integration needs a host-owned version service, not renderer filesystem writes:
 The follow-up browser comment removes the update modal. Check for updates now
 calls `GET /api/updates/check` and changes the Update card in place: Checking,
 Update available, Up to date, No release yet, Check unavailable or Check failed.
-The endpoint reads the official Strata repository's stable releases and compares
+The endpoint reads the official Cortex repository's stable releases and compares
 semantic versions; drafts/prereleases are ignored. Results include `checkedAt`,
-separate `strata`/`engine` states, `installedVersion`, optional `latestVersion` and
+separate `cortex`/`engine` states, `installedVersion`, optional `latestVersion` and
 `releaseUrl`, and `canInstall: false` for this unmanaged host.
 
-An available Strata release adds **Get update**, a link to its verified GitHub
+An available Cortex release adds **Get update**, a link to its verified GitHub
 release page. It does not install software. The real browser check exercised this
 state on 12 October. Failed requests remain retryable and do not leave a stale
 Up to date verdict on screen. Engine checks require a tested compatibility feed

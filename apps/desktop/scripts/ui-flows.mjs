@@ -27,7 +27,7 @@ const repoHost = resolve(here, '../../host');
 const staged = resolve(here, '../src-tauri/resources');
 const stagedControl = resolve(args.control ?? join(staged, 'control'));
 const nodeExe = resolve(args.node ?? join(staged, 'node', process.platform === 'win32' ? 'node.exe' : 'node'));
-const work = mkdtempSync(join(tmpdir(), 'strata-ui-flows-'));
+const work = mkdtempSync(join(tmpdir(), 'cortex-ui-flows-'));
 const shots = resolve(args.shots ?? join(work, 'shots'));
 mkdirSync(shots, { recursive: true });
 const only = new Set(String(args.only ?? 'download,models,profile,ui2,ui2d,tune,fail,delete,theme,restart,perf,polish,stop,latest').split(','));
@@ -43,8 +43,8 @@ const check = (ok, label, detail = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'}
 // ------------------------------------------------------------------ the app folder: the real Control with a fake installer
 const control = join(work, 'control');
 mkdirSync(control, { recursive: true });
-for (const name of ['python', 'strata_control', 'strata_cli', 'serve']) symlinkSync(join(stagedControl, name), join(control, name), 'junction');
-for (const name of ['strata.py', 'VERSION', 'BUNDLE.json', 'requirements.txt']) copyFileSync(join(stagedControl, name), join(control, name));
+for (const name of ['python', 'cortex_control', 'cortex_cli', 'serve']) symlinkSync(join(stagedControl, name), join(control, name), 'junction');
+for (const name of ['cortex.py', 'VERSION', 'BUNDLE.json', 'requirements.txt']) copyFileSync(join(stagedControl, name), join(control, name));
 cpSync(join(stagedControl, 'tools'), join(control, 'tools'), { recursive: true });
 const python = isWin ? join(control, 'python', 'python.exe') : join(control, 'python', 'bin', 'python3');
 
@@ -71,13 +71,13 @@ def job():
     return {'running': True, 'step': '5/7: downloading Qwen3.8-Flash-Next IQ3_S', 'model': 'IQ3_S',
             'download': {'file': 'model files', 'done_gb': round(done, 3), 'total_gb': TOTAL, 'remaining_gb': round(TOTAL - done, 3), 'percent': int(100 * done / TOTAL)}}
 def call(name, a):
-    if name == 'strata_models': return CATALOG
-    if name == 'strata_remove':
-        cfg = ROOT / ('strata-%s.json' % a['model'])
+    if name == 'cortex_models': return CATALOG
+    if name == 'cortex_remove':
+        cfg = ROOT / ('cortex-%s.json' % a['model'])
         if a.get('confirm') and cfg.exists(): cfg.unlink()
         return {'summary': 'Deleted', 'plan': {'gb': 83.6}, 'failed': []}
-    if name == 'strata_status': return {'summary': 'fake', 'installed': {'models': [{'model': 'iq3_s', 'disk_gb': 83.6, 'disk_bytes': 83600000000}]}, 'hardware': HARDWARE, 'recommendation': CATALOG['recommendation'], 'install': job(), 'running': []}
-    if name == 'strata_install':
+    if name == 'cortex_status': return {'summary': 'fake', 'installed': {'models': [{'model': 'iq3_s', 'disk_gb': 83.6, 'disk_bytes': 83600000000}]}, 'hardware': HARDWARE, 'recommendation': CATALOG['recommendation'], 'install': job(), 'running': []}
+    if name == 'cortex_install':
         if a.get('cancel'):
             f = STATE / 'job.json'
             if f.exists(): j = json.loads(f.read_text()); j['cancelled'] = True; f.write_text(json.dumps(j))
@@ -95,13 +95,13 @@ for line in sys.stdin:
     if 'id' not in m: continue
     method = m.get('method')
     if method == 'initialize': res = {'protocolVersion': '2024-11-05'}
-    elif method == 'tools/list': res = {'tools': [{'name': n} for n in ('strata_models', 'strata_status', 'strata_install', 'strata_remove')]}
+    elif method == 'tools/list': res = {'tools': [{'name': n} for n in ('cortex_models', 'cortex_status', 'cortex_install', 'cortex_remove')]}
     else:
         p = m['params']
         res = {'structuredContent': call(p['name'], p.get('arguments') or {})}
     sys.stdout.write(json.dumps({'jsonrpc': '2.0', 'id': m['id'], 'result': res}) + '\n'); sys.stdout.flush()
 `;
-writeFileSync(join(control, 'tools', 'strata_mcp.py'), FAKE_INSTALLER);
+writeFileSync(join(control, 'tools', 'cortex_mcp.py'), FAKE_INSTALLER);
 
 const FAKE_ENGINE = `import os, sys, json, time
 from pathlib import Path
@@ -128,10 +128,10 @@ async function scenario(name, { installed = false, env = {} } = {}, body) {
   if (!only.has(name)) return;
   console.log(`--- ${name}`);
   const dir = join(work, name);
-  const dirs = { home: join(dir, 'home'), appdata: join(dir, 'appdata'), local: join(dir, 'local'), components: join(dir, 'local', 'Strata', 'components'), install: join(dir, 'local', 'Strata', 'install'), state: join(dir, 'fake-state'), profiles: join(dir, 'profiles'), runtime: join(dir, 'runtime') };
+  const dirs = { home: join(dir, 'home'), appdata: join(dir, 'appdata'), local: join(dir, 'local'), components: join(dir, 'local', 'Cortex', 'components'), install: join(dir, 'local', 'Cortex', 'install'), state: join(dir, 'fake-state'), profiles: join(dir, 'profiles'), runtime: join(dir, 'runtime') };
   for (const d of [dirs.home, dirs.appdata, dirs.local, dirs.components, dirs.install, dirs.state, join(dir, 'models')]) mkdirSync(d, { recursive: true });
-  const baseEnv = { ...process.env, STRATA_COMPONENTS_DIR: dirs.components, STRATA_PROFILE_DIR: dirs.profiles, STRATA_RUNTIME_DIR: dirs.runtime, STRATA_HOME: dirs.home, STRATA_MODELS_DIR: join(dir, 'models'), APPDATA: dirs.appdata, LOCALAPPDATA: dirs.local, USERPROFILE: dirs.home, XDG_CONFIG_HOME: join(dir, 'xdg'), XDG_DATA_HOME: join(dir, 'xdgdata'), PYTHONDONTWRITEBYTECODE: '1', STRATA_ENGINE_BACKEND: 'cuda', FAKE_STATE: dirs.state, ...env };
-  delete baseEnv.STRATA_API_KEY; delete baseEnv.STRATA_INSTALL_DIR;
+  const baseEnv = { ...process.env, CORTEX_COMPONENTS_DIR: dirs.components, CORTEX_PROFILE_DIR: dirs.profiles, CORTEX_RUNTIME_DIR: dirs.runtime, CORTEX_HOME: dirs.home, CORTEX_MODELS_DIR: join(dir, 'models'), APPDATA: dirs.appdata, LOCALAPPDATA: dirs.local, USERPROFILE: dirs.home, XDG_CONFIG_HOME: join(dir, 'xdg'), XDG_DATA_HOME: join(dir, 'xdgdata'), PYTHONDONTWRITEBYTECODE: '1', CORTEX_ENGINE_BACKEND: 'cuda', FAKE_STATE: dirs.state, ...env };
+  delete baseEnv.CORTEX_API_KEY; delete baseEnv.CORTEX_INSTALL_DIR;
   if (installed) {
     const platform = isWin ? 'windows-x86_64' : 'linux-x86_64';
     const folder = join(dirs.components, 'engine', `0.1.45-${platform}-cuda`);
@@ -140,17 +140,17 @@ async function scenario(name, { installed = false, env = {} } = {}, body) {
     const entry = isWin ? 'engine.cmd' : 'engine';
     writeFileSync(join(folder, entry), isWin ? `@echo off\r\n"${python}" "%~dp0engine_main.py" %*\r\n` : `#!/bin/sh\nexec "${python}" "$(dirname "$0")/engine_main.py" "$@"\n`);
     const files = [entry, 'engine_main.py'].map(p => { const b = readFileSync(join(folder, p)); return { path: p, sha256: sha(b), bytes: b.length }; });
-    writeFileSync(join(folder, 'engine-component.json'), JSON.stringify({ schema_version: 1, id: 'strata-engine', version: '0.1.45', platform, backend: 'cuda', entrypoint: entry, files }));
+    writeFileSync(join(folder, 'engine-component.json'), JSON.stringify({ schema_version: 1, id: 'cortex-engine', version: '0.1.45', platform, backend: 'cuda', entrypoint: entry, files }));
     const tok = join(dirs.install, 'tokenizer');
     mkdirSync(tok, { recursive: true });
-    const script = `import json, sys\nfrom tools.strata_tokenizer import BYTE_TO_UNICODE\ntok = sys.argv[1]\ntokens = [BYTE_TO_UNICODE[i] for i in range(256)] + ['ab', '<|im_start|>', '<|im_end|>', '<|endoftext|>']\njson.dump({t: i for i, t in enumerate(tokens)}, open(tok + '/vocab.json', 'w'))\nopen(tok + '/merges.txt', 'w').write('a b')\njson.dump([0] * 257 + [3, 3, 3], open(tok + '/token_type.json', 'w'))\n`;
+    const script = `import json, sys\nfrom tools.cortex_tokenizer import BYTE_TO_UNICODE\ntok = sys.argv[1]\ntokens = [BYTE_TO_UNICODE[i] for i in range(256)] + ['ab', '<|im_start|>', '<|im_end|>', '<|endoftext|>']\njson.dump({t: i for i, t in enumerate(tokens)}, open(tok + '/vocab.json', 'w'))\nopen(tok + '/merges.txt', 'w').write('a b')\njson.dump([0] * 257 + [3, 3, 3], open(tok + '/token_type.json', 'w'))\n`;
     const made = spawnSync(python, ['-c', script, tok], { cwd: control, env: { ...baseEnv, PYTHONNOUSERSITE: '1' }, encoding: 'utf8' });
     if (made.status !== 0) throw new Error('tokenizer fixture: ' + made.stderr);
-    writeFileSync(join(dirs.install, 'strata-iq3_s.json'), JSON.stringify({ exe: 'component:strata-engine', backend: 'cuda', tokenizer: tok, args: ['--max-context', '32768', '--pool-workers', '12'], cwd: dir, model_name: 'stub', host: '127.0.0.1', port: 0, kv: 'int8' }));
+    writeFileSync(join(dirs.install, 'cortex-iq3_s.json'), JSON.stringify({ exe: 'component:cortex-engine', backend: 'cuda', tokenizer: tok, args: ['--max-context', '32768', '--pool-workers', '12'], cwd: dir, model_name: 'stub', host: '127.0.0.1', port: 0, kv: 'int8' }));
   }
   const port = env.FIXED_PORT ? Number(env.FIXED_PORT) : await freePort(), base = `http://127.0.0.1:${port}`;
   const host = spawn(nodeExe, [join(repoHost, 'server', 'index.mjs')], { cwd: repoHost, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
-    env: { ...baseEnv, STRATA_PORT: String(port), STRATA_DIST: join(repoHost, 'dist'), STRATA_PACKAGED: '1', STRATA_REAL_ENGINE: '1', STRATA_NO_ACQUIRE: '1', STRATA_CONTROL_DIR: control, STRATA_SHARE_PORT: String(await freePort()), STRATA_TUNNEL_PORT: String(await freePort()) } });
+    env: { ...baseEnv, CORTEX_PORT: String(port), CORTEX_DIST: join(repoHost, 'dist'), CORTEX_PACKAGED: '1', CORTEX_REAL_ENGINE: '1', CORTEX_NO_ACQUIRE: '1', CORTEX_CONTROL_DIR: control, CORTEX_SHARE_PORT: String(await freePort()), CORTEX_TUNNEL_PORT: String(await freePort()) } });
   let log = ''; host.stdout.on('data', c => { log += c; }); host.stderr.on('data', c => { log += c; });
   const api = async (path, init) => { const r = await fetch(base + path, init); return { status: r.status, body: await r.json().catch(() => null) }; };
   const browser = await chromium.launch({ executablePath: CHROME, headless: true });
@@ -327,7 +327,7 @@ await scenario('profile', { installed: true }, async ({ base, api, browser, shot
 });
 
 // ------------------------------------------------------------------------------------------------ version list, This computer, Tune, a task
-for (const scheme of ['light', 'dark']) await scenario(scheme === 'light' ? 'ui2' : 'ui2d', { installed: true, env: { FAKE_TOKEN_DELAY: '0.02', FAKE_REPLY: 'I am thinking about it. </think> ' + 'Here is the answer, word by word. '.repeat(12), STRATA_TUNE_NO_QUIET_CHECK: '1' } }, async ({ base, api, browser, shot }) => {
+for (const scheme of ['light', 'dark']) await scenario(scheme === 'light' ? 'ui2' : 'ui2d', { installed: true, env: { FAKE_TOKEN_DELAY: '0.02', FAKE_REPLY: 'I am thinking about it. </think> ' + 'Here is the answer, word by word. '.repeat(12), CORTEX_TUNE_NO_QUIET_CHECK: '1' } }, async ({ base, api, browser, shot }) => {
   const page = await newPage(browser, base, { colorScheme: scheme });
   await clickText(page, /Go straight to the app/i);
   await page.getByText(/Conversation context/i).first().waitFor({ timeout: 30000 });
@@ -423,13 +423,13 @@ await scenario('tune', { installed: true, env: { FAKE_TOKEN_DELAY: '0.02', FAKE_
   let done = false, job = null;
   for (let i = 0; i < 120 && !done; i++) { job = (await api('/api/native')).body.jobs.findLast?.(j => j.kind === 'tune') ?? null; done = !!job && job.state !== 'running'; await delay(1000); }
   check(job?.state === 'done', 'tuning finishes without a vision error', job?.error ?? job?.state);
-  const cfg = JSON.parse(readFileSync(join(dirs.install, 'strata-iq3_s.json'), 'utf8'));
+  const cfg = JSON.parse(readFileSync(join(dirs.install, 'cortex-iq3_s.json'), 'utf8'));
   check(cfg.args.includes('--resident-budget-gib'), '"leave 20%" wrote a RAM budget for the experts', cfg.args.join(' '));
   const gib = Number(cfg.args[cfg.args.indexOf('--resident-budget-gib') + 1]);
   check(gib + 10 <= 63.1 * 0.8, 'the budget keeps the model within 80% of the PC RAM', `${gib} GiB`);
   // chat + reading size
-  await page.getByRole('textbox', { name: /Message Strata/i }).waitFor({ timeout: 60000 });
-  await page.getByRole('textbox', { name: /Message Strata/i }).fill('hello');
+  await page.getByRole('textbox', { name: /Message Cortex/i }).waitFor({ timeout: 60000 });
+  await page.getByRole('textbox', { name: /Message Cortex/i }).fill('hello');
   await page.keyboard.press('Enter');
   await page.locator('.st-msg--assistant .st-bubble').first().waitFor({ timeout: 60000 });
   await page.locator('.st-msg--assistant .st-bubble p').first().waitFor({ timeout: 60000 }).catch(async () => console.log('info  reply so far:', JSON.stringify(await page.locator('.st-msg--assistant').first().innerText()).slice(0, 300)));
@@ -452,7 +452,7 @@ await scenario('tune', { installed: true, env: { FAKE_TOKEN_DELAY: '0.02', FAKE_
   check(/32\.8K|32K|32,768|32768/.test(contextText) && !/128K/.test(contextText), 'the context shown is the one the model runs with (32K), not 128K', contextText.replace(/\s+/g, ' ').slice(0, 160));
   const sizes = [];
   for (const px of [12, 14, 16, 22]) {
-    await page.evaluate(v => { const k = 'strata.prefs.v2'; const cur = JSON.parse(localStorage.getItem(k) || '{}'); localStorage.setItem(k, JSON.stringify({ ...cur, contentFontSize: v })); }, px);
+    await page.evaluate(v => { const k = 'cortex.prefs.v2'; const cur = JSON.parse(localStorage.getItem(k) || '{}'); localStorage.setItem(k, JSON.stringify({ ...cur, contentFontSize: v })); }, px);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.locator('.st-msg--assistant .st-bubble').first().waitFor({ timeout: 30000 });
     await page.screenshot({ path: join(shots, `tune-3-chat-${px}px.png`) });
@@ -460,11 +460,11 @@ await scenario('tune', { installed: true, env: { FAKE_TOKEN_DELAY: '0.02', FAKE_
   }
   console.log('info  chain', JSON.stringify(await page.evaluate(() => { const el = document.querySelector('.st-msg--assistant .st-bubble p'); const out = []; for (let e = el; e && !e.classList.contains('st-msg'); e = e.parentElement) out.push(e.tagName + '.' + String(e.className).split(' ')[0] + '=' + getComputedStyle(e).fontSize); return out; })));
   // which visible text does NOT follow the reading size? (same elements at 12 and 22)
-  const survey = async px => { await page.evaluate(v => { const k = 'strata.prefs.v2'; const cur = JSON.parse(localStorage.getItem(k) || '{}'); localStorage.setItem(k, JSON.stringify({ ...cur, contentFontSize: v })); }, px); await page.reload({ waitUntil: 'domcontentloaded' }); await page.locator('.st-msg--assistant .st-bubble').first().waitFor({ timeout: 30000 }); await delay(600);
+  const survey = async px => { await page.evaluate(v => { const k = 'cortex.prefs.v2'; const cur = JSON.parse(localStorage.getItem(k) || '{}'); localStorage.setItem(k, JSON.stringify({ ...cur, contentFontSize: v })); }, px); await page.reload({ waitUntil: 'domcontentloaded' }); await page.locator('.st-msg--assistant .st-bubble').first().waitFor({ timeout: 30000 }); await delay(600);
     return page.evaluate(() => { const out = {}; for (const el of document.querySelectorAll('main *, .chat *, textarea')) { if (![...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()) && el.tagName !== 'TEXTAREA') continue; const r = el.getBoundingClientRect(); if (!r.width || !r.height) continue; const key = el.tagName.toLowerCase() + '.' + String(el.className).split(' ')[0] + ' <' + (el.parentElement?.className ?? '').toString().split(' ')[0] + '>'; out[key] = parseFloat(getComputedStyle(el).fontSize); } return out; }); };
   const a = await survey(12), b = await survey(22);
   // a fresh app (nothing saved) uses 14 px
-  await page.evaluate(() => localStorage.removeItem('strata.prefs.v2'));
+  await page.evaluate(() => localStorage.removeItem('cortex.prefs.v2'));
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.locator('.st-msg--assistant .st-bubble').first().waitFor({ timeout: 30000 });
   check(await page.evaluate(() => getComputedStyle(document.querySelector('.st-msg--assistant .st-bubble')).fontSize) === '14px', 'the default reading size is 14 px');
@@ -485,7 +485,7 @@ await scenario('tune', { installed: true, env: { FAKE_TOKEN_DELAY: '0.02', FAKE_
     const box = await slider.first().boundingBox();
     await page.mouse.click(box.x + box.width * 0.9, box.y + box.height / 2);
     await delay(400);
-    const dragged = await page.evaluate(() => [getComputedStyle(document.querySelector('.st-msg--assistant .st-bubble') ?? document.body).fontSize, getComputedStyle(document.documentElement).getPropertyValue('--st-content-fs'), JSON.parse(localStorage.getItem('strata.prefs.v2') || '{}').contentFontSize]);
+    const dragged = await page.evaluate(() => [getComputedStyle(document.querySelector('.st-msg--assistant .st-bubble') ?? document.body).fontSize, getComputedStyle(document.documentElement).getPropertyValue('--st-content-fs'), JSON.parse(localStorage.getItem('cortex.prefs.v2') || '{}').contentFontSize]);
     check(parseFloat(dragged[0]) >= 20 && parseFloat(dragged[2]) >= 20, 'clicking the slider with the mouse changes it too, and it is saved', dragged.join(' '));
   } else console.log('info  the settings slider was not reachable by hash here; the stored size was checked above');
   check(page.problems.length === 0, 'no page error', page.problems.join('; '));
@@ -511,7 +511,7 @@ await scenario('delete', { installed: true }, async ({ base, api, browser, dirs,
   let state = null;
   for (let i = 0; i < 40; i++) { state = (await api('/api/native')).body; if (state.instances.length === 0 && !state.installed?.models?.some(m => m.model === 'iq3_s')) break; await delay(500); }
   check(state.instances.length === 0, 'the loaded model was unloaded');
-  check(!existsSync(join(dirs.install, 'strata-iq3_s.json')), 'the installer removed the run config of the model');
+  check(!existsSync(join(dirs.install, 'cortex-iq3_s.json')), 'the installer removed the run config of the model');
   check(!state.installed?.models?.some(m => m.model === 'iq3_s'), 'the model is no longer listed as downloaded');
   await shot(page, '2-after-delete');
 });
@@ -533,7 +533,7 @@ await scenario('perf', { installed: true }, async ({ base, api, browser, shot })
   await page.evaluate(() => { window.__long = []; new PerformanceObserver(l => { for (const e of l.getEntries()) window.__long.push(Math.round(e.duration)); }).observe({ entryTypes: ['longtask'] }); });
   const t0 = Date.now();
   await page.evaluate(() => { location.hash = '#/chat'; });
-  await page.getByRole('textbox', { name: /Message Strata/i }).waitFor({ timeout: 30000 });
+  await page.getByRole('textbox', { name: /Message Cortex/i }).waitFor({ timeout: 30000 });
   const open = Date.now() - t0;
   await delay(1500);
   const long = await page.evaluate(() => window.__long);
@@ -599,7 +599,7 @@ await scenario('stop', { installed: true, env: { FAKE_TOKEN_DELAY: '0.1', FAKE_R
   if (!ready) { const st = (await api('/api/native')).body; console.log('info  jobs', JSON.stringify(st.jobs.map(j => [j.kind, j.state, j.error ?? j.summary])), JSON.stringify(st.instances.map(i => [i.status, i.error]))); await shot(page, '0-stop-notloaded'); }
   check(ready, 'a model is loaded');
   await page.evaluate(() => { location.hash = '#/chat'; });
-  const box = page.getByRole('textbox', { name: /Message Strata/i });
+  const box = page.getByRole('textbox', { name: /Message Cortex/i });
   await box.waitFor({ timeout: 30000 });
   await box.fill('hello');
   await page.keyboard.press('Enter');
@@ -619,14 +619,14 @@ await scenario('latest', {}, async ({ base, browser, shot }) => {
   await page.evaluate(now => {
     const messages = [];
     for (let i = 0; i < 40; i++) { messages.push({ id: 'u' + i, role: 'user', content: 'question ' + i, at: now }, { id: 'a' + i, role: 'assistant', content: 'answer number ' + i + ' with some text to fill the line and more of it.', at: now, tokens: 20, inputTokens: 5 }); }
-    localStorage.setItem('strata.sessions.v1', JSON.stringify([{ id: 's_latest', title: 'long', updatedAt: now, createdAt: now, messages }]));
-    localStorage.setItem('strata.active-session.v1', 's_latest');
+    localStorage.setItem('cortex.sessions.v1', JSON.stringify([{ id: 's_latest', title: 'long', updatedAt: now, createdAt: now, messages }]));
+    localStorage.setItem('cortex.active-session.v1', 's_latest');
   }, now);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await delay(1500);
   if (await page.getByRole('button', { name: /Go straight to the app/i }).count()) { await clickText(page, /Go straight to the app/i); await delay(1500); }
   await page.goto(base + '/#/chat', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('textbox', { name: /Message Strata/i }).waitFor({ timeout: 30000 });
+  await page.getByRole('textbox', { name: /Message Cortex/i }).waitFor({ timeout: 30000 });
   await delay(800);
   await page.locator('.main__body.chat').first().waitFor({ timeout: 15000 }).catch(async () => { await shot(page, '0-latest-missing'); console.log('info  body', JSON.stringify((await page.locator('body').innerText()).slice(0, 300))); });
   await page.locator('.main__body.chat').first().evaluate(el => { el.scrollTop = 3000; });
@@ -690,12 +690,12 @@ if (only.has('restart')) {
   await run(async (context, { base }) => {
     const page = context.pages()[0] ?? await context.newPage();
     await page.goto(base, { waitUntil: 'domcontentloaded' });
-    await page.evaluate(() => { localStorage.setItem('strata.prefs.v2', JSON.stringify({ theme: 'dark', contentFontSize: 19, language: 'de' })); localStorage.setItem('strata.sessions.v1', JSON.stringify([{ id: 'chat-1', title: 'My chat' }])); });
+    await page.evaluate(() => { localStorage.setItem('cortex.prefs.v2', JSON.stringify({ theme: 'dark', contentFontSize: 19, language: 'de' })); localStorage.setItem('cortex.sessions.v1', JSON.stringify([{ id: 'chat-1', title: 'My chat' }])); });
   });
   await run(async (context, { base }) => {
     const page = context.pages()[0] ?? await context.newPage();
     await page.goto(base, { waitUntil: 'domcontentloaded' });
-    const saved = await page.evaluate(() => ({ prefs: JSON.parse(localStorage.getItem('strata.prefs.v2') || '{}'), chats: localStorage.getItem('strata.sessions.v1'), theme: document.documentElement.dataset.theme }));
+    const saved = await page.evaluate(() => ({ prefs: JSON.parse(localStorage.getItem('cortex.prefs.v2') || '{}'), chats: localStorage.getItem('cortex.sessions.v1'), theme: document.documentElement.dataset.theme }));
     check(saved.prefs.contentFontSize === 19 && saved.prefs.language === 'de', 'text size and language survive a restart on the same port', JSON.stringify(saved.prefs));
     check(saved.theme === 'dark', 'the theme survives too', saved.theme);
     check(/My chat/.test(saved.chats ?? ''), 'and the chat list', saved.chats);
@@ -715,7 +715,7 @@ await scenario('theme', {}, async ({ base, browser, shot }) => {
 });
 
 // the junctions into the staged Control go first (rmdir on a junction removes only the link)
-for (const name of ['python', 'strata_control', 'strata_cli', 'serve']) { try { rmdirSync(join(control, name)); } catch { /* already gone */ } }
+for (const name of ['python', 'cortex_control', 'cortex_cli', 'serve']) { try { rmdirSync(join(control, name)); } catch { /* already gone */ } }
 try { rmSync(work, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { console.log('info  scratch folder left behind:', work); }
 console.log(`shots in ${shots}`);
 process.exit(failed ? 1 : 0);

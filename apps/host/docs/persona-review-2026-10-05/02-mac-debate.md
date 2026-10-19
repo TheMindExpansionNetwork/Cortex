@@ -24,6 +24,6 @@ My round 1 kept all five steps. I now vote **B12 OPTIONAL** because the ballot e
 
 ## Held positions and priorities
 
-I hold the single context adjustment, one selected-priority recommendation, compact paired rates and aligned comparison view. My top three are **B02, B06 and B11**. I support evidence consolidation only within a genuinely common source scope. Exact variant access, Expert/Raw, errors, no-fit states and Demo truth remain part of the interface. Existing Strata typography, readable sizes, opaque content and restrained Apple-inspired control materials need no decorative expansion. Native integration remains deferred.
+I hold the single context adjustment, one selected-priority recommendation, compact paired rates and aligned comparison view. My top three are **B02, B06 and B11**. I support evidence consolidation only within a genuinely common source scope. Exact variant access, Expert/Raw, errors, no-fit states and Demo truth remain part of the interface. Existing Cortex typography, readable sizes, opaque content and restrained Apple-inspired control materials need no decorative expansion. Native integration remains deferred.
 
 The JSON contains one unconditional allowed choice for every B01–B20. Amendments are refinements for later discussion, not conditions attached to votes.

@@ -2,9 +2,9 @@
 #include <cstdio>
 #include <string>
 
-#include "strata/prefill/share_rules.hpp"
+#include "cortex/prefill/share_rules.hpp"
 
-using strata::prefill::share_rules::default_share_has_work;
+using cortex::prefill::share_rules::default_share_has_work;
 
 static int failed = 0;
 #define CHECK(x) do { if (!(x)) { std::fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x); ++failed; } } while (0)
@@ -20,7 +20,7 @@ int main() {
     static_assert(!default_share_has_work(10, 10), "constexpr");
 
     // H11: memory verdicts
-    using namespace strata::prefill::share_rules;
+    using namespace cortex::prefill::share_rules;
     const uint64_t G = 1ull << 30;
     ShareMemory m;
     m.buffer_bytes = G / 3;

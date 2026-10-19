@@ -1,4 +1,4 @@
-"""The desktop app's installer: tools/strata_mcp.py and setup.py run on Control's Python in STRATA_CONTROL_INSTALL mode.
+"""The desktop app's installer: tools/cortex_mcp.py and setup.py run on Control's Python in CORTEX_CONTROL_INSTALL mode.
 
 What the owner asked for: a user installs the app, picks a model in it and downloads and prepares it, like any normal user.
 What must stay true: a start or a serve never acquires anything (tests/terminal/test_no_acquisition.py), and the install
@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT))
 
 def load_setup(home: Path, name: str = "setup_control_mode"):
     """setup.py imported as the app's installer: the mode is read when the module loads."""
-    env = {"STRATA_CONTROL_INSTALL": "1", "STRATA_INSTALL_DIR": str(home)}
+    env = {"CORTEX_CONTROL_INSTALL": "1", "CORTEX_INSTALL_DIR": str(home)}
     with mock.patch.dict(os.environ, env):
         spec = importlib.util.spec_from_file_location(name, ROOT / "setup.py")
         module = importlib.util.module_from_spec(spec)
@@ -47,7 +47,7 @@ class ControlModeTests(unittest.TestCase):
         # without the mode nothing moves: HOME is the source folder, as it always was
         spec = importlib.util.spec_from_file_location("setup_plain_mode", ROOT / "setup.py")
         plain = importlib.util.module_from_spec(spec)
-        with mock.patch.dict(os.environ, {"STRATA_CONTROL_INSTALL": "0"}):
+        with mock.patch.dict(os.environ, {"CORTEX_CONTROL_INSTALL": "0"}):
             spec.loader.exec_module(plain)
         self.assertFalse(plain.CONTROL)
         self.assertEqual(plain.home(), plain.ROOT)
@@ -91,7 +91,7 @@ class ControlModeTests(unittest.TestCase):
         empty = Path(self.tmp.name) / "components"
         empty.mkdir()
         gpu = {"index": 0, "vram_gb": 12.0}
-        with mock.patch.dict(os.environ, {"STRATA_COMPONENTS_DIR": str(empty)}), \
+        with mock.patch.dict(os.environ, {"CORTEX_COMPONENTS_DIR": str(empty)}), \
                 mock.patch.object(S, "download", side_effect=AssertionError("fetched")), \
                 mock.patch.object(S, "build_engine", side_effect=AssertionError("built")), \
                 mock.patch.object(S, "get_prebuilt", side_effect=AssertionError("fetched an engine")):
@@ -100,18 +100,18 @@ class ControlModeTests(unittest.TestCase):
         self.assertEqual(libs, [])
         self.assertEqual(vision, "none")                                   # images are not in the first app release
         self.assertEqual(meta["source"], "local")
-        self.assertEqual(S.engine_exe(eng), "component:strata-engine")
+        self.assertEqual(S.engine_exe(eng), "component:cortex-engine")
 
     def test_the_run_config_goes_to_the_install_folder_and_the_data_folder_sits_beside_it(self):
         S = self.S
         self.assertEqual(S.installed_configs(), [])
-        (self.home / "strata-q2_0.json").write_text(json.dumps({"exe": "component:strata-engine", "args": ["--native", "x.gguf"],
+        (self.home / "cortex-q2_0.json").write_text(json.dumps({"exe": "component:cortex-engine", "args": ["--native", "x.gguf"],
                                                                 "tokenizer": "t"}), encoding="utf-8")
         with mock.patch.object(S, "model_config", return_value=True):
-            self.assertEqual([p.name for p in S.installed_configs()], ["strata-q2_0.json"])
+            self.assertEqual([p.name for p in S.installed_configs()], ["cortex-q2_0.json"])
         with mock.patch.dict(os.environ, {"APPDATA": self.tmp.name, "XDG_CONFIG_HOME": self.tmp.name}):
             data, _ = S.data_folder_in_place()
-        self.assertEqual(data, self.home.resolve().parent / "Strata-data")
+        self.assertEqual(data, self.home.resolve().parent / "Cortex-data")
 
     @unittest.skipIf(os.name == "nt", "a launcher is a shell script: Linux and macOS bundles")
     def test_the_bundle_keeps_one_real_python_and_launchers_for_the_other_names(self):
@@ -154,34 +154,34 @@ class ControlModeTests(unittest.TestCase):
         finally:
             sys.path.pop(0)
         tools = stage.local_imports(ROOT, stage.INSTALLER_TOOLS)
-        for need in ("strata_mcp", "iq_pack", "strata_pack", "canonical_xcheck", "pack_layer", "gguf_reader", "gguf_writer", "_paths"):
+        for need in ("cortex_mcp", "iq_pack", "cortex_pack", "canonical_xcheck", "pack_layer", "gguf_reader", "gguf_writer", "_paths"):
             self.assertIn(need, tools)
         out = Path(self.tmp.name) / "control"
         out.mkdir()
         record = stage.add_installer(out)
-        for name in ("setup.py", "ref/load.py", "tools/strata_mcp.py", "tools/iq_pack.py", "data/draft_vocab.bin"):
+        for name in ("setup.py", "ref/load.py", "tools/cortex_mcp.py", "tools/iq_pack.py", "data/draft_vocab.bin"):
             self.assertTrue((out / name).is_file(), name)
-        self.assertIn("tools/strata_pack.py", record["files"])
+        self.assertIn("tools/cortex_pack.py", record["files"])
         # every module setup.py's preparation steps run exists in the bundle
-        for tool in ("iq_pack", "strata_pack", "pack_index", "strata_tokenizer", "mtp_fetch", "mtp_pack", "mtp_rt"):
+        for tool in ("iq_pack", "cortex_pack", "pack_index", "cortex_tokenizer", "mtp_fetch", "mtp_pack", "mtp_rt"):
             self.assertTrue((out / "tools" / f"{tool}.py").is_file(), tool)
 
 
 class InstallerServerTests(unittest.TestCase):
-    """tools/strata_mcp.py with its source (setup.py, serve/) apart from the install folder, as the app runs it."""
+    """tools/cortex_mcp.py with its source (setup.py, serve/) apart from the install folder, as the app runs it."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name) / "install"
         self.root.mkdir()
-        spec = importlib.util.spec_from_file_location("strata_mcp_for_test", ROOT / "tools" / "strata_mcp.py")
+        spec = importlib.util.spec_from_file_location("cortex_mcp_for_test", ROOT / "tools" / "cortex_mcp.py")
         self.mcp = importlib.util.module_from_spec(spec)
-        with mock.patch.dict(os.environ, {"STRATA_CONTROL_INSTALL": "1", "STRATA_INSTALL_DIR": str(self.root)}):
+        with mock.patch.dict(os.environ, {"CORTEX_CONTROL_INSTALL": "1", "CORTEX_INSTALL_DIR": str(self.root)}):
             spec.loader.exec_module(self.mcp)
 
     def test_the_catalog_comes_from_setup_py_in_the_bundle(self):
-        s = self.mcp.Strata(self.root, ROOT)
+        s = self.mcp.Cortex(self.root, ROOT)
         self.assertEqual(s.root, self.root.resolve())
         self.assertEqual(s.src, ROOT)
         models, families, contexts, source = s.tables()
@@ -191,7 +191,7 @@ class InstallerServerTests(unittest.TestCase):
         self.assertEqual(s.python_override, sys.executable)               # Control's own Python runs the install
 
     def test_the_install_job_runs_on_control_python_without_a_venv_and_may_fetch_only_for_itself(self):
-        s = self.mcp.Strata(self.root, ROOT)
+        s = self.mcp.Cortex(self.root, ROOT)
         spec_path = self.root / "job.json"
         spec = {"job": "j1", "root": str(self.root), "src": str(ROOT), "control": True, "python": sys.executable,
                 "base_python": sys.executable, "create_venv": False, "args": ["--yes", "--no-start"],
@@ -208,16 +208,16 @@ class InstallerServerTests(unittest.TestCase):
             def wait(self):
                 return 0
 
-        with mock.patch.dict(os.environ, {"STRATA_NO_ACQUIRE": "1", "PYTHONPATH": "x", "PYTHONHOME": "y"}), \
+        with mock.patch.dict(os.environ, {"CORTEX_NO_ACQUIRE": "1", "PYTHONPATH": "x", "PYTHONHOME": "y"}), \
                 mock.patch.object(self.mcp.subprocess, "Popen", FakePopen), \
                 mock.patch.object(self.mcp, "proc_identity", return_value=None):
             self.assertEqual(self.mcp.install_job(str(spec_path)), 0)
-            self.assertEqual(os.environ["STRATA_NO_ACQUIRE"], "1", "this process keeps the switch")
+            self.assertEqual(os.environ["CORTEX_NO_ACQUIRE"], "1", "this process keeps the switch")
         self.assertEqual(seen["cmd"][:2], [sys.executable, str(ROOT / "setup.py")])
         env = seen["kw"]["env"]
-        self.assertEqual(env["STRATA_CONTROL_INSTALL"], "1")
-        self.assertEqual(env["STRATA_INSTALL_DIR"], str(self.root))
-        self.assertNotIn("STRATA_NO_ACQUIRE", env, "the explicit install job may fetch the chosen model's files")
+        self.assertEqual(env["CORTEX_CONTROL_INSTALL"], "1")
+        self.assertEqual(env["CORTEX_INSTALL_DIR"], str(self.root))
+        self.assertNotIn("CORTEX_NO_ACQUIRE", env, "the explicit install job may fetch the chosen model's files")
         self.assertNotIn("PYTHONPATH", env)
         self.assertNotIn("PYTHONHOME", env)
         self.assertFalse((self.root / ".venv").exists(), "no virtual environment, no pip")
@@ -225,7 +225,7 @@ class InstallerServerTests(unittest.TestCase):
 
     def test_a_two_file_model_has_one_combined_progress(self):
         """The bar went 70 GB -> 0 -> up again because each file reported its own total. One total for the whole model now."""
-        folder = self.root / "Strata-data" / "models" / "IQ3_S"
+        folder = self.root / "Cortex-data" / "models" / "IQ3_S"
         folder.mkdir(parents=True)
         job = {"folder": str(folder), "total_gb": 0.004}
         step5 = {"step": "5/7: downloading Qwen3.8-Flash-Next IQ3_S"}
@@ -245,15 +245,15 @@ class InstallerServerTests(unittest.TestCase):
         self.assertAlmostEqual(seen[-1]["remaining_gb"], 0.004 - seen[-1]["done_gb"], places=2)
         self.assertTrue(all(d["file"] == "model files" for d in seen))
         # not a download any more once setup is preparing the files
-        self.assertNotIn("download", self.mcp.combined_progress({"step": "6/7: preparing the model for Strata", "download": {"x": 1}}, job))
+        self.assertNotIn("download", self.mcp.combined_progress({"step": "6/7: preparing the model for Cortex", "download": {"x": 1}}, job))
         # a resumed install counts what is already on disk
         self.assertGreater(self.mcp.combined_progress(dict(step5), job)["download"]["done_gb"], 0)
 
     def test_a_model_in_parts_counts_every_part_and_the_picture_reader(self):
         """QA 2026-10-18 (6): the bar stopped at 99 % while the picture reader downloaded, and a first whole part looked like a finished
         model. Every part is counted, the picture reader is a part of its own, and 'done' needs all of them."""
-        S = self.mcp.Strata(self.root, ROOT).setup_module()
-        models = self.root / "Strata-data" / "models"
+        S = self.mcp.Cortex(self.root, ROOT).setup_module()
+        models = self.root / "Cortex-data" / "models"
         files = self.mcp.expected_files(S, "qwen", "IQ3_S", models, True)
         self.assertEqual([f["role"] for f in files], ["model", "model", "vision"])
         self.assertEqual(Path(files[2]["path"]).parent, models, "the picture reader sits beside the model folders")
@@ -284,10 +284,10 @@ class InstallerServerTests(unittest.TestCase):
         self.assertTrue(all(x["state"] == "done" for x in three["parts"]))
         self.assertEqual(three["download"]["done_gb"], three["download"]["total_gb"])
         # not a download once setup prepares the files
-        self.assertNotIn("download", self.mcp.combined_progress({"step": "6/7: preparing the model for Strata", "download": {"x": 1}}, job))
+        self.assertNotIn("download", self.mcp.combined_progress({"step": "6/7: preparing the model for Cortex", "download": {"x": 1}}, job))
 
     def test_a_pack_with_many_files_reports_the_whole_pack(self):
-        S = self.mcp.Strata(self.root, ROOT).setup_module()
+        S = self.mcp.Cortex(self.root, ROOT).setup_module()
         files = self.mcp.expected_files(S, "nvfp4", "NVFP4", self.root / "models", False)
         self.assertGreater(len(files), 5)
         self.assertTrue(all(f["bytes"] for f in files), "a ready-made pack pins every file's size")
@@ -337,9 +337,9 @@ class InstallerServerTests(unittest.TestCase):
             else:
                 (shims / tool).write_text(f"#!/bin/sh\necho {tool} \"$@\" >> '{log}'\n", encoding="utf-8")
                 (shims / tool).chmod(0o755)
-        env = {k: v for k, v in os.environ.items() if k not in ("STRATA_NO_ACQUIRE", "PYTHONPATH", "VIRTUAL_ENV")}
-        env.update(STRATA_CONTROL_INSTALL="1", STRATA_INSTALL_DIR=str(home), APPDATA=str(Path(self.tmp.name) / "appdata"),
-                   XDG_CONFIG_HOME=str(Path(self.tmp.name) / "xdg"), STRATA_COMPONENTS_DIR=str(Path(self.tmp.name) / "components"),
+        env = {k: v for k, v in os.environ.items() if k not in ("CORTEX_NO_ACQUIRE", "PYTHONPATH", "VIRTUAL_ENV")}
+        env.update(CORTEX_CONTROL_INSTALL="1", CORTEX_INSTALL_DIR=str(home), APPDATA=str(Path(self.tmp.name) / "appdata"),
+                   XDG_CONFIG_HOME=str(Path(self.tmp.name) / "xdg"), CORTEX_COMPONENTS_DIR=str(Path(self.tmp.name) / "components"),
                    HF_ENDPOINT=(Path(self.tmp.name) / "no-such-hf").as_uri(), PATH=str(shims) + os.pathsep + env.get("PATH", ""),
                    PYTHONIOENCODING="utf-8")
         done = subprocess.run([sys.executable, str(ROOT / "setup.py"), "--yes", "--no-start", "--family", "qwen", "--model", "Q2_0",
@@ -360,7 +360,7 @@ if __name__ == "__main__":
 class FailedStartTests(unittest.TestCase):
     def test_a_failed_start_carries_the_last_lines_the_server_wrote(self):
         """The app turns `server_exited` into words and keeps the reason under Details: Control reports the log's last lines."""
-        from strata_control import runtime
+        from cortex_control import runtime
         owner = [c for _, c in vars(runtime).items() if isinstance(c, type) and hasattr(c, "_log_tail")][0]
         with tempfile.TemporaryDirectory() as directory:
             fake = mock.Mock()
@@ -383,12 +383,12 @@ class DeleteModelTests(unittest.TestCase):
         base = Path(self.tmp.name)
         self.root = base / "install"
         self.root.mkdir()
-        self.data = base / "Strata-data"
-        spec = importlib.util.spec_from_file_location("strata_mcp_for_delete", ROOT / "tools" / "strata_mcp.py")
+        self.data = base / "Cortex-data"
+        spec = importlib.util.spec_from_file_location("cortex_mcp_for_delete", ROOT / "tools" / "cortex_mcp.py")
         self.mcp = importlib.util.module_from_spec(spec)
-        with mock.patch.dict(os.environ, {"STRATA_CONTROL_INSTALL": "1", "STRATA_INSTALL_DIR": str(self.root)}):
+        with mock.patch.dict(os.environ, {"CORTEX_CONTROL_INSTALL": "1", "CORTEX_INSTALL_DIR": str(self.root)}):
             spec.loader.exec_module(self.mcp)
-        self.s = self.mcp.Strata(self.root, ROOT)
+        self.s = self.mcp.Cortex(self.root, ROOT)
         self.tools = self.mcp.Tools(self.s)
 
         def make(path: Path, size: int):
@@ -405,50 +405,50 @@ class DeleteModelTests(unittest.TestCase):
             make(first.with_name(first.name + ".done"), 1)
             pack = self.data / "packs" / tag
             make(pack / "tokenizer" / "vocab.json", 500)
-            (self.root / f"strata-{tag}.json").write_text(json.dumps({"exe": "component:strata-engine", "args": [
+            (self.root / f"cortex-{tag}.json").write_text(json.dumps({"exe": "component:cortex-engine", "args": [
                 "--pack", str(pack), "--native", str(first), "--ple-gguf", str(shared_ple), "--mtp", str(mtp), "--max-context", "32768"]}), encoding="utf-8")
-            (self.root / f"strata-{tag}.log").write_text("log", encoding="utf-8")
+            (self.root / f"cortex-{tag}.log").write_text("log", encoding="utf-8")
 
     def test_the_plan_names_what_goes_and_what_stays(self):
-        plan = self.tools.strata_remove(model="iq3_s")["plan"]
+        plan = self.tools.cortex_remove(model="iq3_s")["plan"]
         removed = {Path(x["path"]).name for x in plan["remove"]}
         kept = {Path(x["path"]).name for x in plan["keep"]}
         self.assertIn("shard-1.gguf", removed)
         self.assertIn("iq3_s", removed)                                    # its pack folder
-        self.assertIn("strata-iq3_s.json", removed)
+        self.assertIn("cortex-iq3_s.json", removed)
         self.assertEqual(kept, {"shard-2.gguf", "rt"})                     # the shared PLE shard and the shared MTP draft
-        self.assertEqual(plan["bytes"], 10000 + 1 + 500 + 3 + (self.root / "strata-iq3_s.json").stat().st_size)
+        self.assertEqual(plan["bytes"], 10000 + 1 + 500 + 3 + (self.root / "cortex-iq3_s.json").stat().st_size)
 
     def test_confirm_deletes_only_that_model_and_the_other_still_has_everything(self):
-        result = self.tools.strata_remove(model="iq3_s", confirm=True)
+        result = self.tools.cortex_remove(model="iq3_s", confirm=True)
         self.assertEqual(result["failed"], [])
         self.assertFalse((self.data / "models" / "iq3_s").exists())        # its folder is gone with its file
         self.assertFalse((self.data / "packs" / "iq3_s").exists())
-        self.assertFalse((self.root / "strata-iq3_s.json").exists())
+        self.assertFalse((self.root / "cortex-iq3_s.json").exists())
         self.assertTrue((self.data / "models" / "Q2_0" / "shard-2.gguf").is_file())
         self.assertTrue((self.data / "mtp" / "rt" / "experts.bin").is_file())
         self.assertTrue((self.data / "models" / "q2_0" / "shard-1.gguf").is_file())
         self.assertTrue((self.data / "packs" / "q2_0" / "tokenizer" / "vocab.json").is_file())
-        self.assertTrue((self.root / "strata-q2_0.json").is_file())
+        self.assertTrue((self.root / "cortex-q2_0.json").is_file())
 
     def test_the_last_model_takes_its_shared_files_with_it(self):
-        self.tools.strata_remove(model="iq3_s", confirm=True)
-        self.tools.strata_remove(model="q2_0", confirm=True)
+        self.tools.cortex_remove(model="iq3_s", confirm=True)
+        self.tools.cortex_remove(model="q2_0", confirm=True)
         self.assertFalse((self.data / "mtp" / "rt").exists())
         self.assertFalse((self.data / "models" / "Q2_0" / "shard-2.gguf").exists())
 
-    def test_nothing_outside_strata_s_folders_is_touched_and_each_model_reports_its_own_disk_use(self):
+    def test_nothing_outside_cortex_s_folders_is_touched_and_each_model_reports_its_own_disk_use(self):
         outside = Path(self.tmp.name) / "elsewhere" / "mine.gguf"
         self.make(outside, 777)
-        cfg = self.root / "strata-q2_0.json"
+        cfg = self.root / "cortex-q2_0.json"
         data = json.loads(cfg.read_text())
         data["args"] += ["--ple-gguf", str(outside)]
         cfg.write_text(json.dumps(data), encoding="utf-8")
-        plan = self.tools.strata_remove(model="q2_0")["plan"]
+        plan = self.tools.cortex_remove(model="q2_0")["plan"]
         self.assertIn("mine.gguf", {Path(x["path"]).name for x in plan["keep"]})
-        self.tools.strata_remove(model="q2_0", confirm=True)
+        self.tools.cortex_remove(model="q2_0", confirm=True)
         self.assertTrue(outside.is_file())
-        described = self.s.describe_config(self.root / "strata-iq3_s.json")
+        described = self.s.describe_config(self.root / "cortex-iq3_s.json")
         self.assertGreater(described["disk_bytes"], 10000)
 
 
@@ -459,11 +459,11 @@ class LocalGgufInstallTests(unittest.TestCase):
             root.mkdir()
             local = Path(tmp) / "mine"
             local.mkdir()
-            spec = importlib.util.spec_from_file_location("strata_mcp_for_local", ROOT / "tools" / "strata_mcp.py")
+            spec = importlib.util.spec_from_file_location("cortex_mcp_for_local", ROOT / "tools" / "cortex_mcp.py")
             mcp = importlib.util.module_from_spec(spec)
-            with mock.patch.dict(os.environ, {"STRATA_CONTROL_INSTALL": "1", "STRATA_INSTALL_DIR": str(root)}):
+            with mock.patch.dict(os.environ, {"CORTEX_CONTROL_INSTALL": "1", "CORTEX_INSTALL_DIR": str(root)}):
                 spec.loader.exec_module(mcp)
-            tools = mcp.Tools(mcp.Strata(root, ROOT))
+            tools = mcp.Tools(mcp.Cortex(root, ROOT))
             plan, args = tools.install_plan("qwen", "IQ3_S", 32768, "no", None, None, None, None, None, None, None, str(local))
             self.assertIn("--gguf-dir", args)
             self.assertEqual(args[args.index("--gguf-dir") + 1], str(local))

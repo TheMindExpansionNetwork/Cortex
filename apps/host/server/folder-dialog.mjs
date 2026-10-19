@@ -100,7 +100,7 @@ const firstLine = text => String(text ?? '').split(/\r?\n/).map(l => l.trim()).f
 
 /**
  * Linux: zenity, then kdialog, then the desktop portal's file chooser through gdbus. Every one of them runs with the environment the
- * AppImage was started from (external-env.mjs), not Strata's own libraries. A chooser that is missing is skipped; one that fails is
+ * AppImage was started from (external-env.mjs), not Cortex's own libraries. A chooser that is missing is skipped; one that fails is
  * remembered and the next is tried; when none works the answer says why and the person types the path.
  */
 async function chooseLinuxFolder(prompt, { run, portal }) {

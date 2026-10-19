@@ -1,11 +1,11 @@
 // src/kernels/cpu/native_hadamard_test.cpp - APR port, stage 3: one Hadamard-folded trellis expert (TQ2_T / TQK6 /
-// TQK7, ggml types 144-146) on Strata's CPU path against llama.cpp's own graph for the same weights and input.
+// TQK7, ggml types 144-146) on Cortex's CPU path against llama.cpp's own graph for the same weights and input.
 //
-// Strata's path:  native_quant_act (signs, FWHT, Q8_0) -> native_gu_rows (ggml-cpu vec_dot + SwiGLU)
+// Cortex's path:  native_quant_act (signs, FWHT, Q8_0) -> native_gu_rows (ggml-cpu vec_dot + SwiGLU)
 //                 -> native_quant_h (signs, FWHT, Q8_0) -> native_down_rows
 // The reference:  the ops llama.cpp's build_lora_mm_id builds for a prism.hadamard weight - ggml_mul(x, signs),
 //                 llama_mul_mat_hadamard (reshape to [128, n/128], ggml_mul_mat(rot, .)), ggml_mul_mat(W', .) -
-//                 computed by ggml-cpu from the same checkout (STRATA_GGML_DIR = the agention llama.cpp fork).
+//                 computed by ggml-cpu from the same checkout (CORTEX_GGML_DIR = the agention llama.cpp fork).
 // The rotation itself is computed two different ways (FWHT here, a dense 128x128 matmul there), so the two outputs
 // agree to float rounding plus the odd Q8_0 rounding flip, not bit for bit; the test bounds the relative error.
 //
@@ -14,11 +14,11 @@
 //                                                skipping the rotation is caught
 //   native_hadamard_test --pack <dir> --gguf <file> [layer expert]...   real experts of a prism.hadamard GGUF
 //                                                (Gyro-S / Gyro-M) through the pack tools/iq_pack.py made of it
-#include "strata/kernels/cpu/hadamard.hpp"
-#include "strata/kernels/cpu/native_expert.hpp"
-#include "strata/kernels/cpu/expert_layout.hpp"
-#include "strata/kernels/cpu/pool.hpp"
-#include "strata/artifact/gguf_reader.hpp"
+#include "cortex/kernels/cpu/hadamard.hpp"
+#include "cortex/kernels/cpu/native_expert.hpp"
+#include "cortex/kernels/cpu/expert_layout.hpp"
+#include "cortex/kernels/cpu/pool.hpp"
+#include "cortex/artifact/gguf_reader.hpp"
 
 #include "ggml.h"
 #include "ggml-cpu.h"
@@ -32,7 +32,7 @@
 #include <string>
 #include <vector>
 
-using namespace strata::kernels::cpu;
+using namespace cortex::kernels::cpu;
 
 namespace {
 
@@ -55,8 +55,8 @@ double rel(const std::vector<float>& a, const std::vector<float>& b) {
 
 float silu(float g) { return g / (1.f + std::exp(-g)); }
 
-// Strata's CPU path for one token; `loaded` = the layer's NativeFmt as expert_layout_load made it from a pack
-std::vector<float> strata_expert(const Expert& e, const std::vector<float>& x, bool rotate,
+// Cortex's CPU path for one token; `loaded` = the layer's NativeFmt as expert_layout_load made it from a pack
+std::vector<float> cortex_expert(const Expert& e, const std::vector<float>& x, bool rotate,
                                  const NativeFmt* loaded = nullptr) {
     NativeFmt f;
     std::string err;
@@ -177,14 +177,14 @@ int synthetic(int gu_type, int d_type) {
         for (int c = 0; c < FF; ++c) o += (double) wd[(size_t) r * FF + c] * h[c];
         ref[r] = (float) o;
     }
-    const auto ours = strata_expert(e, x, true);
+    const auto ours = cortex_expert(e, x, true);
     const auto llama = llama_expert(e, x);
-    const auto unrot = strata_expert(e, x, false);
+    const auto unrot = cortex_expert(e, x, false);
     const double e_ll = rel(ours, llama), e_ref = rel(ours, ref), e_llref = rel(llama, ref), e_un = rel(unrot, ref);
-    std::printf("synthetic %s/%s: strata vs llama.cpp graph %.2e | vs unrotated float expert: strata %.4f, llama.cpp "
-                "%.4f | strata WITHOUT the rotation %.4f\n", ggml_type_name((ggml_type) gu_type),
+    std::printf("synthetic %s/%s: cortex vs llama.cpp graph %.2e | vs unrotated float expert: cortex %.4f, llama.cpp "
+                "%.4f | cortex WITHOUT the rotation %.4f\n", ggml_type_name((ggml_type) gu_type),
                 ggml_type_name((ggml_type) d_type), e_ll, e_ref, e_llref, e_un);
-    // strata == llama.cpp to rounding, and both approximate W x equally well.  With Q8_0 weights the quantization
+    // cortex == llama.cpp to rounding, and both approximate W x equally well.  With Q8_0 weights the quantization
     // error is ~1%, so the fold's convention itself is checked: the rotated path must reproduce the unrotated float
     // expert and the unrotated path must not.  (The trellis types' own error at 1.6-2.1 bpw on Gaussian weights,
     // compounded through SwiGLU, is large with this test's placeholder ggml encoder; there only agreement counts.)
@@ -196,7 +196,7 @@ int synthetic(int gu_type, int d_type) {
 
 // A real expert, the pack's loader path: expert_layout_load(<pack>) reads native_experts.txt v5 + hadamard.txt (from
 // tools/iq_pack.py), and the layer's NativeFmt is what the engine's CPU pool would use.  (The signs come from the
-// pack: strata::GgufFile keeps only the first 64 items of a metadata array, so it cannot read sign_values.)
+// pack: cortex::GgufFile keeps only the first 64 items of a metadata array, so it cannot read sign_values.)
 int real(const char* pack, const char* path, int layer, int expert) {
     std::string err;
     if (!expert_layout_load(pack, 48, 512, err)) { std::fprintf(stderr, "expert_layout_load: %s\n", err.c_str()); return 1; }
@@ -205,13 +205,13 @@ int real(const char* pack, const char* path, int layer, int expert) {
     if (!lay.native || !hs.any() || lay.version != 5) { std::fprintf(stderr, "%s: not a v5 (Hadamard) native pack\n", pack); return 1; }
     const NativeFmt& lf = lay.fmt[(size_t) layer];
     if (lf.had_block != B || !lf.had_gu || !lf.had_d) { std::fprintf(stderr, "layer %d is not folded in the pack\n", layer); return 1; }
-    strata::GgufFile g(path);
+    cortex::GgufFile g(path);
     Expert e;
     if (const float* sh = hadamard_signs(H)) e.s_h.assign(sh, sh + H);
     if (const float* sf = hadamard_signs(FF)) e.s_ff.assign(sf, sf + FF);
     auto slice = [&](const char* role, std::vector<uint8_t>& dst, int& type) {
         const std::string name = "blk." + std::to_string(layer) + ".ffn_" + role + "_exps.weight";
-        const strata::TensorInfo* t = g.find(name);
+        const cortex::TensorInfo* t = g.find(name);
         if (!t || t->shape.size() != 3) { std::fprintf(stderr, "missing %s\n", name.c_str()); std::exit(1); }
         type = (int) t->type;
         const size_t per = ggml_row_size((ggml_type) type, (int64_t) t->shape[0]) * t->shape[1];
@@ -229,11 +229,11 @@ int real(const char* pack, const char* path, int layer, int expert) {
     std::vector<float> x(H);
     for (auto& v : x) v = nd(rng);
     x[17] = 40.f;
-    const auto ours = strata_expert(e, x, true, &lf);
+    const auto ours = cortex_expert(e, x, true, &lf);
     const auto llama = llama_expert(e, x);
-    const auto unrot = strata_expert(e, x, false);
+    const auto unrot = cortex_expert(e, x, false);
     const double e_ll = rel(ours, llama), e_un = rel(unrot, llama);
-    std::printf("%s layer %d expert %d (%s/%s, signs %s): strata vs llama.cpp graph %.2e | without the rotation %.3f\n",
+    std::printf("%s layer %d expert %d (%s/%s, signs %s): cortex vs llama.cpp graph %.2e | without the rotation %.3f\n",
                 path, layer, expert, ggml_type_name((ggml_type) e.gu_type), ggml_type_name((ggml_type) e.d_type),
                 e.s_h.empty() ? "identity" : "explicit", e_ll, e_un);
     bool ok = e_ll < 2e-3 && e_un > 0.3;
@@ -303,7 +303,7 @@ int main(int argc, char** argv) {
         return rc;
     }
     // ggml type ids of the agention fork: 144 TQ2_T, 145 TQK6, 146 TQK7
-    if (GGML_TYPE_COUNT <= 146) { std::fprintf(stderr, "this ggml has no trellis types (build with STRATA_GGML_DIR = the agention fork)\n"); return 1; }
+    if (GGML_TYPE_COUNT <= 146) { std::fprintf(stderr, "this ggml has no trellis types (build with CORTEX_GGML_DIR = the agention fork)\n"); return 1; }
     rc |= synthetic(8, 8);       // Q8_0: the fold's convention, against the unrotated float expert
     rc |= synthetic(145, 146);   // Gyro-S
     rc |= synthetic(144, 144);   // Gyro-M

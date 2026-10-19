@@ -14,8 +14,8 @@ import { buildProfile, OPENROUTER_EFFORTS } from '../server/agent/profile.mjs';
 import { createModelProviders } from '../server/model-providers.mjs';
 import { createVisionProbe, modelSupportsReasoning, readsPicturesByDefault } from '../server/vision-probe.mjs';
 
-const HARNESS = process.env.STRATA_HARNESS_DIR;
-const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'STRATA_HARNESS_DIR is not set to a built Harness' : false;
+const HARNESS = process.env.CORTEX_HARNESS_DIR;
+const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'CORTEX_HARNESS_DIR is not set to a built Harness' : false;
 
 const LIST = { data: [
   { id: 'deepseek/deepseek-v3.2', name: 'DeepSeek: DeepSeek V3.2', context_length: 163840, architecture: { input_modalities: ['text'] }, supported_parameters: ['tools', 'reasoning', 'include_reasoning', 'temperature'] },
@@ -31,7 +31,7 @@ test('a model list row says whether the model can think', () => {
 });
 
 test('fetching the model list keeps the reasoning answer, and a saved connection keeps it', async t => {
-  const directory = mkdtempSync(join(tmpdir(), 'strata-or-')); t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const directory = mkdtempSync(join(tmpdir(), 'cortex-or-')); t.after(() => rmSync(directory, { recursive: true, force: true }));
   const fetchImpl = async () => ({ ok: true, status: 200, json: async () => LIST, body: { cancel() {} } });
   const service = createModelProviders({ directory, fetchImpl });
   const found = await service.discover({ kind: 'provider', provider: 'openrouter', apiKey: 'mock-key', models: [] });
@@ -65,7 +65,7 @@ test('the profile gives a thinking model the OpenRouter efforts and the OpenRout
 
 test('the real Harness: the chosen effort is sent to OpenRouter as reasoning.effort', { skip }, async t => {
   const worker = await startScriptedWorker({ model: 'a/think' });
-  const dir = mkdtempSync(join(tmpdir(), 'strata-or-run-')); const ws = join(dir, 'ws'); mkdirSync(ws, { recursive: true });
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-or-run-')); const ws = join(dir, 'ws'); mkdirSync(ws, { recursive: true });
   const bridge = createAgentBridge({ dataDir: dir, env: process.env, startTimeoutMs: 90_000, localInstances: () => [], connections: () => [{ id: 'or-conn-1', name: 'OpenRouter', provider: 'openrouter', baseUrl: worker.url, protocol: 'openai-chat', apiKey: 'mock', models: [{ id: 'a/think', name: 'Think', contextMax: 32768, reasoning: true }] }] });
   t.after(async () => { await bridge.close(); await worker.close(); try { rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch { /* best effort */ } });
   const seen = {};

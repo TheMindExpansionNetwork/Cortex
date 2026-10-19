@@ -78,7 +78,7 @@ class Sha256(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.f = Path(self.tmp.name) / "x-00002-of-00004.gguf"
-        self.f.write_bytes(b"strata" * 1000)
+        self.f.write_bytes(b"cortex" * 1000)
         self.sha = hashlib.sha256(self.f.read_bytes()).hexdigest()
 
     def tearDown(self):
@@ -117,10 +117,10 @@ class Sha256(unittest.TestCase):
 class Config(unittest.TestCase):
     def test_choices_from_config(self):
         with tempfile.TemporaryDirectory() as t:
-            for name, family, model in (("strata-unsloth-ud-q4_k_xl.json", "unsloth", M),
-                                        ("strata-swift-iq3_xxs.json", "swift", "IQ3_XXS"),
-                                        ("strata-iq3_s.json", "qwen", "IQ3_S"),
-                                        ("strata-coder-iq1_m.json", "coder", "IQ1_M")):
+            for name, family, model in (("cortex-unsloth-ud-q4_k_xl.json", "unsloth", M),
+                                        ("cortex-swift-iq3_xxs.json", "swift", "IQ3_XXS"),
+                                        ("cortex-iq3_s.json", "qwen", "IQ3_S"),
+                                        ("cortex-coder-iq1_m.json", "coder", "IQ1_M")):
                 p = Path(t) / name
                 p.write_text(json.dumps({"args": ["--max-context", "8192"]}))
                 ch = setup.choices_from_config(p)
@@ -210,7 +210,7 @@ class Base(unittest.TestCase):
             for p in patches:
                 st.enter_context(p)
             code, out = quiet(setup.main)
-        cfg = self.t / f"strata-unsloth-{m.lower()}.json"
+        cfg = self.t / f"cortex-unsloth-{m.lower()}.json"
         return code, out, (json.loads(cfg.read_text()) if cfg.exists() else None)
 
 class Main(Base):
@@ -494,7 +494,7 @@ class IQ4XS(Base):
         self.assertEqual(cfg["tokenizer"], str(pack / "tokenizer"))
         self.assertFalse(cfg["vision"]["gpu"])                                 # pictures on by default, the CPU reader under 24 GB
         with tempfile.TemporaryDirectory() as t:                               # a start reads the choice back
-            p = Path(t) / "strata-unsloth-ud-iq4_xs.json"
+            p = Path(t) / "cortex-unsloth-ud-iq4_xs.json"
             p.write_text(json.dumps(cfg))
             ch = setup.choices_from_config(p)
             self.assertEqual((ch["family"], ch["model"]), ("unsloth", X))
@@ -550,8 +550,8 @@ class IQ4XS(Base):
         self.assertEqual(code, 1, out)
         self.assertNotIn("[ok] RAM", out)
         self.assertIn("[!]  RAM: 16 GB (less than", out)
-        self.assertIn("This PC cannot run Strata yet", out)
-        self.assertNotIn("This PC can run Strata", out)
+        self.assertIn("This PC cannot run Cortex yet", out)
+        self.assertNotIn("This PC can run Cortex", out)
 
     def test_engine_0138(self):
         code, out, cfg = self.main(["--context", "8192"], version="0.1.37", m=X)
@@ -644,9 +644,9 @@ class LayerSplit(unittest.TestCase):
     def start(self, ram, gpu=(0, 1), offered=None):
         from test_setup_risk import run
         with tempfile.TemporaryDirectory() as d:
-            exe = Path(d) / "strata.exe"
+            exe = Path(d) / "cortex.exe"
             exe.write_bytes(b"")
-            p = Path(d) / "strata-unsloth-ud-q4_k_xl.json"
+            p = Path(d) / "cortex-unsloth-ud-q4_k_xl.json"
             before = {"exe": str(exe), "args": ["--pack", "p", "--resident-budget-gib", "40", "--kv", "int8"],
                       "gpu": 0, "gpus_asked": offered is None}
             p.write_text(json.dumps(before))

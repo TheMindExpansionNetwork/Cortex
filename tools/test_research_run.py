@@ -61,17 +61,17 @@ class ResearchRun(unittest.TestCase):
         self.assertTrue(all(q["text"] for q in out["questions"]))
         self.assertEqual(len(self.engine.samplings), 3)
         for s in self.engine.samplings:
-            self.assertEqual(s["strata_prefix"]["tokens"] > 0, True)               # resolved by the server
+            self.assertEqual(s["cortex_prefix"]["tokens"] > 0, True)               # resolved by the server
         self.assertIn("median first token", text)
 
     def test_prefix_off_and_the_joined_layout(self):
         self.engine.samplings.clear()
         self.go("--prefix", "off")
-        self.assertTrue(all("strata_prefix" not in s for s in self.engine.samplings))
+        self.assertTrue(all("cortex_prefix" not in s for s in self.engine.samplings))
         self.engine.samplings.clear()
         code, out, _ = self.go("--prefix", "on", "--layout", "joined", "--parallel", "2")
         self.assertEqual(code, 0)
-        self.assertTrue(all(s["strata_prefix"]["tokens"] > 0 for s in self.engine.samplings))
+        self.assertTrue(all(s["cortex_prefix"]["tokens"] > 0 for s in self.engine.samplings))
 
     def test_compare(self):
         d = Path(self.dir.name)

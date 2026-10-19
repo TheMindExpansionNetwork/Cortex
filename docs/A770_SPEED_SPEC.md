@@ -3,7 +3,7 @@
 ## Objective and completion criteria
 
 Achieve **at least 20 generated tokens/second in decode on the local Intel Arc
-A770 running Strata**, with reproducible benchmark evidence and correct output.
+A770 running Cortex**, with reproducible benchmark evidence and correct output.
 This specification describes the next optimization campaign; it does not claim
 that the target has already been met.
 
@@ -30,11 +30,11 @@ Completion requires:
 
 ## Verified baseline and hardware
 
-- Worktree: a local Strata v0.1.40.3 checkout.
+- Worktree: a local Cortex v0.1.40.3 checkout.
 - Current source baseline: `501f675727ae8a54abed3ec467de1cbfbecd03ea`, branch
   `a770-speed-upstream`, based on upstream `main` at `fb58e0d` when last checked.
 - Existing upstream work: correctness PR #1602 and draft performance PR #1710.
-- Engine binary: `build-sycl/strata`; reports engine 0.1.41.
+- Engine binary: `build-sycl/cortex`; reports engine 0.1.41.
 - GPU: Intel Arc A770, PCI `0000:06:00.0`, device id `56a0`, `xe` driver,
   `ONEAPI_DEVICE_SELECTOR=level_zero:1`. B580 at `level_zero:0` drives the display
   and is outside this single-A770 benchmark.
@@ -42,7 +42,7 @@ Completion requires:
 - A770 is behind the chipset's PCIe 3.0 x4 connection. Engine transfer probes
   measured 1.7-1.8 GB/s. Do not infer the loaded link from the GPU endpoint's
   idle sysfs speed alone; record the upstream bridge and the measured transfer.
-- Build/runtime: oneAPI 2026.1 inside `strata-sycl-dev`.
+- Build/runtime: oneAPI 2026.1 inside `cortex-sycl-dev`.
 
 Measured progress, not estimates:
 
@@ -107,7 +107,7 @@ event. Wait only after all measured submissions are enqueued. Report this as a
 it a pure per-kernel execution duration. Also report host wall time and the
 empty-marker span so that marker overhead and submission starvation are visible.
 
-The initial benchmark must not enable `STRATA_VERIFY_PROFILE`, start a host
+The initial benchmark must not enable `CORTEX_VERIFY_PROFILE`, start a host
 clock writer, record a command graph, or query an event while it is still pending.
 Require nonzero and monotonically ordered start/end timestamps; otherwise fail
 with a useful diagnostic rather than print a zero or wrapped duration.
@@ -141,7 +141,7 @@ a passing or faster result.
 ### First comparison
 
 Compare the default `bf16_gemv_fp32_mmvf_multi` path with
-`STRATA_MMVF_ROWS=1`. The latter is already implemented in
+`CORTEX_MMVF_ROWS=1`. The latter is already implemented in
 `sycl/src/kernels/cuda/native_bf16.dp.cpp`; its selector is cached on first use.
 Run each mode in a separate process, setting the environment before any launch.
 Do not change `setenv` between measurements in one process and assume the cached
@@ -414,9 +414,9 @@ Primary matched configuration:
 ```
 
 Environment: retain the existing FP64-emulation variables and
-`ONEAPI_DEVICE_SELECTOR=level_zero:1`; set `STRATA_VERIFY_NO_HOST=0` in the
+`ONEAPI_DEVICE_SELECTOR=level_zero:1`; set `CORTEX_VERIFY_NO_HOST=0` in the
 wrapper config. The wrapper removes its NO_HOST default when this is zero.
-Keep `STRATA_VERIFY_PROFILE` and `STRATA_VERIFY_EAGER` absent from acceptance
+Keep `CORTEX_VERIFY_PROFILE` and `CORTEX_VERIFY_EAGER` absent from acceptance
 runs. A normal `xe` CPU-miss configuration defaults its PCIe miss share to zero.
 
 Protocol:
@@ -440,9 +440,9 @@ Protocol:
 Portable build commands inside the existing image (run from the worktree):
 
 ```sh
-docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/..:/work" strata-sycl-dev \
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/..:/work" cortex-sycl-dev \
   "source /opt/intel/oneapi/setvars.sh >/dev/null 2>&1; \
-   cmake --build /work/strata-v0.1.40.3/build-sycl --target strata -j 8"
+   cmake --build /work/cortex-v0.1.40.3/build-sycl --target cortex -j 8"
 ```
 
 Use the actual `cmake --build` exit status: `sycl/tools/build.sh` currently
@@ -456,7 +456,7 @@ Initial artifacts:
 
 - This specification: `docs/A770_SPEED_SPEC.md`.
 - Kernel probe: `sycl/probe/bf16_event_bench.cpp` (planned), with a CMake target
-  under `STRATA_SYCL_PARITY`.
+  under `CORTEX_SYCL_PARITY`.
 - A machine-readable microbenchmark output with the fields from work package 1.
 - A persisted benchmark config and response/timing records for selected winners.
 - A short result ledger under this document's execution record.
@@ -466,7 +466,7 @@ Sequence:
 1. Confirm source/resource state and finalize this specification.
 2. Implement the isolated event-timed BF16 benchmark and run baseline/row arms.
 3. Validate bits, guards and strides; record per-shape crossover results.
-4. Benchmark a matched full-model `STRATA_MMVF_ROWS=1` arm if microbenchmarks
+4. Benchmark a matched full-model `CORTEX_MMVF_ROWS=1` arm if microbenchmarks
    justify it, without the experimental host-clock profiler.
 5. Tune registers/subgroups or add a split-K specialization for the measured
    bottleneck. Repeat correctness and end-to-end gates.
@@ -489,7 +489,7 @@ Arcint reference checkout: a local temporary checkout, reviewed revision
 Arcint's headline A770 coder numbers use a different model/configuration.
 Its Flash-Next results are mainly on a B60. Treat those numbers as evidence for
 candidate techniques, not predictions for this A770 workload. Several arcint
-ideas already originated in Strata; audit existing equivalents before porting.
+ideas already originated in Cortex; audit existing equivalents before porting.
 
 ## Execution record
 
@@ -507,10 +507,10 @@ profiling queue, 32 repeats x 7 samples, device queue span per call. All arms
 passed bitwise old/new parity, guard-region, stride, zero-input, scale-extreme,
 non-finite and invalid-geometry-rejection checks.
 
-- Default path versus `STRATA_MMVF_ROWS=1`: the rows path is 1.4-6x SLOWER.
+- Default path versus `CORTEX_MMVF_ROWS=1`: the rows path is 1.4-6x SLOWER.
   320x10240 at T=3: 16.06 -> 79.00 us. 2560x2560 at T=4: 38.68 -> 245.54 us.
   With the caveat that the small (T=1, n=4) rows are launch/clock noise,
-  `STRATA_MMVF_ROWS=1` is rejected as an A770 default.
+  `CORTEX_MMVF_ROWS=1` is rejected as an A770 default.
 - Raw baselines (default path, us): 320x10240 T=3 16.06; 2560x2560 T=4 38.68;
   10240x2560 T=1 182.71; 10240x320 T=3 47.56. These are small relative to the
   ~180 ms decode window, so the BF16 projection family is NOT the decode
@@ -520,7 +520,7 @@ non-finite and invalid-geometry-rejection checks.
 
 ### Work package 3 results (register allocation)
 
-Added `-DSTRATA_SYCL_BF16_GRF=0|128|256` (default 0), applied only to
+Added `-DCORTEX_SYCL_BF16_GRF=0|128|256` (default 0), applied only to
 `native_bf16.dp.cpp` via a kernel-local property. No subgroup-size change.
 
 - `GRF=0` reproduces the saved baseline (ratio 1.000 on the steady shapes),
@@ -534,7 +534,7 @@ Added `-DSTRATA_SYCL_BF16_GRF=0|128|256` (default 0), applied only to
 
 ### Where the decode time actually is
 
-Prior per-window timing (`strata decode timing`) at ~13 tok/s: about 180 ms per
+Prior per-window timing (`cortex decode timing`) at ~13 tok/s: about 180 ms per
 window (T~2.2), of which verify ~171 ms = GPU-reach wait ~130 ms + per-layer
 host ~35 ms (CPU experts ~33 ms) + staging, plus ~8 ms draft. The **GPU-reach
 wait dominates**, i.e. the GPU expert/attention compute for VRAM-resident
@@ -546,7 +546,7 @@ the effective token/window count, not the BF16 projection geometry tested here.
 
 Config: `--resident-experts --prefill-borrow --prefill 1024 --vram-reserve-mib
 300 --pool-workers 7 --adapt-swaps 8 --spec 4 --no-spec-split`, 131072 context,
-INT8 KV, 32K resident, `--prompt-cache 0`, `STRATA_VERIFY_NO_HOST=0`. 8.98 GiB
+INT8 KV, 32K resident, `--prompt-cache 0`, `CORTEX_VERIFY_NO_HOST=0`. 8.98 GiB
 VRAM expert cache, 15.08 GiB resident RAM.
 
 - Sustained 546-token prompt, 256 generated, two warm runs: **9.6 and 10.9
@@ -594,15 +594,15 @@ width). Moving toward 20 tok/s requires making the GPU hot path itself faster
 (quantized expert kernels, attention/GDN) or raising tokens/window — a kernel
 porting effort, not parameter tuning.
 
-### Grouped-expert lane count (`STRATA_EXPERT_LANES`)
+### Grouped-expert lane count (`CORTEX_EXPERT_LANES`)
 
-Added `-DSTRATA_SYCL_EXPERT_LANES=1|2|4|8|16|32` (default 8), applied to
+Added `-DCORTEX_SYCL_EXPERT_LANES=1|2|4|8|16|32` (default 8), applied to
 `iq_kernels.dp.cpp`. The IQ grouped-expert decode kernel uses 8 lanes per row.
 
 - Interleaved A/B on the sustained gate, same session and config:
   **8 lanes = 12.40 / 12.60 tok/s; 16 lanes = 12.1 / 12.6 tok/s.** No
   difference. The earlier 9.6/10.9 "8-lane" numbers were a worse session, not
-  the lane count. `STRATA_EXPERT_LANES` is a **null result**; default stays 8.
+  the lane count. `CORTEX_EXPERT_LANES` is a **null result**; default stays 8.
 - This also resets the reliable steady-state reference: the current best config
   is **~12.4-12.6 tok/s** (first run after load is still cold/JIT).
 - `iq_multi_parity` and `native_grouped_parity` pass; the Coder's IQ hit path
@@ -620,7 +620,7 @@ not mistaken for one; the fork's Intel notes also report 43/44 on the base.
 
 ### Profiling blocker (blocks WP4/WP5 targeting)
 
-`STRATA_VERIFY_PROFILE=1` still fails on the current build: a request returns
+`CORTEX_VERIFY_PROFILE=1` still fails on the current build: a request returns
 HTTP 400 with the engine erroring inside the verify window (the same host-clock
 stamp path documented in WP1). The base engine's only per-stage profiler is this
 one, and it is unreliable, so there is **no trustworthy per-stage breakdown** of
@@ -653,7 +653,7 @@ per-kernel split with a working profiler before committing to that effort.
 
 Consequence: before an architectural change is chosen, the campaign needs a
 **working profiler** — fix the host-clock stamp, add per-kernel timing behind
-`STRATA_VERIFY_EAGER` (no graph) on a profiling-enabled queue, or install an
+`CORTEX_VERIFY_EAGER` (no graph) on a profiling-enabled queue, or install an
 external Intel GPU trace (unitrace / Level Zero timers). The parameter/config
 surface (WP1-WP3, WP6) is exhausted with evidence.
 
@@ -688,7 +688,7 @@ a worker does nothing. Rejected as a lever.
 ### GPU utilization: the GPU is mostly IDLE during decode (major finding)
 
 `gputop` (the Xe counterpart to intel_gpu_top) CAN be read for the engine if the
-engine process is user-owned. `sycl/serve/strata-sycl.sh` runs the container as
+engine process is user-owned. `sycl/serve/cortex-sycl.sh` runs the container as
 root (no `--user`), so `gputop` cannot attribute it; a temporary copy adding
 `--user <uid>:<gid>` made the engine user-owned and readable. During a 700-token
 decode (240-token prompt) the A770's compute engine (ccs) sampled:
@@ -715,7 +715,7 @@ optimization) are closed as mis-targeted.
 
 ### Both in-engine profilers are broken (blocks all targeting)
 
-`STRATA_VERIFY_PROFILE=1` and `STRATA_VERIFY_EAGER=1` both fail on the current
+`CORTEX_VERIFY_PROFILE=1` and `CORTEX_VERIFY_EAGER=1` both fail on the current
 build with the engine erroring in the verify window: **`verify: layer 0 rang but
 its payload never arrived whole`** (HTTP 400), reproducibly (3/3 eager requests
 failed). The PROFILE mode succeeded exactly once, much earlier — so it is a race,
@@ -733,9 +733,9 @@ debug-only path; normal graph-mode inference is unaffected.)
 
 ### Per-stage breakdown obtained (decisive): the CPU pool handoff dominates
 
-Added an opt-in `STRATA_DOORBELL_NOCHECK` that makes `doorbell_wait_payload`
-trust the ring (debug only). With `STRATA_VERIFY_EAGER=1 STRATA_VERIFY_PROFILE=1
-STRATA_DOORBELL_NOCHECK=1` the eager stage table finally printed. T=2 window,
+Added an opt-in `CORTEX_DOORBELL_NOCHECK` that makes `doorbell_wait_payload`
+trust the ring (debug only). With `CORTEX_VERIFY_EAGER=1 CORTEX_VERIFY_PROFILE=1
+CORTEX_DOORBELL_NOCHECK=1` the eager stage table finally printed. T=2 window,
 ms/window (host-clocked, so absolute values are inflated by the stamp overhead;
 the **relative** split is the point):
 

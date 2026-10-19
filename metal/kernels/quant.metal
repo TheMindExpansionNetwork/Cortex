@@ -2,7 +2,7 @@
 // SIMD lane decodes at a time into raw values q[0..UNIT) and one scale s, so that the unit's dot with x is
 // s * sum(q[j] * x[j]).  Every GEMV kernel (moe.metal, gemv.metal) is written once over these.
 //
-// Decode rules transcribed from ggml-quants.c dequantize_row_* (3cf03257) and Strata's Q2_0 contract
+// Decode rules transcribed from ggml-quants.c dequantize_row_* (3cf03257) and Cortex's Q2_0 contract
 // (docs/q2_0-contract.md); the grids and sign tables are ggml-common.h's (prepended by the runtime).  The tables a
 // format needs are copied to threadgroup memory once per threadgroup (constant-memory lookups with divergent indices
 // serialise on Apple GPUs).

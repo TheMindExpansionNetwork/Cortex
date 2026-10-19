@@ -9,7 +9,7 @@ const engineState = {
   running: false,
   startedAt: null,
   uptimeSec: 0,
-  version: 'strata-engine 0.1.0',
+  version: 'cortex-engine 0.1.0',
   backend: 'metal',
   timer: null,
 };
@@ -193,7 +193,7 @@ export async function reset() {
 }
 
 export async function restart() {
-  if (process.env.STRATA_REAL_ENGINE !== '1') throw new Error('Restart is unavailable with the example engine. Save settings for the next load.');
+  if (process.env.CORTEX_REAL_ENGINE !== '1') throw new Error('Restart is unavailable with the example engine. Save settings for the next load.');
   const s = getStore();
   const id = supervisor.status().modelId ?? s.loaded;
   const v = id ? variant(id) : null;
@@ -303,7 +303,7 @@ export async function exportConfig() {
   const s = getStore();
   return {
     ...(s.configExtra ?? {}),
-    schema: 'strata.engine/1',
+    schema: 'cortex.engine/1',
     exportedAt: nowIso(),
     model: s.loaded ?? s.current,
     beginner: s.beginner,

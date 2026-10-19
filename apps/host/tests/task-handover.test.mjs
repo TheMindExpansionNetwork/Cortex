@@ -10,7 +10,7 @@ const { splitTaskOutput, taskHandoverMessage, taskHandoverTitle, setTranslationL
 
 const OUTPUT = 'Two things need your attention.\n\n- Disk space is low.\n- The card ran hot twice.\n\n---\n\n**What it did**\n\n- Read the temperature log\n- Checked free space on C: and D:\n\n> This task wanted to change something and needed a yes. Nothing was changed.';
 const task = { id: 't', title: 'Hardware check', prompt: 'Check it', frequency: 'daily', at: '08:00', weekday: 1, timeZone: 'UTC', enabled: true, lastRunAt: '2026-10-18T06:00:00.000Z', output: OUTPUT,
-  files: [{ name: 'report.md', path: 'C:\\Users\\you\\Documents\\Strata\\Workspace\\report.md' }] };
+  files: [{ name: 'report.md', path: 'C:\\Users\\you\\Documents\\Cortex\\Workspace\\report.md' }] };
 
 test('the saved answer is split into what it found, what it did, and the note that needed a yes', () => {
   const parts = splitTaskOutput(OUTPUT);
@@ -25,7 +25,7 @@ test('the first message names the task and carries the findings, the steps, the 
   setTranslationLanguage('en');
   const text = taskHandoverMessage(task);
   assert.match(text, /^\*\*Continuing from the task “Hardware check”\*\* \(ran .*, finished\)\./);
-  for (const part of ['**What it found**', 'Disk space is low.', '**Needs your attention**', 'needed a yes', '**What it did**', '- Read the temperature log', '**Files**', '- C:\\Users\\you\\Documents\\Strata\\Workspace\\report.md', 'Please help me take it from here.']) assert.ok(text.includes(part), part);
+  for (const part of ['**What it found**', 'Disk space is low.', '**Needs your attention**', 'needed a yes', '**What it did**', '- Read the temperature log', '**Files**', '- C:\\Users\\you\\Documents\\Cortex\\Workspace\\report.md', 'Please help me take it from here.']) assert.ok(text.includes(part), part);
   assert.ok(text.indexOf('What it found') < text.indexOf('What it did') && text.indexOf('What it did') < text.indexOf('Files'), 'in reading order');
   assert.equal(taskHandoverTitle(task), 'Continuing from the task “Hardware check”');
 });

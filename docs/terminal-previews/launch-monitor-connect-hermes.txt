@@ -1,10 +1,10 @@
-# strata launch preview: the Connect view, Hermes selected (its limits in plain words)
+# cortex launch preview: the Connect view, Hermes selected (its limits in plain words)
 # (text of the screen as drawn at the size named in tests/terminal/launch_previews.py)
 
- STRATA  Connect   http://127.0.0.1:8080                                                                         [LIVE]
+ CORTEX  Connect   http://127.0.0.1:8080                                                                         [LIVE]
  1 Overview  2 Serving  3 Requests  4 Engine  5 Hardware  6 Logs  [7 Connect]
  ----------------------------------------------------------------------------------------------------
- Connect an app     URL http://127.0.0.1:8080/v1    model qwen3.8-flash-next-iq3_xxs    key sk-strata-****  (k show)
+ Connect an app     URL http://127.0.0.1:8080/v1    model qwen3.8-flash-next-iq3_xxs    key sk-cortex-****  (k show)
       also reachable at http://192.168.88.21:8080/v1
 
     App                 Works with            Status
@@ -15,7 +15,7 @@
      pi (pi.dev)         chat + tools          tested ok
    > Hermes Agent        chat + tools          tested ok
      OpenClaw            chat + tools          tested ok
-     DeepSeek Harness    the Strata app        tested ok
+     DeepSeek Harness    the Cortex app        tested ok
 
  Hermes Agent setup   ~/.hermes/config.yaml
    model:

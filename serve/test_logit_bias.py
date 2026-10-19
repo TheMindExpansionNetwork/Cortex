@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 
 from serve.logit_bias import engine_key, normalize, validate_request
-from serve.server import ByteTokenizer, MockEngine, Service, StrataEngine, serve
+from serve.server import ByteTokenizer, MockEngine, Service, CortexEngine, serve
 from serve.frontend import ChatTemplate
 
 
@@ -14,7 +14,7 @@ class LogitBias(unittest.TestCase):
     def test_forms_and_transport(self):
         self.assertEqual(normalize({"7": -100, "9": 2.5}, 10), normalize([[7, False], [9, 2.5]], 10))
         self.assertEqual(engine_key([[9, 2.5], [7, False]]), " logit_bias=7:-100,9:2.5")
-        self.assertEqual(StrataEngine.sampling_keys({"logit_bias": {"7": -100}}), " logit_bias=7:-100")
+        self.assertEqual(CortexEngine.sampling_keys({"logit_bias": {"7": -100}}), " logit_bias=7:-100")
         for value in [None, {}, []]:
             self.assertEqual(engine_key(value), "")
 

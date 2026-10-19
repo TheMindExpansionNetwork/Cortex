@@ -6,9 +6,9 @@ generated text:
 
     python tools/collect_profile_traces.py CONFIG.json OUTDIR [--corpus FILE] [--max-new 250] [--mode usage|routing]
 
-CONFIG.json is a run config setup wrote (strata-*.json: "exe", "args", "env", "tokenizer", "cwd").  The engine is run as
+CONFIG.json is a run config setup wrote (cortex-*.json: "exe", "args", "env", "tokenizer", "cwd").  The engine is run as
 `exe args... --tokens-file F --max-new N --greedy` (--serve and --batch are dropped).  `--mode usage` (default) is the
-SYCL engine's STRATA_USAGE_DUMP=PATH, which counts on the device and works with STRATA_VERIFY_NO_HOST; `--mode routing`
+SYCL engine's CORTEX_USAGE_DUMP=PATH, which counts on the device and works with CORTEX_VERIFY_NO_HOST; `--mode routing`
 adds `--dump-routing PATH` (the CUDA/HIP engines and the SYCL host path).  Then, for example:
 
     python tools/make_profile_mix.py OUTDIR/c*.trace:1 --out data/expert-profile-new.bin
@@ -25,7 +25,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import strata_tokenizer as ST  # noqa: E402
+import cortex_tokenizer as ST  # noqa: E402
 
 
 def load_tokenizer(tdir):
@@ -77,7 +77,7 @@ def main():
         cmd = [cfg["exe"]] + args + ["--tokens-file", str(tf), "--max-new", str(a.max_new), "--greedy"]
         env = dict(env0)
         if a.mode == "usage":
-            env["STRATA_USAGE_DUMP"] = str(trace)
+            env["CORTEX_USAGE_DUMP"] = str(trace)
         else:
             cmd += ["--dump-routing", str(trace)]
         print(f"[{n + 1}/{len(corpus)}] {c['d']}: {len(ids)} prompt tokens", flush=True)

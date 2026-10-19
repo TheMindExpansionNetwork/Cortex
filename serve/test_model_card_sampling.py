@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from serve.frontend import ChatTemplate  # noqa: E402
-from serve.server import ByteTokenizer, MockEngine, Service, StrataEngine, model_card_sampling, serve  # noqa: E402
+from serve.server import ByteTokenizer, MockEngine, Service, CortexEngine, model_card_sampling, serve  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -56,7 +56,7 @@ class ModelCardSampling(unittest.TestCase):
         req = urllib.request.Request(self.base + "/v1/chat/completions", data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json"})
         urllib.request.urlopen(req, timeout=10).read()
-        return StrataEngine.sampling_keys(self.engine.sampling)
+        return CortexEngine.sampling_keys(self.engine.sampling)
 
     def test_tables(self):
         self.assertEqual(model_card_sampling("qwen4exp", True), {"temperature": 1.0, "top_p": 0.95, "top_k": 20})

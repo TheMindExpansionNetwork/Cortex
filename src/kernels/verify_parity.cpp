@@ -4,8 +4,8 @@
 // accepted exactly when greedy decode would have produced them), so every kernel here is checked against the
 // one it stands in for, on random inputs that include -0.0, denormals, NaN, -inf and large values.  The tests
 // follow eddoursul's fork (MIT; verify_parity.cpp), ported to this tree's kernels.
-#include "strata/kernels/sampler.hpp"
-#include "strata/kernels/verify_kernels.hpp"
+#include "cortex/kernels/sampler.hpp"
+#include "cortex/kernels/verify_kernels.hpp"
 
 #include <cuda_runtime.h>
 
@@ -51,7 +51,7 @@ template <typename T> std::vector<T> down(const T* d, size_t n) {
 // vocabularies with ties at the maximum (the lowest index wins), NaN, -inf, a row with no value above -inf, and
 // launches repeated on one scratch (each must leave its counters at zero)
 int test_argmax(std::mt19937& rng, cudaStream_t s) {
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     int bad = 0;
     std::normal_distribution<float> nd(0.0f, 4.0f);
     uint8_t* sa = dev<uint8_t>(argmax_rows_scratch_bytes(8));   // one scratch for every row count, as in the engine

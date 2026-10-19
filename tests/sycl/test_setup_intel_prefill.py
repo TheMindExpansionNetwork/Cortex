@@ -19,7 +19,7 @@ A750 = dict(vram_gb=8.0, driver="i915", devid="56a1")
 
 def prefill_of(ctx, card, extra=()):
     cfg = {"args": ["--max-context", str(ctx), "--kv", "int8", "--prefill", "auto", *extra]}
-    out = si.to_sycl(cfg, ROOT / "build-sycl-aot" / "strata", 64.0, {}, **card)
+    out = si.to_sycl(cfg, ROOT / "build-sycl-aot" / "cortex", 64.0, {}, **card)
     return si.flag(out["args"], "--prefill")
 
 
@@ -48,5 +48,5 @@ def test_config_other_cards_unchanged():
 
 def test_user_pick_is_kept():
     cfg = {"args": ["--max-context", "131072", "--kv", "int8", "--prefill", "16384"]}
-    out = si.to_sycl(cfg, ROOT / "build-sycl-aot" / "strata", 64.0, {}, **B70)
+    out = si.to_sycl(cfg, ROOT / "build-sycl-aot" / "cortex", 64.0, {}, **B70)
     assert si.flag(out["args"], "--prefill") == "16384"

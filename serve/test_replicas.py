@@ -12,7 +12,7 @@ from unittest import mock
 
 from serve.frontend import ChatTemplate
 from serve.replicas import BLOCK, ReplicaConfigError, ReplicaEngine, Router, cpu_sets, gpu_groups, replica_cfg
-from serve.server import ByteTokenizer, Service, StrataEngine, serve
+from serve.server import ByteTokenizer, Service, CortexEngine, serve
 from serve.test_parallel import FAKE_BATCH
 
 
@@ -34,12 +34,12 @@ class Config(unittest.TestCase):
                 gpu_groups(cfg)
 
     def test_replica_cfg(self):
-        cfg = {"gpu": [0, 1, 2, 3], "args": ["--x"], "log": "/l/strata.log", "hip_ordinal": 1, "env": {"A": "1"},
+        cfg = {"gpu": [0, 1, 2, 3], "args": ["--x"], "log": "/l/cortex.log", "hip_ordinal": 1, "env": {"A": "1"},
                "expert_profile_save": "/p/prof.bin",
                "replicas": [{"gpus": [0, 1], "env": {"B": 2}}, {"gpus": [2, 3], "args": ["--y"]}]}
         a, b = replica_cfg(cfg, 0, [0, 1]), replica_cfg(cfg, 1, [2, 3])
         self.assertEqual((a["gpu"], b["gpu"]), ([0, 1], [2, 3]))
-        self.assertEqual((a["log"], b["log"]), ("/l/strata.r0.log", "/l/strata.r1.log"))
+        self.assertEqual((a["log"], b["log"]), ("/l/cortex.r0.log", "/l/cortex.r1.log"))
         self.assertEqual(a["env"], {"A": "1", "B": "2"})
         self.assertEqual(b["args"], ["--x", "--y"])
         self.assertNotIn("replicas", a)
@@ -152,7 +152,7 @@ class RouteChoice(unittest.TestCase):
         engine.inflight[0] = 1
         cancel = threading.Event()
         selected = []
-        cancel._strata_replica_selected = selected.append
+        cancel._cortex_replica_selected = selected.append
         self.assertEqual(list(engine.generate([1, 2], 1, {}, cancel)), [7])
         self.assertEqual(selected, [1])
 
@@ -161,7 +161,7 @@ class ReplicaService(unittest.TestCase):
     def start(self, slots=4, n=2):
         import serve.server as server
         self.tmp = tempfile.TemporaryDirectory()
-        script = Path(self.tmp.name) / "fake_strata.py"
+        script = Path(self.tmp.name) / "fake_cortex.py"
         script.write_text(FAKE_BATCH, encoding="utf-8")
         real = server.subprocess.Popen
         self.logs = [Path(self.tmp.name) / f"r{i}.log" for i in range(n)]
@@ -170,7 +170,7 @@ class ReplicaService(unittest.TestCase):
             extra = (["--batch", str(slots)] if slots else []) + ["--log", str(self.logs[i])]
             with mock.patch.object(server.subprocess, "Popen",
                                    lambda cmd, **kw: real([sys.executable, str(script), *cmd[1:]], **kw)):
-                engines.append(StrataEngine("strata", extra))
+                engines.append(CortexEngine("cortex", extra))
         self.engine = ReplicaEngine(engines)
         self.svc = Service(self.engine, ByteTokenizer(), ChatTemplate(Path(__file__).parent / "chat_template.jinja"))
         self.httpd = serve(self.svc, port=0)

@@ -1,4 +1,4 @@
-# Contributing to Strata
+# Contributing to Cortex
 
 **AI assistance is welcome. The contributor is responsible for understanding the change and supplying real evidence.**
 
@@ -24,7 +24,7 @@ the situation, bring it to the original discussion and let a maintainer decide w
 Use the matching [issue form](https://github.com/Niko1221/Strata/issues/new/choose). A bug report should include:
 
 - The smallest steps or command that reproduce the problem, and the expected and actual behavior.
-- Strata version or commit, OS, GPU and VRAM, and relevant model, quantization, and configuration.
+- Cortex version or commit, OS, GPU and VRAM, and relevant model, quantization, and configuration.
 - The exact error and relevant logs, with credentials and private content removed.
 - Whether you reproduced it yourself. Label a finding based only on reading code or a scanner as
   **unconfirmed static analysis**, and explain the suspected path without presenting it as an observed failure.

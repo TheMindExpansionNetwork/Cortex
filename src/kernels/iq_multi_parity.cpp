@@ -14,9 +14,9 @@
 //
 // Random bytes are valid codes for every format here (all grid indices are in range); only the fp16 block scales
 // are set, small enough that the grouped path's SwiGLU output keeps a finite fp16 q8_1 scale.
-#include "strata/kernels/f16_bits.hpp"
-#include "strata/kernels/iq_kernels.hpp"
-#include "strata/kernels/native_mmvq.hpp"
+#include "cortex/kernels/f16_bits.hpp"
+#include "cortex/kernels/iq_kernels.hpp"
+#include "cortex/kernels/native_mmvq.hpp"
 
 #include <cuda_runtime.h>
 
@@ -30,7 +30,7 @@
 #include <string>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 
@@ -425,7 +425,7 @@ int main(int argc, char** argv) {
         for (int dt : {20, 42}) check_grouped(gu, dt, 2560, 640, s, rng);   // the model's shape
         check_grouped(gu, 23, 1024, 512, s, rng);                           // IQ4_XS down needs n_ff % 256 == 0
     }
-    // UD-Q4_K_XL (run with STRATA_KQ_SPLIT=1 to compare the Split path with the old kernels; STRATA_EXPERT_V2K=0 / 1 picks
+    // UD-Q4_K_XL (run with CORTEX_KQ_SPLIT=1 to compare the Split path with the old kernels; CORTEX_EXPERT_V2K=0 / 1 picks
     // the generic multi kernel or the V2K one on gfx12: both are bitwise the old kernels)
     for (int gu : {12, 13})
         for (int dt : {7, 8}) check_grouped(gu, dt, 2560, 640, s, rng);

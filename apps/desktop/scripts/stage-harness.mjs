@@ -22,9 +22,9 @@ import { isOtherOsBinaryFolder, missingHarnessImports } from './harness-prune.mj
 
 const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : fallback; };
-const src = resolve(opt('src', process.env.STRATA_HARNESS_SRC ?? ''));
+const src = resolve(opt('src', process.env.CORTEX_HARNESS_SRC ?? ''));
 const out = resolve(opt('out', join(import.meta.dirname, '..', 'src-tauri', 'resources', 'harness')));
-if (!opt('src', process.env.STRATA_HARNESS_SRC) || !existsSync(join(src, 'apps', 'cli', 'lib', 'bin.js'))) {
+if (!opt('src', process.env.CORTEX_HARNESS_SRC) || !existsSync(join(src, 'apps', 'cli', 'lib', 'bin.js'))) {
   console.error('Give --src <a built Harness checkout> (apps/cli/lib/bin.js must exist).');
   process.exit(2);
 }
@@ -149,7 +149,7 @@ for (const name of ['LICENSE', 'THIRD_PARTY_NOTICES.md']) {
   if (existsSync(join(src, name))) cpSync(join(src, name), join(out, name));
 }
 const cli = JSON.parse(readFileSync(join(out, 'package.json'), 'utf8'));
-let commit = process.env.STRATA_HARNESS_COMMIT ?? null;
+let commit = process.env.CORTEX_HARNESS_COMMIT ?? null;
 if (!commit) { const r = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: src, encoding: 'utf8' }); if (r.status === 0) commit = r.stdout.trim(); }
 function size(dir) { let t = 0, n = 0; for (const e of readdirSync(dir, { withFileTypes: true })) { const p = join(dir, e.name); if (e.isDirectory()) { const s = size(p); t += s.bytes; n += s.files; } else if (e.isFile()) { t += statSync(p).size; n++; } } return { bytes: t, files: n }; }
 const total = size(out);

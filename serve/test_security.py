@@ -36,7 +36,7 @@ class HostNames(unittest.TestCase):
 
     def test_allowed_hosts_of(self):
         self.assertEqual(allowed_hosts_of(None), [])
-        self.assertEqual(allowed_hosts_of("Strata.Example.com"), ["strata.example.com"])
+        self.assertEqual(allowed_hosts_of("Cortex.Example.com"), ["strata.example.com"])
         self.assertEqual(allowed_hosts_of(["https://a.example.com:8443/x", ".example.org", "*"], "box, nas.lan "),
                          ["a.example.com", ".example.org", "*", "box", "nas.lan"])
         for bad in (["bad name"], 5, [3], "http://"):
@@ -76,7 +76,7 @@ class HostCheck(unittest.TestCase):
 class OriginCheck(unittest.TestCase):
     def test_accepted(self):
         names = LOCAL | {"box"}
-        self.assertTrue(origin_allowed("http://127.0.0.1:8095", "127.0.0.1:8095", names))      # Strata's own page
+        self.assertTrue(origin_allowed("http://127.0.0.1:8095", "127.0.0.1:8095", names))      # Cortex's own page
         self.assertTrue(origin_allowed("http://192.168.1.20:8095", "192.168.1.20:8095", names))  # ... by LAN IP
         self.assertTrue(origin_allowed("http://localhost:3000", "127.0.0.1:8095", names))      # a local app
         self.assertTrue(origin_allowed("http://[::1]:3000/", "127.0.0.1:8095", names))

@@ -25,13 +25,13 @@ let failed = false;
 const record = (name, ok, detail = '') => { steps.push({ name, ok: !!ok, detail: String(detail).slice(0, 400) }); console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${detail ? '  ' + String(detail).slice(0, 300) : ''}`); if (!ok) failed = true; };
 const freePort = async () => { const s = createServer(); await new Promise(r => s.listen(0, '127.0.0.1', r)); const p = s.address().port; await new Promise(r => s.close(r)); return p; };
 
-const env = { ...process.env, STRATA_COMPONENTS_DIR: dirs.components, STRATA_PROFILE_DIR: dirs.profiles, STRATA_RUNTIME_DIR: dirs.runtime, STRATA_INSTALL_DIR: dirs.install, STRATA_HOME: dirs.home, STRATA_MODELS_DIR: join(root, 'Strata-data'), STRATA_ENGINE_BACKEND: args.backend ?? 'cuda', XDG_CONFIG_HOME: dirs.xdg, APPDATA: dirs.appdata, PYTHONDONTWRITEBYTECODE: '1' };
-delete env.STRATA_API_KEY;
+const env = { ...process.env, CORTEX_COMPONENTS_DIR: dirs.components, CORTEX_PROFILE_DIR: dirs.profiles, CORTEX_RUNTIME_DIR: dirs.runtime, CORTEX_INSTALL_DIR: dirs.install, CORTEX_HOME: dirs.home, CORTEX_MODELS_DIR: join(root, 'Cortex-data'), CORTEX_ENGINE_BACKEND: args.backend ?? 'cuda', XDG_CONFIG_HOME: dirs.xdg, APPDATA: dirs.appdata, PYTHONDONTWRITEBYTECODE: '1' };
+delete env.CORTEX_API_KEY;
 const port = await freePort();
 const base = `http://127.0.0.1:${port}`;
 const host = spawn(join(app, 'node', 'node'), [join(app, 'host', 'server', 'index.mjs')], { cwd: join(app, 'host'), stdio: ['ignore', 'pipe', 'pipe'], detached: false,
-  env: { ...env, STRATA_PORT: String(port), STRATA_DIST: join(app, 'host', 'dist'), NODE_ENV: 'production', STRATA_PACKAGED: '1', STRATA_REAL_ENGINE: '1', STRATA_NO_ACQUIRE: '1', STRATA_EXIT_WITH_PARENT: '1',
-    STRATA_SHARE_PORT: String(await freePort()), STRATA_TUNNEL_PORT: String(await freePort()), STRATA_WORKSPACE: join(root, 'workspace') } });
+  env: { ...env, CORTEX_PORT: String(port), CORTEX_DIST: join(app, 'host', 'dist'), NODE_ENV: 'production', CORTEX_PACKAGED: '1', CORTEX_REAL_ENGINE: '1', CORTEX_NO_ACQUIRE: '1', CORTEX_EXIT_WITH_PARENT: '1',
+    CORTEX_SHARE_PORT: String(await freePort()), CORTEX_TUNNEL_PORT: String(await freePort()), CORTEX_WORKSPACE: join(root, 'workspace') } });
 mkdirSync(join(root, 'workspace'), { recursive: true });
 let hostLog = ''; host.stdout.on('data', c => { hostLog += c; }); host.stderr.on('data', c => { hostLog += c; });
 const call = async (path, method = 'GET', body) => { const r = await fetch(base + path, { method, headers: { 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }); return { status: r.status, body: await r.json().catch(() => null) }; };
@@ -47,7 +47,7 @@ async function waitJob(id, seconds) {
   }
   throw new Error('operation did not finish in time');
 }
-const engineProcs = () => spawnSync('ps', ['-eo', 'pid,args'], { encoding: 'utf8' }).stdout.split('\n').filter(l => l.includes(join(dirs.components, 'engine')) && /\/strata( |$)/.test(l));
+const engineProcs = () => spawnSync('ps', ['-eo', 'pid,args'], { encoding: 'utf8' }).stdout.split('\n').filter(l => l.includes(join(dirs.components, 'engine')) && /\/cortex( |$)/.test(l));
 
 async function main() {
   let up = false;

@@ -1,10 +1,10 @@
 /**
  * Settings -> Tools and what it gives the assistant, through the real app on a real model, with screenshots (playwright-core + Chrome).
  *
- *   STRATA_URL=http://127.0.0.1:8899 SHOTS=./shots MODEL='Qwen test' node scripts/agent2-tools-flow.mjs
+ *   CORTEX_URL=http://127.0.0.1:8899 SHOTS=./shots MODEL='Qwen test' node scripts/agent2-tools-flow.mjs
  *
- * The host must run with STRATA_BROWSER_HEADLESS=1 (the browser step must not open a window on the person's desktop) and a scratch
- * STRATA_HOME / STRATA_TIMESKIP_DIR. Steps (each prints ok/FAIL):
+ * The host must run with CORTEX_BROWSER_HEADLESS=1 (the browser step must not open a window on the person's desktop) and a scratch
+ * CORTEX_HOME / CORTEX_TIMESKIP_DIR. Steps (each prints ok/FAIL):
  *   1. Settings -> Tools shows the groups; two tools of my own are added through the dialog (instructions, command);
  *   2. web search with no key: "Searched the web" card, real DuckDuckGo results in the answer;
  *   3. the instruction tool is used without asking and shapes the answer; the command tool asks first in Manual, runs after Approve;
@@ -15,8 +15,8 @@ import { chromium } from 'playwright-core';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-const BASE = process.env.STRATA_URL;
-if (!BASE) { console.error('STRATA_URL is required'); process.exit(2); }
+const BASE = process.env.CORTEX_URL;
+if (!BASE) { console.error('CORTEX_URL is required'); process.exit(2); }
 const SHOTS = resolve(process.env.SHOTS ?? 'agent2-tools-shots');
 mkdirSync(SHOTS, { recursive: true });
 const MODEL = process.env.MODEL ?? 'Qwen test';
@@ -107,7 +107,7 @@ try {
   // 2. web search with no key
   if (!SKIP.has('search')) {
     await newChat();
-    await send('Use the web_search tool to find the GitHub page of the Strata local LLM engine by Niko1221. Tell me its address.');
+    await send('Use the web_search tool to find the GitHub page of the Cortex local LLM engine by Niko1221. Tell me its address.');
     await started().catch(() => {});
     const r = await approveUntilIdle('05');
     await idle();
@@ -115,7 +115,7 @@ try {
     const body = await chatText();
     check(/Searched the web/.test(body), 'a "Searched the web" card appeared');
     check(r.asked === 0, 'searching asked nothing (it only reads)');
-    check(/github\.com\/Niko1221\/Strata/i.test(body), 'the answer names the real GitHub address from the results');
+    check(/github\.com\/Niko1221\/Cortex/i.test(body), 'the answer names the real GitHub address from the results');
   }
 
   // 3. my own tools
@@ -148,7 +148,7 @@ try {
     await shot('08-search-off');
     check((await page.getByRole('switch', { name: 'Search the web' }).getAttribute('aria-checked')) === 'false', 'the switch is off');
     await newChat();
-    await send('Use the web_search tool to search for the word Strata. If you have no such tool, say exactly: NO SEARCH TOOL.');
+    await send('Use the web_search tool to search for the word Cortex. If you have no such tool, say exactly: NO SEARCH TOOL.');
     await started().catch(() => {});
     await approveUntilIdle('08');
     await idle();

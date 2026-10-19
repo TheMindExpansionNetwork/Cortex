@@ -1,12 +1,12 @@
 /** Disposable API-edge fixtures for manual CUA review. Never used by the app host.
- * STRATA_FIXTURE_FILE=/tmp/...json node tests/ui-fixture-host.mjs
+ * CORTEX_FIXTURE_FILE=/tmp/...json node tests/ui-fixture-host.mjs
  * Proxies the isolated demo host at 8794; serves the same built UI at 8796.
  */
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
-const file = process.env.STRATA_FIXTURE_FILE;
-const upstreamUrl = process.env.STRATA_FIXTURE_UPSTREAM ?? 'http://127.0.0.1:8794';
-const port = Number(process.env.STRATA_FIXTURE_PORT ?? 8796);
+const file = process.env.CORTEX_FIXTURE_FILE;
+const upstreamUrl = process.env.CORTEX_FIXTURE_UPSTREAM ?? 'http://127.0.0.1:8794';
+const port = Number(process.env.CORTEX_FIXTURE_PORT ?? 8796);
 if (!file) throw new Error('Provide a disposable fixture JSON path.');
 const read = () => JSON.parse(readFileSync(file, 'utf8'));
 let failed = false;

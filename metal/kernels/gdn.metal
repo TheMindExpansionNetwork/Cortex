@@ -6,7 +6,7 @@
 //   kv_j = sum_i S[i][j] k[i];  delta_j = (v_j - gate * kv_j) * beta;  S = gate * S + k[i] delta_j
 //   o_j = (sum_i S[i][j] q[i]) / sqrt(128);  y_j = o_j * rsqrt(mean(o^2) + eps) * gamma_j * sigmoid(z_j)
 //
-// State layout as Strata's: S[(i * h_v + h) * 128 + j].  Value head h reads q/k head h % h_k.
+// State layout as Cortex's: S[(i * h_v + h) * 128 + j].  Value head h reads q/k head h % h_k.
 // One threadgroup per value head, 512 threads = 16 simdgroups: simdgroup s holds columns j = 32 (s % 4) + lane and
 // rows i = 32 (s / 4) .. + 32 of the head's 128 x 128 state in registers.  GDN_NTOK tokens run in order; with
 // `commit` the state and the conv history are written back after the last one (a verify window runs without commit,

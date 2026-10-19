@@ -1,6 +1,6 @@
 node_modules/
-.strata/
-.strata-ui-preview/
+.cortex/
+.cortex-ui-preview/
 .localhost-*/
 .shots/
 tmp/

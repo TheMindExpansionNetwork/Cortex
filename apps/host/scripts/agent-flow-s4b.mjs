@@ -1,7 +1,7 @@
 /**
  * Drive the real app through the S4b flow on a real model and take screenshots (playwright-core + installed Chrome).
  *
- *   STRATA_URL=http://127.0.0.1:8791 SHOTS=./shots METRICS=http://127.0.0.1:18797/metrics node scripts/agent-flow-s4b.mjs
+ *   CORTEX_URL=http://127.0.0.1:8791 SHOTS=./shots METRICS=http://127.0.0.1:18797/metrics node scripts/agent-flow-s4b.mjs
  *
  * Against a host that has the Harness and one API connection saved (the model server), in Manual mode:
  *   1. a coding task that starts two helper agents; the Subagents popover shows two rows; the engine metrics show both running together;
@@ -10,15 +10,15 @@
  *   3. a web page fetch (a tool call), or its plain failure when offline;
  *   4. Stop during helpers: rows stop, the host reports no active turn.
  *
- * Environment: STRATA_URL (required), SHOTS, MODEL (picker text), METRICS (engine /metrics URL, optional, with Authorization from KEY),
+ * Environment: CORTEX_URL (required), SHOTS, MODEL (picker text), METRICS (engine /metrics URL, optional, with Authorization from KEY),
  * PROMPT_HELPERS, PROMPT_EDIT, PROMPT_WEB, PROMPT_STOP, WORKDIR (the folder the agent works in, to check files), CHROME.
  */
 import { chromium } from 'playwright-core';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-const BASE = process.env.STRATA_URL;
-if (!BASE) { console.error('STRATA_URL is required'); process.exit(2); }
+const BASE = process.env.CORTEX_URL;
+if (!BASE) { console.error('CORTEX_URL is required'); process.exit(2); }
 const SHOTS = resolve(process.env.SHOTS ?? 'agent-shots-s4b');
 mkdirSync(SHOTS, { recursive: true });
 const MODEL = process.env.MODEL ?? 'Cloud model';

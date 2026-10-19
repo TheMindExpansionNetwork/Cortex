@@ -1,6 +1,6 @@
 // CPU-only task partition parity. Optional real expert: pool_tasks_test GU_TYPE DOWN_TYPE BLOB_FILE
-#include "strata/kernels/cpu/pool.hpp"
-#include "strata/kernels/cpu/expert_layout.hpp"
+#include "cortex/kernels/cpu/pool.hpp"
+#include "cortex/kernels/cpu/expert_layout.hpp"
 #include "ggml.h"
 
 #include <algorithm>
@@ -12,7 +12,7 @@
 #include <stdexcept>
 #include <vector>
 
-namespace cpu = strata::kernels::cpu;
+namespace cpu = cortex::kernels::cpu;
 
 int main(int argc, char** argv) {
     if (argc != 1 && argc != 4) return 2;

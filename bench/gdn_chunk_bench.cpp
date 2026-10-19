@@ -2,12 +2,12 @@
 // real GDN geometry (S=128, 16 q/k heads, 48 v heads, C=10240), CUDA events.
 //
 // One call of `gdn_recurrence` per side (the whole prompt chunk for one GDN layer: conv output -> out norm),
-// A/B'd with STRATA_GDN_CHUNK=0 / =1 so the dispatch, the tail and the norm are timed exactly as the engine
+// A/B'd with CORTEX_GDN_CHUNK=0 / =1 so the dispatch, the tail and the norm are timed exactly as the engine
 // runs them.  The two paths are not bit-exact (the chunked one reorders the sums); the bench reports the max
 // relative difference it saw so a silent divergence cannot hide behind a speedup.
 //
 //   usage: gdn_chunk_bench [T ...]        (default 1024 4096 8192)
-#include "strata/prefill/kernels.hpp"
+#include "cortex/prefill/kernels.hpp"
 
 #include <cuda_runtime.h>
 
@@ -38,18 +38,18 @@ struct Rng {
 
 float timed(const char* mode, const char* warp, float* st, float* st0, float* h, float* g, float* b, float* z,
             float* ga, float* y, uint16_t* y16, int64_t T, int iters) {
-    setenv("STRATA_GDN_CHUNK", mode, 1);
-    setenv("STRATA_GDN_REC_WARP", warp, 1);
+    setenv("CORTEX_GDN_CHUNK", mode, 1);
+    setenv("CORTEX_GDN_REC_WARP", warp, 1);
     cudaEvent_t e0, e1;
     check(cudaEventCreate(&e0), "event");
     check(cudaEventCreate(&e1), "event");
     check(cudaMemcpy(st, st0, (size_t) S * HV * S * 4, cudaMemcpyDeviceToDevice), "reset");
-    strata::prefill::gdn_recurrence(st, h, g, b, z, ga, 1e-5f, y, y16, T, nullptr);
+    cortex::prefill::gdn_recurrence(st, h, g, b, z, ga, 1e-5f, y, y16, T, nullptr);
     check(cudaDeviceSynchronize(), "warmup");
     check(cudaEventRecord(e0), "record");
     for (int i = 0; i < iters; ++i) {
         check(cudaMemcpy(st, st0, (size_t) S * HV * S * 4, cudaMemcpyDeviceToDevice), "reset");
-        strata::prefill::gdn_recurrence(st, h, g, b, z, ga, 1e-5f, y, y16, T, nullptr);
+        cortex::prefill::gdn_recurrence(st, h, g, b, z, ga, 1e-5f, y, y16, T, nullptr);
     }
     check(cudaEventRecord(e1), "record");
     check(cudaEventSynchronize(e1), "sync");

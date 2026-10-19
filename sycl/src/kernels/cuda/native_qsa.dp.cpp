@@ -25,8 +25,8 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/sycl_queue.hpp"
-#include "strata/kernels/native_qsa.hpp"
+#include "cortex/sycl_queue.hpp"
+#include "cortex/kernels/native_qsa.hpp"
 #include <atomic>
 #include <cmath>
 #include <cstddef>
@@ -35,7 +35,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 std::atomic<bool> enabled{false};
 __dpct_inline__ float warp_sum(float value) {
@@ -181,7 +181,7 @@ void native_qsa_rms_norm_weighted(const float* input, const float* gamma, float*
         auto exp_props = sycl::ext::oneapi::experimental::properties{
             sycl::ext::oneapi::experimental::use_root_sync};
 
-        ((sycl::queue *)(strata::q_of(stream)))
+        ((sycl::queue *)(cortex::q_of(stream)))
             ->parallel_for<
                 dpct_kernel_name<class norm_5d08bf, dpct_kernel_scalar<256>>>(
                 sycl::nd_range<3>(sycl::range(1, 1, unsigned(n_rows)) *
@@ -202,7 +202,7 @@ void native_qsa_rms_norm_weighted(const float* input, const float* gamma, float*
         auto exp_props = sycl::ext::oneapi::experimental::properties{
             sycl::ext::oneapi::experimental::use_root_sync};
 
-        ((sycl::queue *)(strata::q_of(stream)))
+        ((sycl::queue *)(cortex::q_of(stream)))
             ->parallel_for<
                 dpct_kernel_name<class norm_127936, dpct_kernel_scalar<1024>>>(
                 sycl::nd_range<3>(sycl::range(1, 1, unsigned(n_rows)) *
@@ -228,7 +228,7 @@ void native_qsa_rms_norm_grouped(const float* input, const float* gamma, float* 
         auto exp_props = sycl::ext::oneapi::experimental::properties{
             sycl::ext::oneapi::experimental::use_root_sync};
 
-        ((sycl::queue *)(strata::q_of(stream)))
+        ((sycl::queue *)(cortex::q_of(stream)))
             ->parallel_for<dpct_kernel_name<class norm_grouped_b5907a,
                                             dpct_kernel_scalar<256>>>(
                 sycl::nd_range<3>(sycl::range(1, 1, unsigned(n_rows)) *
@@ -250,7 +250,7 @@ void native_qsa_rms_norm_grouped(const float* input, const float* gamma, float* 
         auto exp_props = sycl::ext::oneapi::experimental::properties{
             sycl::ext::oneapi::experimental::use_root_sync};
 
-        ((sycl::queue *)(strata::q_of(stream)))
+        ((sycl::queue *)(cortex::q_of(stream)))
             ->parallel_for<dpct_kernel_name<class norm_grouped_927e80,
                                             dpct_kernel_scalar<1024>>>(
                 sycl::nd_range<3>(sycl::range(1, 1, unsigned(n_rows)) *
@@ -273,7 +273,7 @@ void native_qsa_gate_apply(const float* attn, const float* q_full, float* output
         auto exp_props = sycl::ext::oneapi::experimental::properties{
             sycl::ext::oneapi::experimental::use_root_sync};
 
-        ((sycl::queue *)(strata::q_of(stream)))
+        ((sycl::queue *)(cortex::q_of(stream)))
             ->parallel_for<dpct_kernel_name<class gate_148967>>(
                 sycl::nd_range<3>(
                     sycl::range(1, 1, unsigned((count + 255) / 256)) *
@@ -285,4 +285,4 @@ void native_qsa_gate_apply(const float* attn, const float* q_full, float* output
     }
     check_launch();
 }
-} // namespace strata::kernels
+} // namespace cortex::kernels

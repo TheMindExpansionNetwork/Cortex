@@ -994,7 +994,7 @@
     "task_finding": "T10 optional #6",
     "screen": "engine-adapter-details",
     "sev": "L",
-    "issue": "\"llama.cpp adapter\u2026 native Strata configuration requires a different adapter\"",
+    "issue": "\"llama.cpp adapter\u2026 native Cortex configuration requires a different adapter\"",
     "fix": "move to Expert \u203a About engine",
     "task": "T10",
     "status": "optional-not-scheduled",

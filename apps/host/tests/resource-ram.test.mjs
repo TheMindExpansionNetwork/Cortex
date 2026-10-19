@@ -46,22 +46,22 @@ test('neither profile reserves less VRAM than the engine\'s safe floor (the driv
 
 test('"leave 20% for my work" also asks the engine to leave 20% of the RAM free at its start, and full performance takes that out again', () => {
   const work = resourceSettings(config, pc64, 'work', iq3s);
-  assert.equal(work.env.STRATA_RESIDENT_HEADROOM_GIB, '13', '20% of 63 GB, rounded up');
+  assert.equal(work.env.CORTEX_RESIDENT_HEADROOM_GIB, '13', '20% of 63 GB, rounded up');
   assert.equal(work.ui_resource_baseline.ramHeadroom, true);
   const back = resourceSettings({ ...config, args: work.args, env: work.env, ui_resource_profile: 'work', ui_resource_baseline: work.ui_resource_baseline }, pc64, 'performance', iq3s);
-  assert.equal(back.env.STRATA_RESIDENT_HEADROOM_GIB, undefined);
-  const own = resourceSettings({ ...config, env: { STRATA_RESIDENT_HEADROOM_GIB: '6' } }, pc64, 'work', iq3s);
+  assert.equal(back.env.CORTEX_RESIDENT_HEADROOM_GIB, undefined);
+  const own = resourceSettings({ ...config, env: { CORTEX_RESIDENT_HEADROOM_GIB: '6' } }, pc64, 'work', iq3s);
   assert.equal(own.env, undefined, 'a value the user set is not overwritten');
   assert.equal(resourceSettings(config, { ...pc64, ram_gb: 128 }, 'work', iq3s).env, undefined, 'no budget, no headroom setting');
 });
 
 test('a start that died gets ONE safer second try: pin less when the locked memory ran out, else a RAM budget with the rest on the SSD', () => {
-  const pinned = saferStart(config, pc64, iq3s, 'server_exited: mapped staging allocation failed [pinned-memory-exhausted] start again with STRATA_ARENA_PIN_GIB=26 (pin less)');
-  assert.equal(pinned.config.env.STRATA_ARENA_PIN_GIB, '26');
+  const pinned = saferStart(config, pc64, iq3s, 'server_exited: mapped staging allocation failed [pinned-memory-exhausted] start again with CORTEX_ARENA_PIN_GIB=26 (pin less)');
+  assert.equal(pinned.config.env.CORTEX_ARENA_PIN_GIB, '26');
   assert.match(pinned.words, /would not lock as much memory/);
   assert.equal(flag(saferStart(pinned.config, pc64, iq3s, 'server_exited: mapped staging allocation failed [pinned-memory-exhausted]').config.args, '--resident-budget-gib'), String(Math.floor(63 * .5) - 4), 'already pinned less: the next safer setting is the RAM budget');
   const noHint = saferStart(config, pc64, iq3s, 'mapped staging allocation failed');
-  assert.equal(noHint.config.env.STRATA_ARENA_PIN_GIB, String(Math.floor(63 / 2) - 8));
+  assert.equal(noHint.config.env.CORTEX_ARENA_PIN_GIB, String(Math.floor(63 / 2) - 8));
   const low = saferStart(config, pc64, iq3s, 'server_exited: memory guard: 1.9 GiB free');
   assert.equal(flag(low.config.args, '--resident-budget-gib'), String(Math.floor(63 * .5) - 4));
   assert.match(low.words, /low-memory mode/);

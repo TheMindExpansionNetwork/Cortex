@@ -1,5 +1,5 @@
 // Recovered from the Claude Daily merge parity harness (lab/wip-0809), extended to the Daily's chunk kernel.
-// src/kernels/qsa_merge_daily_parity.cpp - the Daily's decode attention (STRATA_ATTN_DAILY=1: attn_chunk_kernel_pre75
+// src/kernels/qsa_merge_daily_parity.cpp - the Daily's decode attention (CORTEX_ATTN_DAILY=1: attn_chunk_kernel_pre75
 // and attn_merge_v2_kernel) against upstream's (attn_chunk_kernel, attn_merge_kernel), bitwise (GPU, synthetic, no
 // model).
 //
@@ -24,10 +24,10 @@
 //
 //   qsa_merge_daily_parity [--device N]           the sweep; exit 0 when every case is bit-identical (77: no GPU)
 //   qsa_merge_daily_parity [--device N] --bench   plus each merge's time per call at target/drafter caps2051/32768
-#include "strata/kernels/kv_q4.hpp"
-#include "strata/kernels/kv_q8.hpp"
-#include "strata/kernels/qsa.hpp"
-#include "strata/kernels/qsa_decode_attn.hpp"
+#include "cortex/kernels/kv_q4.hpp"
+#include "cortex/kernels/kv_q8.hpp"
+#include "cortex/kernels/qsa.hpp"
+#include "cortex/kernels/qsa_decode_attn.hpp"
 
 #include <cuda_runtime.h>
 
@@ -41,7 +41,7 @@
 #include <random>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 void ck(cudaError_t e, const char* what) {

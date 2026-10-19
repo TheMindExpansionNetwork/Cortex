@@ -2,7 +2,7 @@ import type { BeginnerConfig, EngineConfig, ExpertParam } from './types';
 
 /** Portable saved configuration. Metadata stays separate from editable values. */
 export interface ConfigDocument {
-  schema: 'strata.engine/1';
+  schema: 'cortex.engine/1';
   beginner: BeginnerConfig;
   expert: Record<string, string | number | boolean>;
   [key: string]: unknown;
@@ -11,7 +11,7 @@ export interface ConfigDocument {
 export function configDocument(engine: EngineConfig): ConfigDocument {
   return {
     ...(engine.extra ?? {}),
-    schema: 'strata.engine/1',
+    schema: 'cortex.engine/1',
     beginner: { ...engine.beginner },
     expert: { ...Object.fromEntries(engine.expert.map(p => [p.id, p.value])), 'ctx.length': engine.beginner.contextLength === 'recommended' ? '128K' : engine.beginner.contextLength.toUpperCase() },
   };
@@ -37,7 +37,7 @@ export function readConfig(text: string): ConfigDocument {
     if (!['string', 'number', 'boolean'].includes(typeof v)) throw new Error(`${key}: use a text, number or true/false value.`);
   }
   const { model: _model, exportedAt: _time, ...rest } = value;
-  return { ...rest, schema: 'strata.engine/1', beginner: value.beginner as BeginnerConfig, expert } as ConfigDocument;
+  return { ...rest, schema: 'cortex.engine/1', beginner: value.beginner as BeginnerConfig, expert } as ConfigDocument;
 }
 
 export function configPatch(doc: ConfigDocument) {

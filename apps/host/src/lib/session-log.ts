@@ -1,7 +1,7 @@
 import type { Session } from './types';
 
 export function sessionLog(session: Session) {
-  return JSON.stringify({ schema: 'strata.session-log/1', exportedAt: new Date().toISOString(), session }, null, 2);
+  return JSON.stringify({ schema: 'cortex.session-log/1', exportedAt: new Date().toISOString(), session }, null, 2);
 }
 
 export function downloadSessionLog(session: Session) {

@@ -17,7 +17,7 @@ async function loadTs(path) {
 const { readDroppedRefs, fetchDropped, dragHasFiles } = await loadTs('../src/lib/native-drop.ts');
 
 test('the host keeps only regular files it can read, each for one fetch, for a short time', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'strata-drop-'));
+  const dir = await mkdtemp(join(tmpdir(), 'cortex-drop-'));
   try {
     await writeFile(join(dir, 'a.PNG'), Buffer.from([1, 2, 3])); await writeFile(join(dir, 'notes.md'), '# hi'); await writeFile(join(dir, 'thing.bin'), 'x');
     await mkdir(join(dir, 'folder'));
@@ -40,19 +40,19 @@ test('the host keeps only regular files it can read, each for one fetch, for a s
 });
 
 test('only the app shell can hand files over; the page fetches each file once', { timeout: 60000 }, async () => {
-  const home = await mkdtemp(join(tmpdir(), 'strata-drop-host-'));
+  const home = await mkdtemp(join(tmpdir(), 'cortex-drop-host-'));
   const socket = createServer(); await new Promise(r => socket.listen(0, '127.0.0.1', r));
   const port = socket.address().port; await new Promise(r => socket.close(r));
   const secret = 'a'.repeat(40);
-  const child = spawn(process.execPath, ['server/index.mjs'], { cwd: root, env: { ...process.env, STRATA_HOME: home, STRATA_MODELS_DIR: join(home, 'models'), STRATA_PORT: String(port), STRATA_REAL_ENGINE: '0', STRATA_WORKSPACE: join(home, 'work'), STRATA_SHUTDOWN_TOKEN: secret }, stdio: 'ignore', windowsHide: true });
+  const child = spawn(process.execPath, ['server/index.mjs'], { cwd: root, env: { ...process.env, CORTEX_HOME: home, CORTEX_MODELS_DIR: join(home, 'models'), CORTEX_PORT: String(port), CORTEX_REAL_ENGINE: '0', CORTEX_WORKSPACE: join(home, 'work'), CORTEX_SHUTDOWN_TOKEN: secret }, stdio: 'ignore', windowsHide: true });
   const base = `http://127.0.0.1:${port}`;
   try {
     for (let i = 0; i < 100; i++) { try { if ((await fetch(base + '/api/skills')).ok) break; } catch { /* not up */ } await new Promise(r => setTimeout(r, 100)); }
     const picture = join(home, 'qa.png'); await writeFile(picture, Buffer.from([137, 80, 78, 71]));
     const post = (headers) => fetch(base + '/api/app/drop', { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify({ paths: [picture] }) });
     assert.equal((await post({})).status, 403, 'a page cannot hand over paths');
-    assert.equal((await post({ 'x-strata-shutdown': 'b'.repeat(40) })).status, 403);
-    const ok = await post({ 'x-strata-shutdown': secret });
+    assert.equal((await post({ 'x-cortex-shutdown': 'b'.repeat(40) })).status, 403);
+    const ok = await post({ 'x-cortex-shutdown': secret });
     assert.equal(ok.status, 200);
     const [file] = (await ok.json()).files;
     assert.deepEqual([file.name, file.type, file.size], ['qa.png', 'image/png', 4]);

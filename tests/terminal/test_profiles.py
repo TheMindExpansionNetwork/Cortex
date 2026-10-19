@@ -10,8 +10,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from strata_cli.cli import main
-from strata_control import doctor, profiles, runtime
+from cortex_cli.cli import main
+from cortex_control import doctor, profiles, runtime
 
 
 class OperatorProfileTests(unittest.TestCase):
@@ -19,9 +19,9 @@ class OperatorProfileTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.env = mock.patch.dict(os.environ, {"STRATA_PROFILE_DIR": str(self.root / "profiles"),
-                                             "STRATA_RUNTIME_DIR": str(self.root / "runtime"),
-                                             "STRATA_API_KEY": ""})
+        self.env = mock.patch.dict(os.environ, {"CORTEX_PROFILE_DIR": str(self.root / "profiles"),
+                                             "CORTEX_RUNTIME_DIR": str(self.root / "runtime"),
+                                             "CORTEX_API_KEY": ""})
         self.env.start()
         self.addCleanup(self.env.stop)
         engine = self.root / "engine"
@@ -120,13 +120,13 @@ class OperatorProfileTests(unittest.TestCase):
         with redirect_stdout(output), redirect_stderr(diagnostics):
             self.assertNotEqual(main(["profile", "show", "missing", "--quiet"]), 0)
         self.assertEqual(output.getvalue(), "")
-        self.assertIn("strata:", diagnostics.getvalue())
+        self.assertIn("cortex:", diagnostics.getvalue())
         output, diagnostics = io.StringIO(), io.StringIO()
         def failed_operation(_a):
             print("x" * 70_000)
             print("failure detail")
             return 5
-        with mock.patch("strata_cli.cli._profile_command", side_effect=failed_operation):
+        with mock.patch("cortex_cli.cli._profile_command", side_effect=failed_operation):
             with redirect_stdout(output), redirect_stderr(diagnostics):
                 self.assertEqual(main(["profile", "list", "--quiet"]), 5)
         self.assertEqual(output.getvalue(), "")
@@ -232,7 +232,7 @@ class OperatorProfileTests(unittest.TestCase):
             return mock.Mock(returncode=0)
 
         with mock.patch.dict(os.environ, {"EDITOR": "fake-editor", "VISUAL": ""}), \
-                mock.patch("strata_control.profiles.subprocess.run", side_effect=corrupt):
+                mock.patch("cortex_control.profiles.subprocess.run", side_effect=corrupt):
             code, result = self.command("profile", "edit", "local", "--output", "json")
         self.assertEqual(code, 2)
         self.assertFalse(result["ok"])
@@ -341,8 +341,8 @@ class OperatorProfileTests(unittest.TestCase):
         self.config.write_text(json.dumps(config), encoding="utf-8")
         profiles.create("four-gpu", str(self.config))
         cards = "\n".join(f"{i}, RTX 6000 test {i}, GPU-test-{i}, 49140, 580.95" for i in range(4))
-        with mock.patch("strata_control.doctor.shutil.which", return_value="/fake/nvidia-smi"), \
-                mock.patch("strata_control.doctor.subprocess.run",
+        with mock.patch("cortex_control.doctor.shutil.which", return_value="/fake/nvidia-smi"), \
+                mock.patch("cortex_control.doctor.subprocess.run",
                            return_value=mock.Mock(returncode=0, stdout=cards)) as probe:
             code, result = self.command("doctor", "--profile", "four-gpu", "--live", "--output", "json")
         self.assertEqual(code, 0)
@@ -352,8 +352,8 @@ class OperatorProfileTests(unittest.TestCase):
         self.assertEqual(probe.call_args.kwargs["timeout"], 5)
         self.assertFalse(probe.call_args.kwargs.get("shell", False))
 
-        with mock.patch("strata_control.doctor.shutil.which", return_value="/fake/nvidia-smi"), \
-                mock.patch("strata_control.doctor.subprocess.run",
+        with mock.patch("cortex_control.doctor.shutil.which", return_value="/fake/nvidia-smi"), \
+                mock.patch("cortex_control.doctor.subprocess.run",
                            return_value=mock.Mock(returncode=0, stdout=cards.rsplit("\n", 1)[0])):
             code, result = self.command("components", "verify", "--profile", "four-gpu", "--live",
                                         "--output", "json")
@@ -367,7 +367,7 @@ class OperatorProfileTests(unittest.TestCase):
         config["backend"] = "cuda"
         self.config.write_text(json.dumps(config), encoding="utf-8")
         profiles.create("local", str(self.config))
-        with mock.patch("strata_control.doctor.shutil.which", return_value=None):
+        with mock.patch("cortex_control.doctor.shutil.which", return_value=None):
             code, result = self.command("doctor", "--profile", "local", "--live", "--output", "json")
         self.assertEqual(code, 5)
         self.assertEqual(result["report"]["live_gpu_probe"]["status"], "unavailable")
@@ -375,7 +375,7 @@ class OperatorProfileTests(unittest.TestCase):
 
         config["backend"] = "hip"
         self.config.write_text(json.dumps(config), encoding="utf-8")
-        with mock.patch("strata_control.doctor.subprocess.run",
+        with mock.patch("cortex_control.doctor.subprocess.run",
                         side_effect=AssertionError("NVIDIA probe must not run for HIP")):
             code, result = self.command("doctor", "--profile", "local", "--live", "--output", "json")
         self.assertEqual(code, 5)
@@ -383,12 +383,12 @@ class OperatorProfileTests(unittest.TestCase):
 
     def test_doctor_default_does_not_run_host_probe(self):
         profiles.create("local", str(self.config))
-        with mock.patch("strata_control.doctor.subprocess.run",
+        with mock.patch("cortex_control.doctor.subprocess.run",
                         side_effect=AssertionError("default doctor must be offline")):
             code, result = self.command("doctor", "--profile", "local", "--output", "json")
         self.assertEqual(code, 0)
         self.assertIsNone(result["report"]["live_gpu_probe"])
-        with mock.patch("strata_control.doctor.subprocess.run",
+        with mock.patch("cortex_control.doctor.subprocess.run",
                         side_effect=AssertionError("a profile is required for live probes")):
             code, missing = self.command("doctor", "--live", "--output", "json")
         self.assertEqual(code, 5)
@@ -405,14 +405,14 @@ class OperatorProfileTests(unittest.TestCase):
                        "0, GPU, GPU-0, 1000, 580.95\n0, GPU, GPU-0, 1000, 580.95",
                        "0, GPU, GPU-0, not-a-number, 580.95"):
             with self.subTest(output=output), \
-                    mock.patch("strata_control.doctor.shutil.which", return_value="/fake/nvidia-smi"), \
-                    mock.patch("strata_control.doctor.subprocess.run",
+                    mock.patch("cortex_control.doctor.shutil.which", return_value="/fake/nvidia-smi"), \
+                    mock.patch("cortex_control.doctor.subprocess.run",
                                return_value=mock.Mock(returncode=0, stdout=output)):
                 code, result = self.command("doctor", "--profile", "local", "--live", "--output", "json")
             self.assertEqual(code, 5)
             self.assertEqual(result["report"]["live_gpu_probe"]["status"], "unavailable")
-        with mock.patch("strata_control.doctor.shutil.which", return_value="/fake/nvidia-smi"), \
-                mock.patch("strata_control.doctor.subprocess.run",
+        with mock.patch("cortex_control.doctor.shutil.which", return_value="/fake/nvidia-smi"), \
+                mock.patch("cortex_control.doctor.subprocess.run",
                            side_effect=subprocess.TimeoutExpired("nvidia-smi", 5)):
             code, result = self.command("doctor", "--profile", "local", "--live", "--output", "json")
         self.assertEqual(code, 5)
@@ -421,7 +421,7 @@ class OperatorProfileTests(unittest.TestCase):
     def test_calibration_preview_has_no_engine_or_config_side_effects(self):
         profiles.create("local", str(self.config))
         before = self.config.read_bytes()
-        with mock.patch("serve.server.StrataEngine", side_effect=AssertionError("engine started")), \
+        with mock.patch("serve.server.CortexEngine", side_effect=AssertionError("engine started")), \
                 mock.patch("tools.calibrate.run", side_effect=AssertionError("measurement started")):
             code, result = self.command("engine", "calibrate", "--profile", "local", "--plan", "--output", "json")
         self.assertEqual(code, 0)
@@ -440,7 +440,7 @@ class OperatorProfileTests(unittest.TestCase):
                 profiles.set_values("local", [assignment])
         profiles.set_values("local", ["queue_timeout=5"])
         with self.assertRaisesRegex(profiles.ProfileError, "requires max_queue"):
-            from strata_cli.cli import _launch_plan
+            from cortex_cli.cli import _launch_plan
             _launch_plan("local")
 
 

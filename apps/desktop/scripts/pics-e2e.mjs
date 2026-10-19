@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Attached pictures reaching a model, end to end on a test box, through the installed app layout (packaged host + bundled Control + an engine
- * component that carries strata-vision):
+ * component that carries cortex-vision):
  *   1. the model catalog marks the picture-capable models (images: true) when the picture reader is installed;
  *   2. API models: a llama-server with a small picture model (--mmproj) is saved as a Custom model API; the host works out that it reads pictures,
  *      and a real picture goes out as image_url and is answered. A server without a picture reader, a model set "not to read pictures", and an API
@@ -28,14 +28,14 @@ const delay = ms => new Promise(r => setTimeout(r, ms));
 let failed = false;
 const record = (name, ok, detail = '') => { if (!ok) failed = true; console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${detail ? '  ' + String(detail).slice(0, 600) : ''}`); };
 const freePort = async () => { const s = createServer(); await new Promise(r => s.listen(0, '127.0.0.1', r)); const p = s.address().port; await new Promise(r => s.close(r)); return p; };
-const env = { ...process.env, STRATA_COMPONENTS_DIR: components, STRATA_PROFILE_DIR: dirs.profiles, STRATA_RUNTIME_DIR: dirs.runtime, STRATA_INSTALL_DIR: dirs.models,
-  STRATA_HOME: dirs.home, STRATA_MODELS_DIR: join(work, 'models-unused'), APPDATA: dirs.appdata, XDG_CONFIG_HOME: dirs.xdg, PYTHONDONTWRITEBYTECODE: '1' };
-delete env.STRATA_API_KEY;
+const env = { ...process.env, CORTEX_COMPONENTS_DIR: components, CORTEX_PROFILE_DIR: dirs.profiles, CORTEX_RUNTIME_DIR: dirs.runtime, CORTEX_INSTALL_DIR: dirs.models,
+  CORTEX_HOME: dirs.home, CORTEX_MODELS_DIR: join(work, 'models-unused'), APPDATA: dirs.appdata, XDG_CONFIG_HOME: dirs.xdg, PYTHONDONTWRITEBYTECODE: '1' };
+delete env.CORTEX_API_KEY;
 const port = await freePort();
 const base = `http://127.0.0.1:${port}`;
 const host = spawn(node, [hostEntry], { cwd: join(install, 'host'), stdio: ['ignore', 'pipe', 'pipe'],
-  env: { ...env, STRATA_PORT: String(port), STRATA_DIST: join(install, 'host', 'dist'), NODE_ENV: 'production', STRATA_PACKAGED: '1', STRATA_REAL_ENGINE: '1', STRATA_NO_ACQUIRE: '1',
-    STRATA_SHARE_PORT: String(await freePort()), STRATA_TUNNEL_PORT: String(await freePort()) } });
+  env: { ...env, CORTEX_PORT: String(port), CORTEX_DIST: join(install, 'host', 'dist'), NODE_ENV: 'production', CORTEX_PACKAGED: '1', CORTEX_REAL_ENGINE: '1', CORTEX_NO_ACQUIRE: '1',
+    CORTEX_SHARE_PORT: String(await freePort()), CORTEX_TUNNEL_PORT: String(await freePort()) } });
 let hostLog = '';
 host.stdout.on('data', c => { hostLog += c; }); host.stderr.on('data', c => { hostLog += c; });
 const call = async (path, method = 'GET', body) => {
@@ -84,7 +84,7 @@ async function waitJob(id, seconds) {
   }
   throw new Error('operation did not finish');
 }
-const names = low => /(red|blue|green|circle|square|triangle|strata|42)/.test(low);
+const names = low => /(red|blue|green|circle|square|triangle|cortex|42)/.test(low);
 
 async function main() {
   let up = false;
@@ -94,7 +94,7 @@ async function main() {
 
   // ---- 1. the catalog
   const packages = existsSync(join(components, 'engine')) ? readdirSync(join(components, 'engine')) : [];
-  const reader = packages.some(p => existsSync(join(components, 'engine', p, 'strata-vision')));
+  const reader = packages.some(p => existsSync(join(components, 'engine', p, 'cortex-vision')));
   const native = (await call('/api/native?refresh=1')).body;
   record('the engine component carries the picture reader and the host knows it (visionReader)', reader && native.visionReader === true, `component=${reader} host=${native.visionReader}`);
   const rows = (native.catalog?.families ?? []).flatMap(f => (f.sizes ?? []).map(s => ({ family: f.title ?? f.family, size: s.id, images: s.images, capable: s.imagesCapable })));
@@ -173,7 +173,7 @@ async function main() {
   console.log(`    answer from the local model (${Math.round((Date.now() - t0) / 1000)} s): ${JSON.stringify((local.text ?? local.message ?? '').slice(0, 300))}`);
   const low = (local.text ?? '').toLowerCase();
   record('the local model answers about the picture (names the shapes)', local.status === 200 && /red|circle/.test(low) && /blue|square/.test(low) && /green|triangle/.test(low), `status=${local.status} err=${local.error ?? ''}`);
-  record('the local model reads STRATA 42', low.includes('42'));
+  record('the local model reads CORTEX 42', low.includes('42'));
   // the same picture through the agent (the Harness route must declare image input: the "does not declare image input" error of the tester)
   if (args.agent) {   // needs a Harness beside the host (the installed layout has one; a bare test box does not)
     const t1 = Date.now(); let a = { status: 0 };

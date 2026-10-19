@@ -7,9 +7,9 @@ for name in ['source','config','baseline','candidate','mtp','output']:
 a=ap.parse_args()
 source=a.source.resolve()
 sys.path[:0]=[str(source),str(source/'tools')]
-from serve.server import StrataEngine, Service, engine_args, child_env, serve
+from serve.server import CortexEngine, Service, engine_args, child_env, serve
 from serve.frontend import ChatTemplate
-import strata_tokenizer as ST
+import cortex_tokenizer as ST
 
 cfg=json.loads(a.config.read_text())
 cfg={k:v for k,v in cfg.items() if k in ['args','tokenizer','gpu','lib_dirs','env']}
@@ -23,7 +23,7 @@ tok=ST.Tokenizer(tokens,(tp/'merges.txt').read_text().split('\n'),json.loads((tp
 template=ChatTemplate(tp/'chat_template.jinja')
 rows=[]
 out=a.output;out.mkdir(parents=True,exist_ok=True)
-class AuditEngine(StrataEngine):
+class AuditEngine(CortexEngine):
  def generate(self,*a,**kw):
   self.emitted=[]
   for token in super().generate(*a,**kw):

@@ -1,4 +1,4 @@
-/* Model setup, run profiles and expert editing share the existing Strata kit. */
+/* Model setup, run profiles and expert editing share the existing Cortex kit. */
 .model-run{max-width:1140px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr);gap:16px;animation:run-reveal 220ms var(--st-ease)}
 .model-run>*{min-width:0}
 .run-toolbar{display:flex;align-items:center;justify-content:flex-end;gap:10px;border-bottom:1px solid var(--st-line);padding-bottom:16px}

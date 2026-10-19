@@ -115,7 +115,7 @@ class FakeEngine:
 
     def __init__(self, elastic=False):
         self.up, self.calls, self.info = True, [], {"vram_elastic": elastic}
-        self.spawn = (["strata"], ["--vram-elastic"] if elastic else [])
+        self.spawn = (["cortex"], ["--vram-elastic"] if elastic else [])
         self.unloaded = False
 
     def alive(self):
@@ -274,9 +274,9 @@ class OverHttp(unittest.TestCase):
         self.assertEqual(pngs, [fake_sd_cli.png(512, 768, 11, "a red fox"), fake_sd_cli.png(512, 768, 12, "a red fox")])
         self.assertEqual([x["seed"] for x in body["data"]], [11, 12])
         self.assertEqual(body["size"], "512x768")
-        self.assertEqual(body["strata"]["steps"], 8)
-        self.assertEqual(body["strata"]["sampling_s"], 0.08)
-        self.assertEqual(body["strata"]["gpu_policy"], "keep")
+        self.assertEqual(body["cortex"]["steps"], 8)
+        self.assertEqual(body["cortex"]["sampling_s"], 0.08)
+        self.assertEqual(body["cortex"]["gpu_policy"], "keep")
         self.assertEqual(self.svc.images.totals["images"], 2)
         self.assertEqual([p.name for p in Path(self.svc.images.dir).iterdir()], [])   # nothing left behind
 

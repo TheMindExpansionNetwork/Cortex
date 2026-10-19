@@ -1,4 +1,4 @@
-// src/prefill/moe_fused_iq.cu - see include/strata/prefill/moe_fused_iq.hpp (#136: the native packs' prompt experts on
+// src/prefill/moe_fused_iq.cu - see include/cortex/prefill/moe_fused_iq.hpp (#136: the native packs' prompt experts on
 // the fused int8 kernels of moe_fused.cu).
 //
 // The arithmetic.  An activation block of 32 values is x = d_x * a, a = round(x / d_x) in -127..127, stored in natural
@@ -19,11 +19,11 @@
 // to 8 KB, IQ2_S).  The activations arrive by cp.async, four stages deep, as in moe_fused.cu; the fragments come by
 // ldmatrix.  The products are mma.sync m16n8k32 (m16n8k16 for the formats with a scale per 16 values); the epilogues
 // (SwiGLU, H to int8 per 32 features; down into the per-slot rows) are moe_fused.cu's.
-#include "strata/prefill/moe_fused_iq.hpp"
-#include "strata/kernels/gfx_arch.hpp"
-#include "strata/core/emulate.hpp"
-#include "strata/core/sm120_series.hpp"
-#include "strata/core/gfx12_platform_defaults.hpp"
+#include "cortex/prefill/moe_fused_iq.hpp"
+#include "cortex/kernels/gfx_arch.hpp"
+#include "cortex/core/emulate.hpp"
+#include "cortex/core/sm120_series.hpp"
+#include "cortex/core/gfx12_platform_defaults.hpp"
 
 #if defined(__HIPCC__)
 #include "moe_f16_common.cuh"
@@ -45,7 +45,7 @@
 #include <cstring>
 #include <mutex>
 
-namespace strata::prefill::fused {
+namespace cortex::prefill::fused {
 namespace {
 
 void ck(cudaError_t e, const char* what) {
@@ -181,7 +181,7 @@ __device__ __forceinline__ void ldsm4(uint32_t (&r)[4], const void* p) {
 }
 
 #elif defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 750
-// Turing (STRATA_PF_FUSED_SM75): plain copies instead of cp.async (the same bytes; the barriers around them stay), and
+// Turing (CORTEX_PF_FUSED_SM75): plain copies instead of cp.async (the same bytes; the barriers around them stay), and
 // the s8 MMAs as m8n8k16 - m16n8k32 is four (rows g / g + 8 by k 0-15 / 16-31), m16n8k16 two (rows g / g + 8), each
 // pair starting from MAGIC.  The int32 sums are exact in any order: the same d as the sm_80 instructions.
 __device__ __forceinline__ void cp16(void* dst, const void* src) { *(uint4*) dst = __ldg((const uint4*) src); }
@@ -255,8 +255,8 @@ __device__ __forceinline__ uint4 sign_entry(int i, bool parity) {
 #endif
 // 8 nibbles of q4 through a 16-entry int8 table (4 words): the low nibbles' values in .x, the high ones' in .y
 // W (X5): direct-selector form on gfx: p = low 3 bits of each nibble picks within the table half, bit 3 picks the half;
-// exhaustively bit-exact over all 2^32 inputs (X5). Disable with -DSTRATA_W_NO_T16.
-#if defined(__HIPCC__) && !defined(STRATA_W_NO_T16)
+// exhaustively bit-exact over all 2^32 inputs (X5). Disable with -DCORTEX_W_NO_T16.
+#if defined(__HIPCC__) && !defined(CORTEX_W_NO_T16)
 __device__ __forceinline__ uint32_t table16_one(uint32_t x, const uint32_t (&t)[4]) {
     const uint32_t p = x & 0x07070707u;
     const uint32_t a = __builtin_amdgcn_perm(t[1], t[0], p), b = __builtin_amdgcn_perm(t[3], t[2], p);
@@ -741,17 +741,17 @@ native_kernel(const Batch b, const NativeGeom geo, const Tables tb, const uint8_
 // D row of a lane's element i; on gfx12 a lane's 8 rows are consecutive, so a feature's gate (even local row) and up
 // (odd) sit in one lane (elements 2j, 2j + 1) and the SwiGLU needs no cross-lane exchange.
 #if defined(__gfx1100__) || defined(__gfx1101__) || defined(__gfx1102__) || defined(__gfx1103__) || defined(__gfx1150__) || defined(__gfx1151__)
-#define STRATA_NAT_W11 1
+#define CORTEX_NAT_W11 1
 #else
-#define STRATA_NAT_W11 0
+#define CORTEX_NAT_W11 0
 #endif
 #if defined(__gfx1200__) || defined(__gfx1201__)
-#define STRATA_NAT_W12 1
+#define CORTEX_NAT_W12 1
 #else
-#define STRATA_NAT_W12 0
+#define CORTEX_NAT_W12 0
 #endif
-#define STRATA_NAT_WMMA (STRATA_NAT_W11 || STRATA_NAT_W12)
-#if STRATA_NAT_W12
+#define CORTEX_NAT_WMMA (CORTEX_NAT_W11 || CORTEX_NAT_W12)
+#if CORTEX_NAT_W12
 #define NW_DROW(i, hi) (8 * (hi) + (i))
 #else
 #define NW_DROW(i, hi) (2 * (i) + (hi))
@@ -765,15 +765,15 @@ native_kernel(const Batch b, const NativeGeom geo, const Tables tb, const uint8_
 // takes 61-66% more time, and Q8_0 down (18 spilled) took -1.9% to +1.9% time.  The test is the clang major version:
 // other clang 23 builds are not measured, and clang 24 and newer keep the clang 22 rule.  NW_LB is the variant's
 // template argument, the same in the host and every device pass (the launch names that instance); whether its cap
-// applies is decided per architecture and format in the device pass (nw_capped).  -DSTRATA_W_LB=N sets the cap on
+// applies is decided per architecture and format in the device pass (nw_capped).  -DCORTEX_W_LB=N sets the cap on
 // every architecture and format.
-#if defined(STRATA_W_LB)
-constexpr int NW_LB = STRATA_W_LB;
+#if defined(CORTEX_W_LB)
+constexpr int NW_LB = CORTEX_W_LB;
 #else
 constexpr int NW_LB = 8;
 #endif
 constexpr bool nw_capped(int wt) {
-#if defined(STRATA_W_LB) || !defined(__clang_major__) || __clang_major__ < 22
+#if defined(CORTEX_W_LB) || !defined(__clang_major__) || __clang_major__ < 22
     (void) wt;
     return true;
 #elif defined(__gfx1151__) && __clang_major__ == 23
@@ -790,7 +790,7 @@ constexpr int NW_ROWS = 128;
 constexpr int NW_THREADS = 256;
 
 // one A / B fragment: gfx11 16 int8 per lane (uint4), gfx12 8 (uint2)
-#if STRATA_NAT_W12
+#if CORTEX_NAT_W12
 typedef uint2 nw_frag;
 typedef nw_i2 nw_ab;
 __device__ __forceinline__ nw_ab nw_v(uint2 v) { return nw_ab{(int) v.x, (int) v.y}; }
@@ -800,9 +800,9 @@ typedef nw_i4 nw_ab;
 __device__ __forceinline__ nw_ab nw_v(uint4 v) { return nw_ab{(int) v.x, (int) v.y, (int) v.z, (int) v.w}; }
 #endif
 __device__ __forceinline__ nw_i8 nw_wmma(nw_ab a, nw_ab b, nw_i8 c) {
-#if STRATA_NAT_W11
+#if CORTEX_NAT_W11
     return __builtin_amdgcn_wmma_i32_16x16x16_iu8_w32(true, a, true, b, c, false);
-#elif STRATA_NAT_W12
+#elif CORTEX_NAT_W12
     return __builtin_amdgcn_wmma_i32_16x16x16_iu8_w32_gfx12(true, a, true, b, c, false);
 #else
     __builtin_trap();
@@ -812,12 +812,12 @@ __device__ __forceinline__ nw_i8 nw_wmma(nw_ab a, nw_ab b, nw_i8 c) {
 
 // W (X1): ALIAS = the H tile lives on the weight buffers (one extra barrier); LB > 0 = amdgpu_waves_per_eu(LB) (VGPR cap)
 // where nw_capped(WT) says the cap applies.
-// Disable both with -DSTRATA_W_NO_OCC (the launch sites then use <WT, GU, false, 0> and grid factor wgp_blocks).
+// Disable both with -DCORTEX_W_NO_OCC (the launch sites then use <WT, GU, false, 0> and grid factor wgp_blocks).
 template <int WT, bool GU, bool ALIAS = false, int LB = 0>
 __global__ void __launch_bounds__(NW_THREADS) __attribute__((amdgpu_waves_per_eu(LB > 0 && nw_capped(WT) ? LB : 1)))
 native_w11_kernel(const Batch b, const NativeGeom geo, const Tables tb, const uint8_t* __restrict__ act,
                   const int32_t* __restrict__ src, uint8_t* __restrict__ out, float* __restrict__ dm) {
-#if STRATA_NAT_WMMA
+#if CORTEX_NAT_WMMA
     constexpr int NS = (GU ? GU_ROWS_K : D_ROWS_K) / 64;  // 64-value stages along K
     constexpr int NFB = (GU ? 1280 : 2560) / NW_ROWS;     // work items per tile
     constexpr int ACT_LD = NS * AB;
@@ -898,7 +898,7 @@ native_w11_kernel(const Batch b, const NativeGeom geo, const Tables tb, const ui
         auto fetch_b = [&](int s, nw_frag (&q)[2][4], float2 (&x)[2], float2 (&sm)[2]) {
 #pragma unroll
             for (int nt = 0; nt < 2; ++nt) {
-#if STRATA_NAT_W12
+#if CORTEX_NAT_W12
                 const uint2* p = reinterpret_cast<const uint2*>(brow[nt] + s * AB + 8 * hi);   // k 16 j + 8 hi .. + 7
                 q[nt][0] = p[0]; q[nt][1] = p[2]; q[nt][2] = p[4]; q[nt][3] = p[6];
 #else
@@ -923,7 +923,7 @@ native_w11_kernel(const Batch b, const NativeGeom geo, const Tables tb, const ui
 #pragma unroll
                     for (int mt = 0; mt < 2; ++mt) {
                         const int rb = 32 * wm + 16 * mt;
-#if STRATA_NAT_W12
+#if CORTEX_NAT_W12
                         // k 32 h + 8 hi .. + 7 (A0) and 32 h + 16 + 8 hi .. + 7 (A1) of row rb + l16
                         const uint2* ap = reinterpret_cast<const uint2*>(&wt[bf][rb + l16][32 * h + 8 * hi]);
                         const nw_ab A0 = nw_v(ap[0]), A1 = nw_v(ap[2]);
@@ -983,7 +983,7 @@ native_w11_kernel(const Batch b, const NativeGeom geo, const Tables tb, const ui
                 for (int mt = 0; mt < 2; ++mt)
 #pragma unroll
                     for (int nt = 0; nt < 2; ++nt) {
-#if STRATA_NAT_W12
+#if CORTEX_NAT_W12
                         // lane l: local rows rb + 8 hi + i = features 16 wm + 8 mt + 4 hi + j, gate (i = 2j) and up (2j + 1)
 #pragma unroll
                         for (int j = 0; j < 4; ++j) {
@@ -1033,7 +1033,7 @@ native_w11_kernel(const Batch b, const NativeGeom geo, const Tables tb, const ui
                     for (int nt = 0; nt < 2; ++nt) {
                         const int r = 32 * wn + 16 * nt + l16;
                         if (r < nrows) {
-#if STRATA_NAT_W12
+#if CORTEX_NAT_W12
                             // columns rbase + 32 wm + 16 mt + 8 hi .. + 7: contiguous, 32-byte aligned (dm: 16, checked in experts_native)
                             float4* d = reinterpret_cast<float4*>(dm + (size_t) (row0 + r) * 2560 + rbase + 32 * wm + 16 * mt + 8 * hi);
                             d[0] = make_float4(acc[mt][nt][0], acc[mt][nt][1], acc[mt][nt][2], acc[mt][nt][3]);
@@ -1053,7 +1053,7 @@ native_w11_kernel(const Batch b, const NativeGeom geo, const Tables tb, const ui
 #endif
 }
 
-// STRATA_PF_F16=1 (gfx11): the other native formats on the F16 matrix cores - moe_f16_common.cuh's work item,
+// CORTEX_PF_F16=1 (gfx11): the other native formats on the F16 matrix cores - moe_f16_common.cuh's work item,
 // staged activations and epilogues.  load_unit / convert decode each sub-block once into the weight tile in LDS (int8
 // codes, the scales as half2), and each wave turns its own 16 rows into F16 before its products.  Gate/up rows 0..63
 // are the item's gate rows, 64..127 its up rows; down rows are output rows.  The output differs from
@@ -1064,7 +1064,7 @@ template <int WT, bool GU, int BN>
 __global__ void __launch_bounds__(f16::THREADS)
 native_f16_kernel(const Batch b, const NativeGeom geo, const Tables tb, const uint8_t* __restrict__ act,
                   const int32_t* __restrict__ src, uint8_t* __restrict__ out, float* __restrict__ dm) {
-#if STRATA_F16_DEVICE
+#if CORTEX_F16_DEVICE
     // (moe_fused_iq.cu has its own THREADS and AB: the f16 names are qualified where they collide)
     using namespace f16;
     constexpr int NS = (GU ? GU_ROWS_K : D_ROWS_K) / 64;  // 64-value stages along K
@@ -1187,7 +1187,7 @@ unsigned blocks(int64_t n, int per) { return (unsigned) ((n + per - 1) / per); }
 struct DevInfo {
     bool done = false, ok = false;
     bool w12 = false;   // gfx12 (RDNA4): the native kernels only - the Q2_0 pack's (moe_fused.cu) are not ported there
-    bool t75 = false;   // Turing (STRATA_PF_FUSED_SM75): the Q2_0 / Q2_0 layers only (what was set up and checked there)
+    bool t75 = false;   // Turing (CORTEX_PF_FUSED_SM75): the Q2_0 / Q2_0 layers only (what was set up and checked there)
     bool s120 = false;  // compute capability 12.0 (sm120_series.hpp): the default for the formats measured there
     int sms = 0, occ = 1;
 };
@@ -1203,7 +1203,7 @@ int host_astages() {
     if (!per[dev]) {
         int major = 0;
         cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, dev);
-        per[dev] = strata::cc_major_of(major) < 8 ? 2 : ASTAGES;
+        per[dev] = cortex::cc_major_of(major) < 8 ? 2 : ASTAGES;
     }
     return per[dev];
 }
@@ -1228,10 +1228,10 @@ template <int T, bool GU> bool setup_one(int& occ) { return setup_ww<T, GU, 4>(o
 // WGP (two CUs, which these kernels use as one in the default WGP mode) as one multiprocessor, and the occupancy query
 // answers 1 block for these kernels where 2 run side by side - so the grid was half the GPU's room.  gfx1151 (20
 // WGPs), 8192 tokens x top 10, IQ3_S / IQ4_NL, one layer: 1 block per WGP 60.7 ms, 2 44.7, 3 49.9, 4 45.2 (the same
-// work items and arithmetic: the results do not change).  STRATA_PF_OCC=N sets the blocks per WGP (an experiment knob).
+// work items and arithmetic: the results do not change).  CORTEX_PF_OCC=N sets the blocks per WGP (an experiment knob).
 static int wgp_blocks(int occ) {
     static const int env = [] {
-        const char* v = std::getenv("STRATA_PF_OCC");
+        const char* v = std::getenv("CORTEX_PF_OCC");
         return v != nullptr ? std::atoi(v) : 0;
     }();
     return env > 0 ? env : 2 * std::max(occ, 1);
@@ -1241,10 +1241,10 @@ static int wgp_blocks(int occ) {
 // clang 23): gate/up IQ2_S (37,120 B of LDS) and IQ2_XS (203 VGPRs) 3, every other one 4.  R9700, IQ2_S / IQ4_NL, one
 // layer, 4 runs each: 4K 8.80-8.93 ms at 4, 8.18-8.33 at 3; 16K -3%; IQ3_S / IQ4_NL 2-3% slower at 3.  gfx11 keeps 4
 // (measured on gfx1151).  Not from the occupancy API: it counts 64 KB of LDS per multiprocessor (37,120 B -> 1 block).
-// STRATA_PF_OCC_W=N sets it for every occupancy variant (an experiment knob).
+// CORTEX_PF_OCC_W=N sets it for every occupancy variant (an experiment knob).
 static int occ_blocks(bool w12, int type, bool gu) {
     static const int env = [] {
-        const char* v = std::getenv("STRATA_PF_OCC_W");
+        const char* v = std::getenv("CORTEX_PF_OCC_W");
         return v != nullptr ? std::atoi(v) : 0;
     }();
     if (env > 0) return env;
@@ -1258,7 +1258,7 @@ const DevInfo& dev_info() {
     DevInfo& d = g_dev[dev & 31];
     if (d.done) return d;
     d.done = true;
-#if defined(STRATA_HIP_GFX906)
+#if defined(CORTEX_HIP_GFX906)
     // gfx906 reports compute capability 9.0 through HIP, but the mma.sync bodies above are CUDA sm_80+ only and
     // empty in a hipcc build: never available here (the prompt path keeps its own expert GEMMs)
     return d;
@@ -1268,12 +1268,12 @@ const DevInfo& dev_info() {
         cudaDeviceProp prop;
         hipFuncAttributes fa{};
         const bool props = cudaGetDeviceProperties(&prop, dev) == cudaSuccess;
-        d.w12 = props && strata::kernels::gfx_arch_is_gfx12_wmma(prop.gcnArchName);
-        // the arch lists of STRATA_NAT_W11 / STRATA_NAT_W12 (gfx_arch.hpp: never a prefix - another gfx11 / gfx12 part
+        d.w12 = props && cortex::kernels::gfx_arch_is_gfx12_wmma(prop.gcnArchName);
+        // the arch lists of CORTEX_NAT_W11 / CORTEX_NAT_W12 (gfx_arch.hpp: never a prefix - another gfx11 / gfx12 part
         // has the trapping body, which hipFuncGetAttributes and the occupancy query still accept).  And the body this
         // build loaded for the device is the real one: the __builtin_trap() stub (a gfx11-generic / gfx12-generic or
         // SPIR-V build on a listed card) declares no LDS, the real kernel at least its weight buffers.
-        if (!props || !(strata::kernels::gfx_arch_is_gfx11_wmma(prop.gcnArchName) || d.w12) ||
+        if (!props || !(cortex::kernels::gfx_arch_is_gfx11_wmma(prop.gcnArchName) || d.w12) ||
             hipFuncGetAttributes(&fa, reinterpret_cast<const void*>(native_w11_kernel<T_IQ3_XXS, true>)) != hipSuccess ||
             fa.sharedSizeBytes < (size_t) 2 * NW_ROWS * WLD) {
             cudaGetLastError();
@@ -1291,12 +1291,12 @@ const DevInfo& dev_info() {
     int major = 0, minor = 0;
     cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, dev);
     cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, dev);
-    d.s120 = strata::sm120_default(major, minor);   // (takes the raw attributes, as is_sm120 does)
-    major = strata::cc_major_of(major);   // STRATA_EMULATE_CC counts (tests)
-    minor = strata::cc_minor_of(minor);
+    d.s120 = cortex::sm120_default(major, minor);   // (takes the raw attributes, as is_sm120 does)
+    major = cortex::cc_major_of(major);   // CORTEX_EMULATE_CC counts (tests)
+    minor = cortex::cc_minor_of(minor);
     cudaDeviceGetAttribute(&d.sms, cudaDevAttrMultiProcessorCount, dev);
-    // Turing (sm_75): the same kernels with plain copies and m8n8k16 MMAs, opt-in (STRATA_PF_FUSED_SM75=1)
-    static const bool sm75 = [] { const char* v = std::getenv("STRATA_PF_FUSED_SM75"); return v != nullptr && v[0] == '1'; }();
+    // Turing (sm_75): the same kernels with plain copies and m8n8k16 MMAs, opt-in (CORTEX_PF_FUSED_SM75=1)
+    static const bool sm75 = [] { const char* v = std::getenv("CORTEX_PF_FUSED_SM75"); return v != nullptr && v[0] == '1'; }();
     if (major < 8 && !(major == 7 && minor == 5 && sm75)) return d;
     int occ = 1 << 20;
     if (major < 8) {   // Turing: the canonical Q2_0 pack's kernels (the codebook formats' do not fit 64 KB at 4 warps a row)
@@ -1315,16 +1315,16 @@ const DevInfo& dev_info() {
     return d;
 }
 
-// opt-in on top of STRATA_PF_FUSED=1: STRATA_PF_FUSED_KQ=1 takes UD-Q4_K_XL's formats (the output differs from the FP16
+// opt-in on top of CORTEX_PF_FUSED=1: CORTEX_PF_FUSED_KQ=1 takes UD-Q4_K_XL's formats (the output differs from the FP16
 // expert path's at rounding level; KL-gated, see aurora_s23.md)
 bool kq_on() {
     static const bool on = [] {
-        const char* v = std::getenv("STRATA_PF_FUSED_KQ");
+        const char* v = std::getenv("CORTEX_PF_FUSED_KQ");
         return v != nullptr && v[0] == '1';
     }();
     return on;
 }
-// STRATA_PF_F16=1 (gfx11): the formats native_f16_kernel takes (the K-quants are moe_f16_kq.cu's)
+// CORTEX_PF_F16=1 (gfx11): the formats native_f16_kernel takes (the K-quants are moe_f16_kq.cu's)
 bool f16_gu(int t) {
     return t == T_IQ2_XXS || t == T_IQ2_XS || t == T_IQ2_S || t == T_IQ3_XXS || t == T_IQ3_S || t == T_IQ4_XS;
 }
@@ -1347,7 +1347,7 @@ bool d_covered(int t) {
 #endif
         ;
 }
-// d_covered on this device: STRATA_PF_F16=1 also takes Q8_0 down on gfx11 without STRATA_PF_FUSED_KQ - the F16 kernel
+// d_covered on this device: CORTEX_PF_F16=1 also takes Q8_0 down on gfx11 without CORTEX_PF_FUSED_KQ - the F16 kernel
 // has no minimum term, and its output already differs from the int8 kernels' (UD-IQ4_XS: the five Q8_0-down layers
 // would otherwise leave the fused path for MMQ).
 bool d_covered_on(int t, const DevInfo& d) {
@@ -1374,10 +1374,10 @@ void launch(int ww, unsigned grid, const Batch& b, const NativeGeom& g, const Ta
 // about one such tile (56 to 112 rows on average), else 64.  Measured on the RTX 5070 (tests/cuda/prefill_fused_iq_test,
 // a layer of 2048 / 3584 / 8192 tokens, ms, 64 -> 128): IQ2_S 5.2 -> 6.7, 9.5 -> 9.3, 17.5 -> 19.5; IQ2_XXS 4.2 ->
 // 5.8, 7.4 -> 7.6, 13.6 -> 16.5; IQ3_S 5.6 -> 6.6, 10.2 -> 8.8, 18.4 -> 19.0; IQ3_XXS 5.1 -> 6.3, 9.1 -> 8.3, 16.5 ->
-// 17.5 (256 rows was slower still).  STRATA_PF_FUSED_TILE=64|128 forces one.
+// 17.5 (256 rows was slower still).  CORTEX_PF_FUSED_TILE=64|128 forces one.
 int pick_ww(int64_t n, int n_expert) {
     static const int forced = [] {
-        const char* v = std::getenv("STRATA_PF_FUSED_TILE");
+        const char* v = std::getenv("CORTEX_PF_FUSED_TILE");
         const int t = v ? std::atoi(v) : 0;
         return t == 64 ? 4 : t == 128 ? 2 : 0;
     }();
@@ -1389,22 +1389,22 @@ int pick_ww(int64_t n, int n_expert) {
 }  // namespace
 
 bool native_supported(int gu_type, int d_type) {
-    static const bool off = [] {   // STRATA_PF_FUSED_NATIVE=0: the native packs keep MMQ under STRATA_PF_FUSED=1 (A/B)
-        const char* v = std::getenv("STRATA_PF_FUSED_NATIVE");
+    static const bool off = [] {   // CORTEX_PF_FUSED_NATIVE=0: the native packs keep MMQ under CORTEX_PF_FUSED=1 (A/B)
+        const char* v = std::getenv("CORTEX_PF_FUSED_NATIVE");
         return v != nullptr && v[0] == '0';
     }();
     // gfx12: fused::available() (the Q2_0 pack's expert_w11_kernel, not ported) stays false, so requested() does too; the
-    // same opt-in (STRATA_PF_FUSED=1) is read here.  Every other device: requested() as before.
+    // same opt-in (CORTEX_PF_FUSED=1) is read here.  Every other device: requested() as before.
     // unset: on by default on gfx12 for IQ3_S, IQ3_XXS and (148-amd) Q2_0 gate/up (R9700: prompt +13..+20%, first-token KL against the FP16
     // prompt path equal to MMQ's within noise, 96 prompts each; Q2_0: prompt 4K +16.7%, 20K +19.0%, teacher-forced KL 0.0004 / 0.0016,
-    // tasks equal to MMQ's); STRATA_PF_FUSED=0 turns it off, =1 keeps the opt-in for every covered format
+    // tasks equal to MMQ's); CORTEX_PF_FUSED=0 turns it off, =1 keeps the opt-in for every covered format
     static const int env = [] {
-        const char* v = std::getenv("STRATA_PF_FUSED");
+        const char* v = std::getenv("CORTEX_PF_FUSED");
         return v == nullptr || v[0] == '\0' ? -1 : (v[0] == '1' ? 1 : 0);
     }();
     if (off || env == 0 || !gu_covered(gu_type)) return false;
 #if !defined(__HIPCC__)
-    // CUDA: unset, on by default on a compute capability 12.0 card with 80+ SMs (sm120_series.hpp, STRATA_SM120_PERF=0 off) for the gate/up
+    // CUDA: unset, on by default on a compute capability 12.0 card with 80+ SMs (sm120_series.hpp, CORTEX_SM120_PERF=0 off) for the gate/up
     // formats measured there - the IQ3_S pack's IQ2_S, IQ3_XXS, IQ3_S and IQ4_XS layers with IQ4_NL / Q2_0 down (RTX PRO 5000:
     // prompt +7.0% 4K, +5.2% 20K, +3.4% 98K; teacher-forced KL against MMQ 0.0002 over 5998 positions, 0.0010 over 1760 long
     // ones; first-token KL against the FP16 prompt path 0.01181 vs MMQ's 0.01236 over 48 prompts; HumanEval, reasoning,
@@ -1414,12 +1414,12 @@ bool native_supported(int gu_type, int d_type) {
         if (gu_type != T_IQ2_S && gu_type != T_IQ3_XXS && gu_type != T_IQ3_S && gu_type != T_IQ4_XS) return false;
         const DevInfo& d = dev_info();
         // 12.0 cards with 80+ SMs only (RTX PRO 5000 / 6000, RTX 5080 / 5090): on an RTX 5070 (48 SMs, IQ2_XS pack, experts
-        // partly in RAM) the fused kernels were 4.7% slower on 20K prompts (0/6 pairs) - it keeps MMQ unless STRATA_PF_FUSED=1
+        // partly in RAM) the fused kernels were 4.7% slower on 20K prompts (0/6 pairs) - it keeps MMQ unless CORTEX_PF_FUSED=1
         return d.ok && d.s120 && d.sms >= 80 && !d.t75 && d_covered_on(d_type, d);
     }
 #endif
-    // default: only these three; the Q2_0 one (148-amd) is on Linux only: on Windows it is opt-in (STRATA_PF_FUSED=1) until tested there
-    if (env < 0 && gu_type != T_IQ3_S && gu_type != T_IQ3_XXS && !(gu_type == T_Q2_0 && strata::core::kGfx12PromptDefaultsOn)) return false;
+    // default: only these three; the Q2_0 one (148-amd) is on Linux only: on Windows it is opt-in (CORTEX_PF_FUSED=1) until tested there
+    if (env < 0 && gu_type != T_IQ3_S && gu_type != T_IQ3_XXS && !(gu_type == T_Q2_0 && cortex::core::kGfx12PromptDefaultsOn)) return false;
     const DevInfo& d = dev_info();
     if (!d.ok || !d_covered_on(d_type, d)) return false;
     if (d.t75 && (gu_type != T_Q2_0 || d_type != T_Q2_0)) return false;
@@ -1452,7 +1452,7 @@ void experts_native(const Batch& b, const NativeGeom& g, int n_expert, int64_t n
         // Q4_K / Q5_K gate/up and Q5_1 down spill 100+ and keep the old launch).
         // Those counts are from a clang before 22; from clang 22 nw_capped decides which of these kernels get the cap
         // (above NW_LB), and the launch is the same.
-#ifdef STRATA_W_NO_OCC
+#ifdef CORTEX_W_NO_OCC
         const bool occ_gu = false, occ_d = false;
 #else
         const bool occ_gu = g.gu_type == T_IQ2_XXS || g.gu_type == T_IQ2_XS || g.gu_type == T_IQ2_S ||
@@ -1469,54 +1469,54 @@ void experts_native(const Batch& b, const NativeGeom& g, int n_expert, int64_t n
                                                           (int64_t) d.sms * (occ_d ? occ_blocks(d.w12, g.d_type, false) : wgp_blocks(d.occ)));
         const uint8_t* xa8 = (const uint8_t*) xa;
         uint8_t* ha8 = (uint8_t*) ha;
-#define STRATA_NW_GU(T) do { if (occ_gu) native_w11_kernel<T, true, true, NW_LB><<<g_gu, NW_THREADS, 0, s>>>(b, g, tb, xa8, src, ha8, nullptr); else native_w11_kernel<T, true><<<g_gu, NW_THREADS, 0, s>>>(b, g, tb, xa8, src, ha8, nullptr); } while (0)
-        // STRATA_PF_F16=1: gfx11's F16 matrix cores - the K-quants' kernels (moe_f16_kq.cu) and native_f16_kernel for
+#define CORTEX_NW_GU(T) do { if (occ_gu) native_w11_kernel<T, true, true, NW_LB><<<g_gu, NW_THREADS, 0, s>>>(b, g, tb, xa8, src, ha8, nullptr); else native_w11_kernel<T, true><<<g_gu, NW_THREADS, 0, s>>>(b, g, tb, xa8, src, ha8, nullptr); } while (0)
+        // CORTEX_PF_F16=1: gfx11's F16 matrix cores - the K-quants' kernels (moe_f16_kq.cu) and native_f16_kernel for
         // f16_gu / f16_d (gfx12's WMMA layout differs, so it keeps the int8 kernels)
         const bool f16 = !d.w12 && f16::requested();
         const bool f16_wide = f16::pick_bn(n, n_expert) == 2 * kTileRows;
-#define STRATA_F16_LAUNCH(T, GU, NFB, ACT, OUT, DM) do { \
+#define CORTEX_F16_LAUNCH(T, GU, NFB, ACT, OUT, DM) do { \
     const unsigned grid_f = (unsigned) std::max<int64_t>(1, tiles * (NFB)); \
     if (f16_wide) native_f16_kernel<T, GU, 2 * kTileRows><<<grid_f, f16::THREADS, 0, s>>>(b, g, tb, ACT, src, OUT, DM); \
     else native_f16_kernel<T, GU, kTileRows><<<grid_f, f16::THREADS, 0, s>>>(b, g, tb, ACT, src, OUT, DM); \
 } while (0)
         if (f16 && f16kq::covers(g.gu_type)) f16kq::gate_up(b, g, tb.ts, tb.tiles, tb.off, n, n_expert, tiles, xa8, src, ha8, s);
         else if (f16 && f16_gu(g.gu_type)) {
-#define STRATA_F16_GU(T) STRATA_F16_LAUNCH(T, true, f16::GU_NFB, xa8, ha8, nullptr)
+#define CORTEX_F16_GU(T) CORTEX_F16_LAUNCH(T, true, f16::GU_NFB, xa8, ha8, nullptr)
             switch (g.gu_type) {
-                case T_IQ2_XXS: STRATA_F16_GU(T_IQ2_XXS); break;
-                case T_IQ2_XS: STRATA_F16_GU(T_IQ2_XS); break;
-                case T_IQ2_S: STRATA_F16_GU(T_IQ2_S); break;
-                case T_IQ3_XXS: STRATA_F16_GU(T_IQ3_XXS); break;
-                case T_IQ3_S: STRATA_F16_GU(T_IQ3_S); break;
-                default: STRATA_F16_GU(T_IQ4_XS); break;
+                case T_IQ2_XXS: CORTEX_F16_GU(T_IQ2_XXS); break;
+                case T_IQ2_XS: CORTEX_F16_GU(T_IQ2_XS); break;
+                case T_IQ2_S: CORTEX_F16_GU(T_IQ2_S); break;
+                case T_IQ3_XXS: CORTEX_F16_GU(T_IQ3_XXS); break;
+                case T_IQ3_S: CORTEX_F16_GU(T_IQ3_S); break;
+                default: CORTEX_F16_GU(T_IQ4_XS); break;
             }
-#undef STRATA_F16_GU
+#undef CORTEX_F16_GU
         }
         else switch (g.gu_type) {
-            case T_IQ2_XXS: STRATA_NW_GU(T_IQ2_XXS); break;
-            case T_IQ2_XS: STRATA_NW_GU(T_IQ2_XS); break;
-            case T_IQ2_S: STRATA_NW_GU(T_IQ2_S); break;
-            case T_IQ3_XXS: STRATA_NW_GU(T_IQ3_XXS); break;
-            case T_IQ3_S: STRATA_NW_GU(T_IQ3_S); break;
-            case T_Q2_0: STRATA_NW_GU(T_Q2_0); break;
-            case T_Q4_K: STRATA_NW_GU(T_Q4_K); break;
-            case T_Q5_K: STRATA_NW_GU(T_Q5_K); break;
-            default: STRATA_NW_GU(T_IQ4_XS); break;
+            case T_IQ2_XXS: CORTEX_NW_GU(T_IQ2_XXS); break;
+            case T_IQ2_XS: CORTEX_NW_GU(T_IQ2_XS); break;
+            case T_IQ2_S: CORTEX_NW_GU(T_IQ2_S); break;
+            case T_IQ3_XXS: CORTEX_NW_GU(T_IQ3_XXS); break;
+            case T_IQ3_S: CORTEX_NW_GU(T_IQ3_S); break;
+            case T_Q2_0: CORTEX_NW_GU(T_Q2_0); break;
+            case T_Q4_K: CORTEX_NW_GU(T_Q4_K); break;
+            case T_Q5_K: CORTEX_NW_GU(T_Q5_K); break;
+            default: CORTEX_NW_GU(T_IQ4_XS); break;
         }
-#undef STRATA_NW_GU
-#define STRATA_NW_D(T) do { if (occ_d) native_w11_kernel<T, false, true, NW_LB><<<g_d, NW_THREADS, 0, s>>>(b, g, tb, ha8, src, nullptr, dm); else native_w11_kernel<T, false><<<g_d, NW_THREADS, 0, s>>>(b, g, tb, ha8, src, nullptr, dm); } while (0)
+#undef CORTEX_NW_GU
+#define CORTEX_NW_D(T) do { if (occ_d) native_w11_kernel<T, false, true, NW_LB><<<g_d, NW_THREADS, 0, s>>>(b, g, tb, ha8, src, nullptr, dm); else native_w11_kernel<T, false><<<g_d, NW_THREADS, 0, s>>>(b, g, tb, ha8, src, nullptr, dm); } while (0)
         if (f16 && f16kq::covers_down(g.d_type)) f16kq::down(b, g, tb.ts, tb.tiles, tb.off, n, n_expert, tiles, ha8, dm, s);
         else if (f16 && f16_d(g.d_type)) {
-            if (g.d_type == T_Q2_0) STRATA_F16_LAUNCH(T_Q2_0, false, f16::D_NFB, ha8, nullptr, dm);
-            else if (g.d_type == T_Q8_0) STRATA_F16_LAUNCH(T_Q8_0, false, f16::D_NFB, ha8, nullptr, dm);
-            else STRATA_F16_LAUNCH(T_IQ4_NL, false, f16::D_NFB, ha8, nullptr, dm);
+            if (g.d_type == T_Q2_0) CORTEX_F16_LAUNCH(T_Q2_0, false, f16::D_NFB, ha8, nullptr, dm);
+            else if (g.d_type == T_Q8_0) CORTEX_F16_LAUNCH(T_Q8_0, false, f16::D_NFB, ha8, nullptr, dm);
+            else CORTEX_F16_LAUNCH(T_IQ4_NL, false, f16::D_NFB, ha8, nullptr, dm);
         }
-        else if (g.d_type == T_Q2_0) STRATA_NW_D(T_Q2_0);
-        else if (g.d_type == T_Q5_1) STRATA_NW_D(T_Q5_1);
-        else if (g.d_type == T_Q8_0) STRATA_NW_D(T_Q8_0);
-        else STRATA_NW_D(T_IQ4_NL);
-#undef STRATA_NW_D
-#undef STRATA_F16_LAUNCH
+        else if (g.d_type == T_Q2_0) CORTEX_NW_D(T_Q2_0);
+        else if (g.d_type == T_Q5_1) CORTEX_NW_D(T_Q5_1);
+        else if (g.d_type == T_Q8_0) CORTEX_NW_D(T_Q8_0);
+        else CORTEX_NW_D(T_IQ4_NL);
+#undef CORTEX_NW_D
+#undef CORTEX_F16_LAUNCH
         ck(cudaGetLastError(), "experts_native");
         return;
     }
@@ -1541,4 +1541,4 @@ void experts_native(const Batch& b, const NativeGeom& g, int n_expert, int64_t n
     ck(cudaGetLastError(), "experts_native");
 }
 
-}  // namespace strata::prefill::fused
+}  // namespace cortex::prefill::fused

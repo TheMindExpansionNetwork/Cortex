@@ -7,8 +7,8 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/kernels/sampler.hpp"
-#include "strata/kernels/verify_kernels.hpp"
+#include "cortex/kernels/sampler.hpp"
+#include "cortex/kernels/verify_kernels.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -61,7 +61,7 @@ template <typename T> std::vector<T> down(const T* d, size_t n) {
 // vocabularies with ties at the maximum (the lowest index wins), NaN, -inf, a row with no value above -inf, and
 // launches repeated on one scratch (each must leave its counters at zero)
 int test_argmax(std::mt19937 &rng, dpct::queue_ptr s) {
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     int bad = 0;
     std::normal_distribution<float> nd(0.0f, 4.0f);
     uint8_t* sa = dev<uint8_t>(argmax_rows_scratch_bytes(8));   // one scratch for every row count, as in the engine

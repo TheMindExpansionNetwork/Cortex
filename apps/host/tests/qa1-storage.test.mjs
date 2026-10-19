@@ -33,7 +33,7 @@ test('F02: Settings -> Storage has ONE Downloaded models list and one total, wit
   assert.match(screen, /No downloaded models/);
 });
 
-test('item 8: "Strata" in Settings is the app\'s version; Strata Control\'s 0.1.45 is only a fallback; the update check gets the app version too', async () => {
+test('item 8: "Cortex" in Settings is the app\'s version; Cortex Control\'s 0.1.45 is only a fallback; the update check gets the app version too', async () => {
   const { appVersionToShow } = await import('../server/app-version.mjs');
   assert.equal(appVersionToShow('0.2.0-beta', '0.1.45'), '0.2.0-beta');
   assert.equal(appVersionToShow('dev', '0.1.45'), '0.1.45', 'a source checkout has no app version: the next best number');
@@ -48,7 +48,7 @@ test('item 8: "Strata" in Settings is the app\'s version; Strata Control\'s 0.1.
   const route = await readFile(new URL('../server/index.mjs', import.meta.url), 'utf8');
   assert.match(route, /appVersion:appVersionToShow\(setupState\(\)\.app\.version,native\.state\(\)\.version\)/);
   const updates = await readFile(new URL('../src/components/SettingsUpdates.tsx', import.meta.url), 'utf8');
-  assert.doesNotMatch(updates, /native\?\.version \?\? appVersion/, 'the Strata row no longer prefers Control\'s version');
+  assert.doesNotMatch(updates, /native\?\.version \?\? appVersion/, 'the Cortex row no longer prefers Control\'s version');
   assert.match(updates, /AboutVersions/);
 });
 

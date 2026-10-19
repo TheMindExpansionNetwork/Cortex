@@ -1,5 +1,5 @@
 """Tests for the model configs setup.py lists: the server keeps a config's Chat settings next to it as
-`strata-<model>.shared-settings.json`, which matches the configs' own `strata-*.json` but is not one (no exe, no
+`cortex-<model>.shared-settings.json`, which matches the configs' own `cortex-*.json` but is not one (no exe, no
 args), so the start menu and the "set up like the last one" lookup must leave it out.
 
     python -m unittest tools.test_setup_configs
@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 import setup  # noqa: E402
 
-CONFIG = {"exe": "engine/strata.exe", "args": ["--max-context", "131072"]}
+CONFIG = {"exe": "engine/cortex.exe", "args": ["--max-context", "131072"]}
 SHARED = {"reasoning_effort": "high", "temperature": 0.6}
 
 
@@ -34,9 +34,9 @@ class ModelConfigs(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.dir = Path(tmp.name)
-        self.config = write(self.dir, "strata-iq3_s.json", CONFIG)
-        self.shared = write(self.dir, "strata-iq3_s.shared-settings.json", SHARED)
-        # previous_config also looks into the Strata folders next to this checkout: keep the real ones out
+        self.config = write(self.dir, "cortex-iq3_s.json", CONFIG)
+        self.shared = write(self.dir, "cortex-iq3_s.shared-settings.json", SHARED)
+        # previous_config also looks into the Cortex folders next to this checkout: keep the real ones out
         patch = mock.patch.object(setup, "other_installs", return_value=[])
         patch.start()
         self.addCleanup(patch.stop)
@@ -47,7 +47,7 @@ class ModelConfigs(unittest.TestCase):
 
     def test_the_last_config_of_another_install_is_never_its_shared_settings(self):
         # the shared settings are written after the config (the first time Chat settings are saved), so they are
-        # the newest strata-*.json there
+        # the newest cortex-*.json there
         later = self.config.stat().st_mtime + 60
         os.utime(self.shared, (later, later))
         self.assertEqual(setup.previous_config([self.dir], {}), self.config)

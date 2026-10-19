@@ -42,7 +42,7 @@ class HotfixTag(unittest.TestCase):
 
     def test_an_engine_that_says_four_parts_is_read_as_four(self):
         with tempfile.TemporaryDirectory() as d:
-            exe = Path(d) / "strata.exe"
+            exe = Path(d) / "cortex.exe"
             exe.write_bytes(b"MZ\x00engine=0.1.40.2\n\x00")
             self.assertEqual(setup.engine_version(exe), (0, 1, 40, 2))
             exe.write_bytes(b"MZ\x00engine=0.1.40\n\x00")

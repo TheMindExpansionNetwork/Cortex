@@ -8,7 +8,7 @@ import { previewFile, rawFile, parseCsv, createAttachments, withAttachments } fr
 const NL = String.fromCharCode(10);
 
 test('previews: html and markdown as text, csv as a table, pictures and pdf as raw addresses, nothing outside the folder', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'strata-pv-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-pv-'));
   try {
     const root = join(dir, 'p'); mkdirSync(root);
     writeFileSync(join(root, 'a.html'), '<h1>x</h1>'); writeFileSync(join(root, 'n.md'), '# T'); writeFileSync(join(root, 'd.csv'), ['name,qty', '"Tea, green",2', '"say ""hi""",3', ''].join(NL));

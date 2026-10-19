@@ -1,6 +1,6 @@
 """serve/images.py - image generation (Qwen-Image-2.1-Turbo) through stable-diffusion.cpp's sd-cli.
 
-POST /v1/images/generations takes OpenAI's request shape (prompt, size, n, response_format b64_json|url) plus Strata's
+POST /v1/images/generations takes OpenAI's request shape (prompt, size, n, response_format b64_json|url) plus Cortex's
 own fields seed and steps.  Each request runs one `sd-cli` process with the arguments the model's card gives for
 stable-diffusion.cpp (8 steps, CFG 1, euler, Turbo's sigmas, --diffusion-fa) and returns the PNG files that process
 wrote, unchanged: an image from the API is byte for byte the image plain sd-cli writes with the same arguments.
@@ -21,7 +21,7 @@ The config's "images" section (written by setup --images, tools/image/install.py
    "llm": "...Qwen3-VL-8B-Instruct-UD-Q4_K_XL.gguf", "quant": "Q8_0", "args": ["--diffusion-fa"],
    "gpu_policy": "auto", "reload": "lazy"|"eager", "max_n": 4, "max_side": 2048, "timeout_s": 3600,
    "lib_dirs": [...], "uma": false, "need_mib": null, "out_dir": null, "keep_files": 64,
-   "native": false}   (native: Strata's own DiT runner, tools/image/sdcpp_native; CUDA / HIP builds)
+   "native": false}   (native: Cortex's own DiT runner, tools/image/sdcpp_native; CUDA / HIP builds)
 """
 from __future__ import annotations
 
@@ -123,7 +123,7 @@ def sd_cli_args(cfg: dict, job: dict, out_pattern: str) -> list[str]:
         cmd += ["-b", str(job["n"])]
     cmd += ["-o", out_pattern]
     cmd += [str(a) for a in (cfg.get("args") or [])]
-    if cfg.get("native") is True:                   # Strata's DiT runner inside sd-cli (CUDA / HIP builds)
+    if cfg.get("native") is True:                   # Cortex's DiT runner inside sd-cli (CUDA / HIP builds)
         cmd += ["--model-args", "qwen_image_2_1_native=1"]
     return cmd
 
@@ -183,7 +183,7 @@ class ImageGen:
         self.model = self.cfg.get("model_name") or MODEL_NAME
         self.log = log
         out = self.cfg.get("out_dir")
-        self.dir = Path(out) if out else Path(tempfile.mkdtemp(prefix="strata-images-"))
+        self.dir = Path(out) if out else Path(tempfile.mkdtemp(prefix="cortex-images-"))
         self.dir.mkdir(parents=True, exist_ok=True)
         self.keep_files = int(self.cfg.get("keep_files") or 64)
         self.lock = threading.Lock()              # one sd-cli at a time even when the service's turn is not taken
@@ -195,7 +195,7 @@ class ImageGen:
         return [self.cfg[k] for k in ("exe", "diffusion_model", "vae", "llm") if not Path(self.cfg[k]).exists()]
 
     def _say(self, text: str) -> None:
-        print(f"[strata] {text}", flush=True)
+        print(f"[cortex] {text}", flush=True)
         if self.log is not None:
             try:
                 self.log.write(f"[images] {text}\n")
@@ -309,7 +309,7 @@ class ImageGen:
                 item["b64_json"] = base64.b64encode(png).decode("ascii")
             data.append(item)
         return {"created": int(time.time()), "data": data, "model": self.model,
-                "output_format": "png", "size": f"{job['width']}x{job['height']}", "strata": figures}
+                "output_format": "png", "size": f"{job['width']}x{job['height']}", "cortex": figures}
 
     def status(self) -> dict:
         out = {"enabled": True, "model": self.model, "backend": self.cfg.get("backend"),
@@ -458,9 +458,9 @@ def restore_session(svc) -> None:
     svc.restore_after_load = None
     try:
         r = svc.engine.session_file("restore", path)
-        print(f"[strata] the conversation from before the image job is back ({r.get('tokens')} tokens)", flush=True)
+        print(f"[cortex] the conversation from before the image job is back ({r.get('tokens')} tokens)", flush=True)
     except Exception as e:                           # noqa: BLE001 - the engine runs, without the old cache
-        print(f"[strata] the conversation from before the image job was not restored ({e}); the next request "
+        print(f"[cortex] the conversation from before the image job was not restored ({e}); the next request "
               "reads its prompt again", flush=True)
     finally:
         with contextlib.suppress(OSError):

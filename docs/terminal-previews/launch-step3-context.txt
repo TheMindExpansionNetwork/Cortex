@@ -1,7 +1,7 @@
-# strata launch preview: step3-context
+# cortex launch preview: step3-context
 # (text of the screen as drawn at the size named in tests/terminal/launch_previews.py)
 
- STRATA  Set up   Step 3 of 9: Context
+ CORTEX  Set up   Step 3 of 9: Context
  ────────────────────────────────────────────────────────────────────────────────────────────────────────────
  How much text should it remember at once?
    8K     about 6,100 words       +0.1 GB

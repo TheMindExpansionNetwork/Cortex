@@ -21,15 +21,15 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/sycl_queue.hpp"
-#include "strata/kernels/shared_expert.hpp"
-#include "strata/kernels/bf16_gemv.hpp"
-#include "strata/kernels/bf16_bits.hpp"
-#include "strata/kernels/f16_bits.hpp"
-#include "strata/kernels/quantize_act.hpp"
-#include "strata/kernels/s2_gemv_q8.hpp"
-#include "strata/kernels/s_gemv.hpp"
-#include "strata/kernels/native_mmvq.hpp"
+#include "cortex/sycl_queue.hpp"
+#include "cortex/kernels/shared_expert.hpp"
+#include "cortex/kernels/bf16_gemv.hpp"
+#include "cortex/kernels/bf16_bits.hpp"
+#include "cortex/kernels/f16_bits.hpp"
+#include "cortex/kernels/quantize_act.hpp"
+#include "cortex/kernels/s2_gemv_q8.hpp"
+#include "cortex/kernels/s_gemv.hpp"
+#include "cortex/kernels/native_mmvq.hpp"
 
 #include <cmath>
 #include <climits>
@@ -39,7 +39,7 @@
 #include <cstring>
 #include <stdexcept>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
 constexpr int THREADS = 128;
@@ -303,7 +303,7 @@ void launch_sigmoid_scale_rows(float *out, const float *g, int n_embd,
 
 bool fused_swiglu_q81_enabled() {
     static const bool on = [] {
-        const char* v = std::getenv("STRATA_FUSED_SWIGLU_Q81");
+        const char* v = std::getenv("CORTEX_FUSED_SWIGLU_Q81");
         return v == nullptr || std::atoi(v) != 0;
     }();
     return on;
@@ -316,14 +316,14 @@ void shared_expert_multi(int n_tok, const float* x, const uint16_t* x_bf16, cons
     const bool gate_deferred = (lfuse & 1) != 0, pair = (lfuse & 2) != 0;
     if (n_tok < 1 || n_tok > 8 || !nw.q8_1 || !nw.gate_data || !nw.up_data || !nw.down_data || !stream)
         throw std::invalid_argument("shared_expert_multi: needs 1..8 tokens, native weights, scratch and a stream");
-    dpct::queue_ptr cs = strata::q_of(stream);
-    // the activation's q8_1: the caller's (STRATA_VERIFY_QDEDUP, x_q8_1_ready) or the descriptor's, else quantized here
+    dpct::queue_ptr cs = cortex::q_of(stream);
+    // the activation's q8_1: the caller's (CORTEX_VERIFY_QDEDUP, x_q8_1_ready) or the descriptor's, else quantized here
     const void* x_q8_1 = x_q8_1_ready ? x_q8_1_ready : nw.x_q8_1;
     if (!x_q8_1) {
         native_quantize_q8_1(x, nw.q8_1, (int) n_embd, n_tok, stream);
         x_q8_1 = nw.q8_1;
     }
-    // S26 STRATA_LFUSE (gate_deferred): gate and up in one launch where the pair applies (bitwise the two calls)
+    // S26 CORTEX_LFUSE (gate_deferred): gate and up in one launch where the pair applies (bitwise the two calls)
     if (!(pair && nw.gate_type == nw.up_type &&
           native_mmvq_pair(nw.gate_type, nw.gate_data, nw.up_data, x_q8_1, gate, up, (int) n_embd, (int) n_ff, n_tok, stream))) {
         native_mmvq(nw.gate_type, nw.gate_data, x_q8_1, gate, (int) n_embd, (int) n_ff, n_tok, stream);
@@ -374,7 +374,7 @@ void shared_expert_multi(int n_tok, const float* x, const uint16_t* x_bf16, cons
                                         dpct::get_error_string_dummy(e));
         return;
     }
-    static const bool batch = [] { const char* v = std::getenv("STRATA_DEC_BATCH"); return v == nullptr || std::atoi(v) != 0; }();
+    static const bool batch = [] { const char* v = std::getenv("CORTEX_DEC_BATCH"); return v == nullptr || std::atoi(v) != 0; }();
     if (native_bf16 && batch && n_tok > 1) {   // one gemv for all rows (outputs identical), fused sigmoid+scale
         bf16_gemv_fp32_mmvf_multi(x, n_embd, gate_inp_bf16, g, 1, n_embd, 1, n_tok, stream);
         launch_sigmoid_scale_rows(out, g, (int) n_embd, n_tok, cs);
@@ -552,7 +552,7 @@ void shared_expert(const uint8_t *x_q8_0, const uint8_t *x_q8k,
             auto exp_props = sycl::ext::oneapi::experimental::properties{
                 sycl::ext::oneapi::experimental::use_root_sync};
 
-            strata::q_of(stream)
+            cortex::q_of(stream)
                 ->parallel_for<
                     dpct_kernel_name<class native_swiglu_kernel_75dcdc>>(
                     sycl::nd_range<3>(sycl::range(1, 1, g_ff) *
@@ -565,10 +565,10 @@ void shared_expert(const uint8_t *x_q8_0, const uint8_t *x_q8k,
             auto exp_props = sycl::ext::oneapi::experimental::properties{
                 sycl::ext::oneapi::experimental::use_root_sync};
             dpct::has_capability_or_fail(
-                strata::q_of(stream)->get_device(),
+                cortex::q_of(stream)->get_device(),
                 {sycl::aspect::fp64});
 
-            strata::q_of(stream)
+            cortex::q_of(stream)
                 ->parallel_for<dpct_kernel_name<class swiglu_kernel_fbfcfe>>(
                     sycl::nd_range<3>(sycl::range(1, 1, g_ff) *
                                           sycl::range(1, 1, THREADS),
@@ -609,16 +609,16 @@ void shared_expert(const uint8_t *x_q8_0, const uint8_t *x_q8k,
     if (use_native) {
         bf16_gemv_fp32_mmvf(x_f32, gate_inp_bf16, g, n_embd, 1, stream);
         launch_sigmoid_scale_rows(out, g, (int)n_embd, 1,
-                                  strata::q_of(stream));
+                                  cortex::q_of(stream));
     } else {
         {
             auto exp_props = sycl::ext::oneapi::experimental::properties{
                 sycl::ext::oneapi::experimental::use_root_sync};
             dpct::has_capability_or_fail(
-                strata::q_of(stream)->get_device(),
+                cortex::q_of(stream)->get_device(),
                 {sycl::aspect::fp64});
 
-            strata::q_of(stream)
+            cortex::q_of(stream)
                 ->parallel_for<
                     dpct_kernel_name<class scalar_gate_kernel_82de77>>(
                     sycl::nd_range<3>(sycl::range(1, 1, 256),
@@ -634,7 +634,7 @@ void shared_expert(const uint8_t *x_q8_0, const uint8_t *x_q8k,
             auto exp_props = sycl::ext::oneapi::experimental::properties{
                 sycl::ext::oneapi::experimental::use_root_sync};
 
-            strata::q_of(stream)
+            cortex::q_of(stream)
                 ->parallel_for<dpct_kernel_name<class scale_kernel_a41a71>>(
                     sycl::nd_range<3>(sycl::range(1, 1, g_embd) *
                                           sycl::range(1, 1, THREADS),
@@ -670,10 +670,10 @@ void moe_combine(const float *parts, const float *weights, const float *shared,
         auto exp_props = sycl::ext::oneapi::experimental::properties{
             sycl::ext::oneapi::experimental::use_root_sync};
         dpct::has_capability_or_fail(
-            strata::q_of(stream)->get_device(),
+            cortex::q_of(stream)->get_device(),
             {sycl::aspect::fp64});
 
-        strata::q_of(stream)
+        cortex::q_of(stream)
             ->submit([&](sycl::handler &cgh) {
                 int shared_nullptr_ct6 = shared != nullptr;
 
@@ -700,4 +700,4 @@ catch (sycl::exception const &exc) {
   std::exit(1);
 }
 
-}  // namespace strata::kernels
+}  // namespace cortex::kernels

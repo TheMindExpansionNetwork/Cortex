@@ -36,8 +36,8 @@ export function TasksScreen() {
         };
         load();
         const timer = setInterval(load, 3000);
-        window.addEventListener('strata:tasks', load);
-        return () => { alive = false; clearInterval(timer); window.removeEventListener('strata:tasks', load); };
+        window.addEventListener('cortex:tasks', load);
+        return () => { alive = false; clearInterval(timer); window.removeEventListener('cortex:tasks', load); };
     }, []);
     async function action(fn: () => Promise<unknown>) {
         setPending(true);
@@ -45,7 +45,7 @@ export function TasksScreen() {
         try {
             await fn();
             await refresh();
-            window.dispatchEvent(new Event('strata:tasks'));
+            window.dispatchEvent(new Event('cortex:tasks'));
         }
         catch (e) {
             setError(e instanceof Error ? e.message : String(e));
@@ -77,7 +77,7 @@ export function TasksScreen() {
     return <Screen title={currentTask ? <span className="sr-only">{currentTask.title}</span> : "Tasks"} sub={currentTask ? undefined : "Run a prompt on a schedule, or whenever you need it."} actions={currentTask ? taskHeader : <div className="tasks-actions"><input className="st-input tasks-search" type="search" aria-label={tr("Search tasks")} placeholder={tr("Search tasks…")} value={query} onChange={e => setQuery(e.target.value)}/><Select ariaLabel={tr("Sort tasks")} value={sort} options={[{ value: 'next', label: 'Next run' }, { value: 'name', label: 'Name' }]} onChange={setSort}/><IconBtn name="plus" title={tr("New task")} onClick={() => open(blank())}/></div>}>
     <div className="tasks-page">
     
-    {tr(!currentTask && <p className="task-runtime small muted"><Icon name="clock" size={16}/>{tr(library?.mode === 'simulated' ? 'Example model · sample answers. ' : '')}{tr("Runs while Strata\u2019s host is open. Runs saved instructions using the loaded model.")}</p>)}
+    {tr(!currentTask && <p className="task-runtime small muted"><Icon name="clock" size={16}/>{tr(library?.mode === 'simulated' ? 'Example model · sample answers. ' : '')}{tr("Runs while Cortex\u2019s host is open. Runs saved instructions using the loaded model.")}</p>)}
     {tr(error && !editor ? <ErrorNotice message={error} onRetry={() => void refresh()}/> : null)}
     {tr(currentTask ? null : !ready ? <p className="muted">{tr("Loading tasks\u2026")}</p> : !visible.length ? <div className="tasks-empty"><Icon name="clock" size={72}/><h2 className="h3">{tr(query ? 'No matching tasks' : 'No scheduled tasks yet')}</h2><p className="muted">{tr(query ? 'Try another search.' : 'Create one with the + button.')}</p></div> : <div className="task-list">{tr(visible.map(t => <article key={t.id} className="task-row"><span className="task-icon"><Icon name="clock" size={24}/></span><div className="task-copy"><h2 className="h4">{t.title}</h2><p className="small muted">{tr(t.status === 'running' ? 'Running…' : t.enabled ? (t.nextRunAt ? `Next: ${new Date(t.nextRunAt).toLocaleString(localeTag(), { dateStyle: 'medium', timeStyle: 'short' })}` : 'Scheduled · calculating next run') : 'Paused')} · {tr(t.timeZone)}</p>{tr(t.error ? <button className="task-failed text-action" onClick={() => setResult(t.id!)}>{tr("Last run failed \u00B7 View")}</button> : null)}{tr(t.output ? <button className="text-action" onClick={() => setResult(t.id!)}>{tr("View last result")}{tr(t.demo ? ' · Example' : '')}</button> : null)}</div><div className="row"><><IconBtn name="pencil" title={tr("Edit {0}", [t.title])} disabled={pending || t.status === 'running'} onClick={() => open(t)}/><Btn size="sm" icon={t.status === 'running' ? 'stop' : 'bolt'} title={tr(t.status === 'running' ? `Stop ${t.title}` : `Run ${t.title} now`)} disabled={pending || !loaded} onClick={() => void action(() => api.post(`/api/tasks/${t.id}/${t.status === 'running' ? 'stop' : 'run'}`))}>{tr(t.status === 'running' ? 'Stop' : 'Run now')}</Btn><label className="row small"><span>{tr("On schedule")}</span><button className="st-toggle" role="switch" aria-label={tr("Schedule {0}", [t.title])} aria-checked={t.enabled} disabled={pending || t.status === 'running'} onClick={() => void action(() => api.patch(`/api/tasks/${t.id}`, { enabled: !t.enabled }))}/></label></></div></article>))}</div>)}
     {tr(currentTask ? <TaskDetail task={currentTask}/> : null)}

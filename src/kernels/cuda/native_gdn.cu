@@ -1,6 +1,6 @@
 // Arithmetic adapted from gated_delta_net.cu at pinned llama.cpp
 // 3cf03257f219afbe7334045ff7c6a06ac68c627d. Only state addressing differs:
-// each warp owns one Strata (head,column) and retains its four rows in registers.
+// each warp owns one Cortex (head,column) and retains its four rows in registers.
 // Compile with --use_fast_math to match the pinned CUDA implementation.
 //
 // MIT License
@@ -23,8 +23,8 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
-#include "strata/kernels/native_gdn.hpp"
-#include "strata/core/geometry.hpp"
+#include "cortex/kernels/native_gdn.hpp"
+#include "cortex/core/geometry.hpp"
 #include <cuda_runtime.h>
 #include <atomic>
 #include <cmath>
@@ -32,11 +32,11 @@
 #include <cstdint>
 #include <stdexcept>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 std::atomic<bool> enabled{false};
 constexpr int S = 128;
-static_assert(S == strata::core::kCompiledGeometry.ssm_state_size, "native_gdn is compiled for core/geometry.hpp");
+static_assert(S == cortex::core::kCompiledGeometry.ssm_state_size, "native_gdn is compiled for core/geometry.hpp");
 
 __device__ __forceinline__ float warp_sum(float value) {
 #pragma unroll
@@ -121,4 +121,4 @@ void native_gdn_step(float* state, const float* q, const float* k, const float* 
     const auto error = cudaGetLastError();
     if (error != cudaSuccess) throw std::runtime_error(cudaGetErrorString(error));
 }
-} // namespace strata::kernels
+} // namespace cortex::kernels

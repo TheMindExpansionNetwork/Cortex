@@ -1,5 +1,5 @@
 // metal/src/engine/window.cpp - the decode window on Metal: Verifier::init/run/commit's Metal side (the one backend
-// hook, src/core/verify.cpp under STRATA_GPU_METAL).  Everything above it - the decode loop, MTP control, the serve
+// hook, src/core/verify.cpp under CORTEX_GPU_METAL).  Everything above it - the decode loop, MTP control, the serve
 // protocol, the PLE table reads, the file tier - is the shared host code.
 //
 // The window is mac-kern's chain (metal/kernels, tests/token_chain.cpp) on the model GGUF itself: shard 1 is mmapped
@@ -19,10 +19,10 @@
 #include "stream.h"
 #include "../../tests/coop_probe.h"
 
-#include "strata/core/layer.hpp"
-#include "strata/core/conversation_cache.hpp"
-#include "strata/core/session.hpp"
-#include "strata/kernels/ngram.hpp"
+#include "cortex/core/layer.hpp"
+#include "cortex/core/conversation_cache.hpp"
+#include "cortex/core/session.hpp"
+#include "cortex/kernels/ngram.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -44,9 +44,9 @@
 #include <thread>
 #include <vector>
 
-namespace strata::gpu { uint64_t purge_device_allocations(size_t min_bytes); }   // metal/src/gpu/runtime.cpp
+namespace cortex::gpu { uint64_t purge_device_allocations(size_t min_bytes); }   // metal/src/gpu/runtime.cpp
 
-namespace strata::metal_engine {
+namespace cortex::metal_engine {
 
 namespace {
 
@@ -64,10 +64,10 @@ struct QsaArgs { uint32_t pos0, pos_base, max_cells, n_tok; float eps; };
 struct GlueArgs { uint32_t n, n_tok, n_embd, topk; };
 struct ArgArgs { uint32_t n_vocab, parts; };
 // the routed gate/up's i-quant grids from constant memory (QUANT_CTAB, function constant 23 of quant.metal): bitwise
-// the threadgroup copy's values, 3-7% faster on the M5 Max; STRATA_METAL_CTAB=0 turns it off
+// the threadgroup copy's values, 3-7% faster on the M5 Max; CORTEX_METAL_CTAB=0 turns it off
 bool metal_ctab() {
     static const bool on = [] {
-        const char* e = std::getenv("STRATA_METAL_CTAB");
+        const char* e = std::getenv("CORTEX_METAL_CTAB");
         return !(e && std::string(e) == "0");
     }();
     return on;
@@ -115,7 +115,7 @@ const int32_t* g_mrope_dev = nullptr;
 
 class Window {
 public:
-    bool init(const strata::core::ModelGeometry& g, strata::core::SessionState& ss, const std::string& shard1, int max_t,
+    bool init(const cortex::core::ModelGeometry& g, cortex::core::SessionState& ss, const std::string& shard1, int max_t,
               int64_t max_cells, std::string& err);
     bool run(int T, const int32_t* tokens, int64_t pos0, bool head, int32_t* out, std::string& err);
     bool commit(int n_keep, std::string& err);
@@ -126,8 +126,8 @@ public:
     bool streaming() const { return stream_; }
     // --serve's conversation checkpoints: the window's running state (the GDN recurrences and conv histories, the
     // PLE history, each QSA layer's indexer tail and tail-block key); the KV and pooled keys are positional
-    bool checkpoint_save(strata::core::ConversationCheckpoint& c, std::string& err);
-    bool checkpoint_restore(const strata::core::ConversationCheckpoint& c, std::string& err);
+    bool checkpoint_save(cortex::core::ConversationCheckpoint& c, std::string& err);
+    bool checkpoint_restore(const cortex::core::ConversationCheckpoint& c, std::string& err);
     void reset();   // a new sequence (session_zero): the running state zeroed
     void set_max_t(int t) { max_t_ = std::min(t, MAXT); }
     // ---- the MTP draft layer (mtp.hpp's math on mac-kern's kernels; the MTP GGUF from tools/mtp_pack.py)
@@ -143,7 +143,7 @@ public:
 private:
     const gguf::Tensor& T(const std::string& name) const {
         const gguf::Tensor* t = f_.find(name);
-        if (!t) { std::fprintf(stderr, "strata metal: the model has no tensor %s\n", name.c_str()); std::exit(2); }
+        if (!t) { std::fprintf(stderr, "cortex metal: the model has no tensor %s\n", name.c_str()); std::exit(2); }
         return *t;
     }
     const mtl::Pipeline* P(int lib, const std::string& fn, const mtl::Constants& c, const std::string& key) {
@@ -157,11 +157,11 @@ private:
     void push(std::vector<mtl::Dispatch>& ds, mtl::Dispatch d) {
         d.barrier = !nb_;
         nb_ = false;
-        // timing only (WRONG answers): STRATA_METAL_SKIP=a,b,... runs the dispatches whose pipeline name contains one
+        // timing only (WRONG answers): CORTEX_METAL_SKIP=a,b,... runs the dispatches whose pipeline name contains one
         // of the words as empty grids (the marginal cost of a kernel class by leaving it out)
         static const std::vector<std::string> skip = [] {
             std::vector<std::string> v;
-            if (const char* e = std::getenv("STRATA_METAL_SKIP")) {
+            if (const char* e = std::getenv("CORTEX_METAL_SKIP")) {
                 std::string s = e, w;
                 for (char c : s + ",") { if (c == ',') { if (!w.empty()) v.push_back(w); w.clear(); } else w += c; }
             }
@@ -195,16 +195,16 @@ private:
                    const mtl::Buffer& inj_in, const mtl::Buffer& inj_out, bool apply, const Act& out, bool final_, int ntok);
     const gguf::Tensor& TM(const std::string& name) const {
         const gguf::Tensor* x = fm_.find(name);
-        if (!x) { std::fprintf(stderr, "strata metal: the MTP model has no tensor %s\n", name.c_str()); std::exit(2); }
+        if (!x) { std::fprintf(stderr, "cortex metal: the MTP model has no tensor %s\n", name.c_str()); std::exit(2); }
         return *x;
     }
     size_t NM(const std::string& name) const {   // the folded (1 + w) copy of an F32 norm of the MTP model
         auto it = mnorm_off_.find(name);
-        if (it == mnorm_off_.end()) { std::fprintf(stderr, "strata metal: no MTP norm %s\n", name.c_str()); std::exit(2); }
+        if (it == mnorm_off_.end()) { std::fprintf(stderr, "cortex metal: no MTP norm %s\n", name.c_str()); std::exit(2); }
         return it->second;
     }
 
-    strata::core::SessionState* ss_ = nullptr;
+    cortex::core::SessionState* ss_ = nullptr;
     gguf::File f_;
     std::unique_ptr<mtl::Context> cx_;
     mtl::Buffer W_;
@@ -234,28 +234,28 @@ private:
     int hp_ = 0;                     // which of the two history buffers holds the committed conv history (all layers)
     // commit(n) of a window of several tokens: the GDN fold of the kept prefix waits for the next window and runs at
     // the start of its command buffer (one submit and wait less a round).  Nothing else reads the GDN state between
-    // the two (the drafter reads the window's rows and its own caches).  STRATA_METAL_LAZY_FOLD=0: at commit.
+    // the two (the drafter reads the window's rows and its own caches).  CORTEX_METAL_LAZY_FOLD=0: at commit.
     int pend_fold_ = 0;
     // gdn_step's partial commit (mac-kern 56526aed, commit = 0x100 | k): a verify window of T > 1 commits its first
     // row in place (it is always kept), so commit(1) needs no fold and commit(n) folds rows 1..n-1 only; a window
-    // without the head (the prompt) commits all its rows in the step.  Opt-in (STRATA_METAL_PARTIAL=1): at --spec 2
+    // without the head (the prompt) commits all its rows in the step.  Opt-in (CORTEX_METAL_PARTIAL=1): at --spec 2
     // it measured 0.3-0.8% slower on the M5 Max (the in-place state write costs every window, the fold it saves
     // only the rounds with no accepted draft).  Off: the window commits nothing and commit(n) folds n rows.
-    bool partial_ = std::getenv("STRATA_METAL_PARTIAL") && std::string(std::getenv("STRATA_METAL_PARTIAL")) == "1";
+    bool partial_ = std::getenv("CORTEX_METAL_PARTIAL") && std::string(std::getenv("CORTEX_METAL_PARTIAL")) == "1";
     bool win_head_ = true;      // the window being encoded has the head
     bool last_head_ = true;     // the last window had it
     // token_chain's --fuse (mac-kern): the GDN step writes the prepared y planes itself (no xprep), and a window whose
     // context is within the selection budget skips the QSA score and top-k (the cell list is the identity: qids_
-    // holds it from init, restored after a window that selected).  STRATA_METAL_FUSE=0: off.
-    bool fuse_ = !(std::getenv("STRATA_METAL_FUSE") && std::string(std::getenv("STRATA_METAL_FUSE")) == "0");
+    // holds it from init, restored after a window that selected).  CORTEX_METAL_FUSE=0: off.
+    bool fuse_ = !(std::getenv("CORTEX_METAL_FUSE") && std::string(std::getenv("CORTEX_METAL_FUSE")) == "0");
     bool qdirty_ = false;
     // mac-kern's router_route (3f9ca996): the BF16 router GEMV and moe_route in one dispatch, beside the shared
-    // expert's GEMVs (bitwise).  Opt-in (STRATA_METAL_ROUTE=1): in this window, where the router GEMV already runs
+    // expert's GEMVs (bitwise).  Opt-in (CORTEX_METAL_ROUTE=1): in this window, where the router GEMV already runs
     // beside the shared GEMVs, it measured no faster (T2 GPU 13.035 vs 13.027 ms; the fused kernel alone 0.615 ms vs
     // 0.566 for the two) and 0.3-0.5% slower end to end on the M5 Max.
-    bool routef_ = std::getenv("STRATA_METAL_ROUTE") && std::string(std::getenv("STRATA_METAL_ROUTE")) == "1";
+    bool routef_ = std::getenv("CORTEX_METAL_ROUTE") && std::string(std::getenv("CORTEX_METAL_ROUTE")) == "1";
     mtl::Buffer rcounter_;
-    // STRATA_METAL_KPROF=T (test tooling): once, after the 20th cached window of T tokens with the head, the GPU time
+    // CORTEX_METAL_KPROF=T (test tooling): once, after the 20th cached window of T tokens with the head, the GPU time
     // of each kernel class alone (the window's own dispatches of that pipeline + weight role, run by themselves)
     void kprof(const std::vector<mtl::Dispatch>& ds, int Tn);
     void fold(std::vector<mtl::Dispatch>& ds, int n_keep, int hp);
@@ -310,7 +310,7 @@ private:
     int last_n_disp_ = 0;
     int32_t last_tokens_[MAXT] = {};
     std::vector<float> last_norm_;   // the window's normalized PLE rows (T x hc_dim), for commit
-    // STRATA_METAL_LOGPOS=<path> (test tooling, one-token windows): per decode position the log-probability of the
+    // CORTEX_METAL_LOGPOS=<path> (test tooling, one-token windows): per decode position the log-probability of the
     // token that came next (the next window's input: with --spec-follow, the forced text) and the top 64, in the
     // KL harness's row format (phaseA-tests cuda_p0/cuda_kl.py load_lp): pos, target, lp, argmax, 4 x 0, id:lp ...
     std::FILE* logpos_ = nullptr;
@@ -321,7 +321,7 @@ private:
     std::vector<float> lp_row_;
     std::vector<std::pair<float, int32_t>> lp_top_;
     void logpos(int Tn, const int32_t* tokens, int64_t pos0, bool head);
-    // STRATA_METAL_PROFILE=1: where a window's time goes, per window size (printed when the window goes away)
+    // CORTEX_METAL_PROFILE=1: where a window's time goes, per window size (printed when the window goes away)
     struct Prof { int64_t n = 0; double pre = 0, rg = 0, gpu = 0, fin = 0, all = 0; };
     std::map<int, Prof> prof_;
     Prof cprof_, dprof_;   // commit (folds), the draft rounds
@@ -330,7 +330,7 @@ public:
     ~Window();
     void prof_add(bool draft, double ms) { Prof& x = draft ? dprof_ : cprof_; ++x.n; x.all += ms; }
 private:
-    // the Q8_0 copies of the hyper-connection matrices (the default; STRATA_HC_Q8=0: the BF16 originals)
+    // the Q8_0 copies of the hyper-connection matrices (the default; CORTEX_HC_Q8=0: the BF16 originals)
     bool hc_q8_ = false;
     mtl::Buffer Q8_;
     std::map<std::string, size_t> q8off_;
@@ -346,7 +346,7 @@ private:
     gguf::Tensor mhead_t_;
     std::vector<int32_t> dvocab_;
     // the draft layer's BF16 matrices in Q8_0 (half the bytes a draft step reads; drafts only: the verify window
-    // decides every token).  STRATA_METAL_MTP_Q8=0 keeps BF16.
+    // decides every token).  CORTEX_METAL_MTP_Q8=0 keeps BF16.
     mtl::Buffer mq8_;
     std::map<std::string, gguf::Tensor> mq8t_;
     const mtl::Buffer& MB(const std::string& name) const { return mq8t_.count(name) ? mq8_ : Wm_; }
@@ -386,7 +386,7 @@ private:
     bool m5_layout() { if (m5_layout_ < 0) m5_layout_ = coop_k4() ? 1 : 0; return m5_layout_ == 1; }
     bool pc_setup(int C);
     bool pc_chunk(const int64_t* tokens, int nT, int64_t pos0, std::string& err);
-    // the draft round in one command buffer (msl/mtp_chain.metal): STRATA_METAL_MTP_CHAIN=0 runs a command buffer
+    // the draft round in one command buffer (msl/mtp_chain.metal): CORTEX_METAL_MTP_CHAIN=0 runs a command buffer
     // per step with the host's pick and embedding (as before)
     int lchain_ = -1;
     bool chain_ = false;
@@ -397,7 +397,7 @@ namespace {
 // A repack (metal_repack.py: <file>.repack.lock) or setup's model preparation (.preparing.lock) beside the GPU's file holds a lock
 // with its pid.  The repack and the pack move 100+ GB through the disk and one holds up to 20 GB of memory: an engine of 70-90 GB
 // beside them is what froze the 128 GB M5 Max twice (watchdog panics, 2026-10-13).  Returns the pid of a live one, else 0.
-// STRATA_METAL_IGNORE_REPACK=1 starts anyway (your choice).
+// CORTEX_METAL_IGNORE_REPACK=1 starts anyway (your choice).
 long repack_pid_running(const std::string& model_file) {
     namespace fs = std::filesystem;
     std::error_code ec;
@@ -415,7 +415,7 @@ long repack_pid_running(const std::string& model_file) {
 }
 }  // namespace
 
-bool Window::init(const strata::core::ModelGeometry& g, strata::core::SessionState& ss, const std::string& shard1,
+bool Window::init(const cortex::core::ModelGeometry& g, cortex::core::SessionState& ss, const std::string& shard1,
                   int max_t, int64_t max_cells, std::string& err) {
     ss_ = &ss;
     max_t_ = std::min(max_t, MAXT);
@@ -426,9 +426,9 @@ bool Window::init(const strata::core::ModelGeometry& g, strata::core::SessionSta
     }
     eps_ = 1e-6f;
     const double t0 = now_ms();
-    if (const long rp = repack_pid_running(shard1); rp > 0 && !(std::getenv("STRATA_METAL_IGNORE_REPACK") && std::string(std::getenv("STRATA_METAL_IGNORE_REPACK")) == "1")) {
+    if (const long rp = repack_pid_running(shard1); rp > 0 && !(std::getenv("CORTEX_METAL_IGNORE_REPACK") && std::string(std::getenv("CORTEX_METAL_IGNORE_REPACK")) == "1")) {
         err = "metal window: a model repack or setup's preparation is running here (pid " + std::to_string(rp) + "): the engine is not started "
-              "beside it (it froze a 128 GB Mac twice); wait for it to finish, or set STRATA_METAL_IGNORE_REPACK=1";
+              "beside it (it froze a 128 GB Mac twice); wait for it to finish, or set CORTEX_METAL_IGNORE_REPACK=1";
         return false;
     }
     if (!f_.open(shard1, err)) return false;
@@ -463,7 +463,7 @@ bool Window::init(const strata::core::ModelGeometry& g, strata::core::SessionSta
     lgdn_ = cx_->compile({"gdn.metal"}, "#define NO_GGML_COMMON 1\n");
     lqsa_ = cx_->compile({"qsa.metal", "qsa2.metal"}, "#define NO_GGML_COMMON 1\n");
     lsmp_ = cx_->compile({"sample.metal"}, "#define NO_GGML_COMMON 1\n");
-    lple_ = cx_->compile({strata_metal::resource("STRATA_METAL_ENGINE_KERNELS", "engine-msl", STRATA_METAL_ENGINE_KERNELS_DEFAULT) + "/ple.metal"}, "#define NO_GGML_COMMON 1\n");
+    lple_ = cx_->compile({cortex_metal::resource("CORTEX_METAL_ENGINE_KERNELS", "engine-msl", CORTEX_METAL_ENGINE_KERNELS_DEFAULT) + "/ple.metal"}, "#define NO_GGML_COMMON 1\n");
 
     const int MAXC = (int) std::max<int64_t>(4096, (max_cells + 64) / 4 * 4 + 64), MB = MAXC / 4 + 2;
     max_cells_ = MAXC;
@@ -512,10 +512,10 @@ bool Window::init(const strata::core::ModelGeometry& g, strata::core::SessionSta
             pooled_.push_back(A(4 * (size_t) MB * 128));
         }
     }
-    // ---- the HC read in Q8_0 (the owner's default on Metal, as STRATA_HC_Q8 on gfx12): the BF16 down / up / inject
+    // ---- the HC read in Q8_0 (the owner's default on Metal, as CORTEX_HC_Q8 on gfx12): the BF16 down / up / inject
     // matrices quantized once at load (ggml's q8_0 rule, ref_quant), read by gr_down_q8 / gr_up_q8
     {
-        const char* e = std::getenv("STRATA_HC_Q8");
+        const char* e = std::getenv("CORTEX_HC_Q8");
         hc_q8_ = !(e && std::string(e) == "0");
     }
     if (hc_q8_) {
@@ -546,7 +546,7 @@ bool Window::init(const strata::core::ModelGeometry& g, strata::core::SessionSta
                     const uint8_t* src = (const uint8_t*) f_.map + x.offset;
                     if (stream_) {   // F_NOCACHE reads: the page cache is kept for the arena
                         raw.resize(x.bytes);
-                        if (!st_->read(raw.data(), x.bytes, x.offset)) { std::fprintf(stderr, "strata metal: read failed\n"); std::exit(6); }
+                        if (!st_->read(raw.data(), x.bytes, x.offset)) { std::fprintf(stderr, "cortex metal: read failed\n"); std::exit(6); }
                         src = raw.data();
                     }
                     ref::dequant(ref::BF16, src, tmp.data(), ne);
@@ -554,7 +554,7 @@ bool Window::init(const strata::core::ModelGeometry& g, strata::core::SessionSta
                 }
             });
         for (auto& x : th) x.join();
-        std::fprintf(stderr, "strata metal: HC read in Q8_0 (STRATA_HC_Q8=0: BF16): %zu matrices, %.0f MB, made in %.0f ms\n",
+        std::fprintf(stderr, "cortex metal: HC read in Q8_0 (CORTEX_HC_Q8=0: BF16): %zu matrices, %.0f MB, made in %.0f ms\n",
                      names.size(), tot / 1e6, now_ms() - tq);
     }
     if (stream_) {
@@ -562,7 +562,7 @@ bool Window::init(const strata::core::ModelGeometry& g, strata::core::SessionSta
         if (hc_q8_)
             for (const auto& kv : q8off_) skip.push_back(kv.first);
         if (!st_->load_dense(f_, *cx_, skip, W_, err)) return false;
-        const char* e = std::getenv("STRATA_METAL_PREFETCH");
+        const char* e = std::getenv("CORTEX_METAL_PREFETCH");
         st_pred_ = !(e && std::atoi(e) <= 0);
         if (st_pred_) predL_ = A(4 * (size_t) 48 * MAXT * 512);
         if (st_pred_ && st_->ahead2() > 0) predL2_ = A(4 * (size_t) 48 * MAXT * 512);
@@ -577,9 +577,9 @@ bool Window::init(const strata::core::ModelGeometry& g, strata::core::SessionSta
         for (size_t i = 0; i < ne; ++i) dst[i] = ref::f32_to_f16(src[i]);
         plekw_own_ = true;
     }
-    ple_hist_.assign((size_t) strata::kernels::NG_HIST * strata::kernels::NG_HC_DIM, 0.0f);
-    last_norm_.assign((size_t) MAXT * strata::kernels::NG_HC_DIM, 0.0f);
-    std::fprintf(stderr, "strata metal: decode window on %s: %s %s (%.1f GB), %d cells, PLE %s, ready in %.0f ms\n",
+    ple_hist_.assign((size_t) cortex::kernels::NG_HIST * cortex::kernels::NG_HC_DIM, 0.0f);
+    last_norm_.assign((size_t) MAXT * cortex::kernels::NG_HC_DIM, 0.0f);
+    std::fprintf(stderr, "cortex metal: decode window on %s: %s %s (%.1f GB), %d cells, PLE %s, ready in %.0f ms\n",
                  cx_->device_name().c_str(), shard1.c_str(), stream_ ? "streamed from the SSD (experts)" : "wrapped",
                  f_.file_bytes / 1e9, MAXC, ple_on_ ? "on" : "OFF", now_ms() - t0);
     return true;
@@ -595,8 +595,8 @@ void Window::gemv(std::vector<mtl::Dispatch>& ds, const gguf::Tensor& t, const A
     else if (n_out <= 640 || ty == ref::Q2_0 || ty == ref::BF16) { L = 32; Rr = 1; S = 4; K = 1; }
     {
         // windows of several tokens: NR rows a lane share each x load (the window's cost is its x traffic).  The sums
-        // run in the same order for any NR, so the answers do not change.  STRATA_METAL_GEMV_NR (1, 2): the tile.
-        static const int nr_env = [] { const char* e = std::getenv("STRATA_METAL_GEMV_NR"); return e ? std::atoi(e) : 1; }();
+        // run in the same order for any NR, so the answers do not change.  CORTEX_METAL_GEMV_NR (1, 2): the tile.
+        static const int nr_env = [] { const char* e = std::getenv("CORTEX_METAL_GEMV_NR"); return e ? std::atoi(e) : 1; }();
         if (ntok > 1 && nr_env == 2 && n_out >= 2048) {
             if (S == 8 && K == 2) { S = 4; K = 2; }
             if (S == 8 && K == 1) S = 4;
@@ -926,7 +926,7 @@ void gnorm(const float* x, const float* w, float* y, int n_embd, int hc, float e
 // The PLE block (ple.hpp) for the window's T rows on the CPU, after layer 0 (its pending write applied to R): R +=
 // gated + silu(conv); the normalized rows go to last_norm_ (the history advances at commit).
 void Window::ple_cpu(int Tn) {
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     const int hc_dim = NG_HC_DIM;
     const float* nkey = (const float*) ((const uint8_t*) W_.ptr + T("blk.1.ple_norm_key.weight").offset);
     const float* nqry = (const float*) ((const uint8_t*) W_.ptr + T("blk.1.ple_norm_query.weight").offset);
@@ -986,11 +986,11 @@ bool Window::run(int Tn, const int32_t* tokens, int64_t pos0, bool head, int32_t
     }
     // ---- the PLE rows (the table read is the shared host code's), projected on the GPU
     if (ple_on_) {
-        strata::core::SessionState& ss = *ss_;
-        uint32_t rows[MAXT * strata::kernels::PLE_N_HEADS];
+        cortex::core::SessionState& ss = *ss_;
+        uint32_t rows[MAXT * cortex::kernels::PLE_N_HEADS];
         int32_t prev[2] = {ss.ple_prev[0], ss.ple_prev[1]};
         for (int t = 0; t < Tn; ++t) {
-            strata::kernels::ngram_rows(&tokens[t], prev, 1, ss.ple.consts, rows + t * strata::kernels::PLE_N_HEADS);
+            cortex::kernels::ngram_rows(&tokens[t], prev, 1, ss.ple.consts, rows + t * cortex::kernels::PLE_N_HEADS);
             prev[0] = prev[1];
             prev[1] = tokens[t];
         }
@@ -1028,7 +1028,7 @@ bool Window::run(int Tn, const int32_t* tokens, int64_t pos0, bool head, int32_t
         const double r0 = now_ms();
         last_gpu_ms_ = 1000.0 * run_ds(c);
         {
-            static const int kt = std::getenv("STRATA_METAL_KPROF") ? std::atoi(std::getenv("STRATA_METAL_KPROF")) : 0;
+            static const int kt = std::getenv("CORTEX_METAL_KPROF") ? std::atoi(std::getenv("CORTEX_METAL_KPROF")) : 0;
             static int seen = 0;
             if (kt == Tn && head && ++seen == 20 && !stream_) kprof(c.ds, Tn);
         }
@@ -1064,7 +1064,7 @@ bool Window::run(int Tn, const int32_t* tokens, int64_t pos0, bool head, int32_t
         d1.tg[0] = 256;
         push(ds, d1);
         // the PLE block on the GPU (msl/ple.metal): norms, gate, conv, the residual update
-        struct PleArgs { uint32_t n_embd, hc; float eps; } pa{N, HC, strata::kernels::NG_RMS_EPS};
+        struct PleArgs { uint32_t n_embd, hc; float eps; } pa{N, HC, cortex::kernels::NG_RMS_EPS};
         auto off = [&](const char* n) { return T(n).offset; };
         mtl::Dispatch g1, g2, g3, g4;
         g1.p = P(lple_, "ple_gnorm", {}, "ple_gnorm");
@@ -1144,17 +1144,17 @@ void stream_atexit() {
 }  // namespace
 
 // The arena, once the rest is allocated (the MTP layer loads after init): what the GPU working set and the RAM leave
-// with STRATA_METAL_KEEP_FREE_GB kept for macOS (default: 7 GB, or 15% of the RAM when that is more - the M5 Max
+// with CORTEX_METAL_KEEP_FREE_GB kept for macOS (default: 7 GB, or 15% of the RAM when that is more - the M5 Max
 // froze with an 89 GB arena and 7 GB left beside a 50 GB n-gram table read through the file cache; arena_budget.h);
-// STRATA_METAL_ARENA_GB sets it.
+// CORTEX_METAL_ARENA_GB sets it.
 bool Window::stream_arena(std::string& err) {
     uint64_t phys = 0;
     size_t len = sizeof phys;
     sysctlbyname("hw.memsize", &phys, &len, nullptr, 0);
     const double gb = 1e9;
-    if (!(std::getenv("STRATA_METAL_KEEP_HOST_WEIGHTS") && std::string(std::getenv("STRATA_METAL_KEEP_HOST_WEIGHTS")) == "1")) {
-        const uint64_t g = strata::gpu::purge_device_allocations(32u << 20);
-        std::fprintf(stderr, "strata metal stream: %.2f GB of the host code's device weight copies given back (unused by the "
+    if (!(std::getenv("CORTEX_METAL_KEEP_HOST_WEIGHTS") && std::string(std::getenv("CORTEX_METAL_KEEP_HOST_WEIGHTS")) == "1")) {
+        const uint64_t g = cortex::gpu::purge_device_allocations(32u << 20);
+        std::fprintf(stderr, "cortex metal stream: %.2f GB of the host code's device weight copies given back (unused by the "
                              "Metal window)\n", g / 1e9);
     }
     const double used = (double) cx_->allocated();
@@ -1182,39 +1182,39 @@ bool Window::stream_arena(std::string& err) {
         if (sysctlbyname("vm.vm_page_filecache_min", &pages, &pl, nullptr, 0) == 0) am.filecache_min = (double) pages * (double) vm_page_size;
     }
     am.available = avail_now();
-    if (ss_ && ss_->ple.table && ss_->ple.table->mode() == strata::kernels::PleIo::Mmap)
+    if (ss_ && ss_->ple.table && ss_->ple.table->mode() == cortex::kernels::PleIo::Mmap)
         am.ple_mapped = (double) ss_->ple.table->rows() * 192.0;   // a row is at most 192 bytes (Q8_0 + its scale)
-    if (const char* e = std::getenv("STRATA_METAL_KEEP_FREE_GB")) am.keep_gb = std::atof(e);
-    if (const char* e = std::getenv("STRATA_METAL_ARENA_GB")) am.arena_gb = std::atof(e);
-    if (const char* e = std::getenv("STRATA_METAL_LEAVE_SHARE")) am.leave_share = std::atof(e);   // for measuring; the default is kLeaveShare
+    if (const char* e = std::getenv("CORTEX_METAL_KEEP_FREE_GB")) am.keep_gb = std::atof(e);
+    if (const char* e = std::getenv("CORTEX_METAL_ARENA_GB")) am.arena_gb = std::atof(e);
+    if (const char* e = std::getenv("CORTEX_METAL_LEAVE_SHARE")) am.leave_share = std::atof(e);   // for measuring; the default is kLeaveShare
     const double keep = arena_keep(am);
     const double avail = am.available;
     double budget = arena_budget(am);
     if (budget < 2 * gb) {
-        std::fprintf(stderr, "strata metal stream: only %.1f GB left for the expert arena (the GPU working set %.1f GB, RAM %.1f GB, "
+        std::fprintf(stderr, "cortex metal stream: only %.1f GB left for the expert arena (the GPU working set %.1f GB, RAM %.1f GB, "
                              "%.1f GB allocated): expect a low hit rate\n", budget / gb, cx_->recommended_working_set() / gb,
                      phys / gb, used / gb);
         budget = std::max(budget, 1.0 * gb);
     }
     std::string prof;
-    if (const char* e = std::getenv("STRATA_METAL_EXPERT_PROFILE")) prof = e;
-    else prof = strata_metal::resource(nullptr, "data", STRATA_METAL_DATA_DEFAULT) + "/expert-profile.bin";
-    std::fprintf(stderr, "strata metal stream: %.2f GB allocated before the arena (the process holds %.2f GB, %.2f GB resident); "
+    if (const char* e = std::getenv("CORTEX_METAL_EXPERT_PROFILE")) prof = e;
+    else prof = cortex_metal::resource(nullptr, "data", CORTEX_METAL_DATA_DEFAULT) + "/expert-profile.bin";
+    std::fprintf(stderr, "cortex metal stream: %.2f GB allocated before the arena (the process holds %.2f GB, %.2f GB resident); "
                          "RAM %.1f GB (%.1f GB available, %.1f GB kept for macOS), GPU working set %.1f GB\n", used / gb,
                  pm0.footprint / gb, pm0.rss / gb, phys / gb, avail / gb, keep / gb, cx_->recommended_working_set() / gb);
     {   // the planned total: arena + the Metal buffers (or the process's own count when it is more) + the n-gram table's
         // reserve, against the cap (arena_budget.h: footprint_cap)
         const FootprintPlan fp = footprint_plan(am, budget);
-        std::fprintf(stderr, "strata metal stream: planned resident footprint %.1f GB = arena %.1f + %.1f held before it + %.1f "
+        std::fprintf(stderr, "cortex metal stream: planned resident footprint %.1f GB = arena %.1f + %.1f held before it + %.1f "
                              "reserved for the n-gram table; cap %.1f GB = the lesser of the GPU working set %.1f GB and the RAM "
                              "%.1f GB less %.1f GB left to macOS and its file cache%s\n",
                      fp.total / gb, fp.arena / gb, fp.base / gb, fp.ple / gb, fp.cap / gb, cx_->recommended_working_set() / gb,
                      phys / gb, (am.phys - fp.cap) / gb,
-                     am.arena_gb >= 0 && fp.over() ? " - STRATA_METAL_ARENA_GB is above the cap: kept as set (your choice), but "
+                     am.arena_gb >= 0 && fp.over() ? " - CORTEX_METAL_ARENA_GB is above the cap: kept as set (your choice), but "
                                                      "a Mac that runs short of memory can freeze (watchdog panics seen at 90+ GB "
                                                      "resident of 128)" : "");
     }
-    const char* epg = std::getenv("STRATA_METAL_PROMPT_GEMM");
+    const char* epg = std::getenv("CORTEX_METAL_PROMPT_GEMM");
     const bool pg_on = !(epg && std::string(epg) == "0");
     bool minimal = false;   // the arena's least layout (the min slots) is not shrunk further: it goes ahead, filled in steps
     for (int tries = 0;; ++tries) {
@@ -1225,7 +1225,7 @@ bool Window::stream_arena(std::string& err) {
             break;
         if (st_->shrink_to() == 0 || tries == 4) return false;
         if ((double) st_->shrink_to() + 64.0 * (1 << 20) >= budget) minimal = true;   // no smaller layout than this one
-        std::fprintf(stderr, "strata metal stream: less memory is free than when the arena was planned: %.1f -> %.1f GB\n",
+        std::fprintf(stderr, "cortex metal stream: less memory is free than when the arena was planned: %.1f -> %.1f GB\n",
                      budget / gb, st_->shrink_to() / gb);
         budget = (double) st_->shrink_to();
     }
@@ -1233,7 +1233,7 @@ bool Window::stream_arena(std::string& err) {
     {   // what the process really holds now, against the plan and the cap (a number that disagrees is a bug in the count)
         const ProcMem pm1 = proc_mem();
         const double cap = footprint_cap(am);
-        std::fprintf(stderr, "strata metal stream: resident footprint after the fill: the process holds %.1f GB (%.1f GB resident), "
+        std::fprintf(stderr, "cortex metal stream: resident footprint after the fill: the process holds %.1f GB (%.1f GB resident), "
                              "planned %.1f GB, cap %.1f GB%s\n", pm1.footprint / gb, pm1.rss / gb,
                      footprint_plan(am, (double) st_->arena_used_bytes()).total / gb, cap / gb,
                      pm1.footprint > cap ? " - OVER THE CAP" : "");
@@ -1244,7 +1244,7 @@ bool Window::stream_arena(std::string& err) {
 }
 
 void Window::logpos(int Tn, const int32_t* tokens, int64_t pos0, bool head) {
-    static const char* path = std::getenv("STRATA_METAL_LOGPOS");
+    static const char* path = std::getenv("CORTEX_METAL_LOGPOS");
     if (path == nullptr || !head) return;
     if (logpos_ == nullptr) logpos_ = std::fopen(path, "ab");
     if (logpos_ == nullptr) return;
@@ -1317,17 +1317,17 @@ void Window::kprof(const std::vector<mtl::Dispatch>& ds, int Tn) {
         rows.push_back({m, c + " x" + std::to_string(v.size())});
     }
     std::sort(rows.rbegin(), rows.rend());
-    std::fprintf(stderr, "strata metal kprof: window T%d, %zu dispatches, GPU %.3f ms; classes alone (serialized) sum %.3f ms:\n",
+    std::fprintf(stderr, "cortex metal kprof: window T%d, %zu dispatches, GPU %.3f ms; classes alone (serialized) sum %.3f ms:\n",
                  Tn, ds.size(), all, sum);
-    for (const auto& [m, c] : rows) std::fprintf(stderr, "strata metal kprof: %8.3f ms %5.1f%%  %s\n", m, 100.0 * m / sum, c.c_str());
+    for (const auto& [m, c] : rows) std::fprintf(stderr, "cortex metal kprof: %8.3f ms %5.1f%%  %s\n", m, 100.0 * m / sum, c.c_str());
 }
 
 Window::~Window() {
     if (logpos_) std::fclose(logpos_);
-    if (std::getenv("STRATA_METAL_PROFILE") == nullptr) return;
+    if (std::getenv("CORTEX_METAL_PROFILE") == nullptr) return;
     auto line = [](const char* what, const Prof& x) {
         if (x.n == 0) return;
-        std::fprintf(stderr, "strata metal profile: %-10s %6lld x  %.3f ms: host before %.3f, run_graph %.3f (GPU %.3f, so "
+        std::fprintf(stderr, "cortex metal profile: %-10s %6lld x  %.3f ms: host before %.3f, run_graph %.3f (GPU %.3f, so "
                              "encode/submit/wait %.3f), patch+finish %.3f\n", what, (long long) x.n, x.all / x.n, x.pre / x.n,
                      x.rg / x.n, x.gpu / x.n, (x.rg - x.gpu) / x.n, x.fin / x.n);
     };
@@ -1343,7 +1343,7 @@ bool Window::finish(int Tn, const int32_t* tokens, int64_t pos0, bool head, int3
     ++win_n_[Tn];
     win_ms_[Tn] += now_ms() - t0;
     win_gpu_[Tn] += last_gpu_ms_;
-    static const bool prof = std::getenv("STRATA_METAL_PROFILE") != nullptr;
+    static const bool prof = std::getenv("CORTEX_METAL_PROFILE") != nullptr;
     if (prof) {
         Prof& x = prof_[Tn * 2 + (head ? 1 : 0)];
         const double t1 = now_ms();
@@ -1356,7 +1356,7 @@ bool Window::finish(int Tn, const int32_t* tokens, int64_t pos0, bool head, int3
     for (int t = 0; t < Tn; ++t) out[t] = head ? tokout_.as<int32_t>()[t] : -1;
     last_T_ = Tn;
     for (int t = 0; t < Tn; ++t) last_tokens_[t] = tokens[t];
-    static const bool trace = std::getenv("STRATA_METAL_TRACE") != nullptr;
+    static const bool trace = std::getenv("CORTEX_METAL_TRACE") != nullptr;
     if (trace && head) {
         // the pick and its margin over the runner-up (a near tie says a backend difference may flip it)
         const float* lg = lm_.as<float>();
@@ -1365,7 +1365,7 @@ bool Window::finish(int Tn, const int32_t* tokens, int64_t pos0, bool head, int3
             if (i1 < 0 || lg[i] > lg[i1]) { i2 = i1; i1 = i; }
             else if (i2 < 0 || lg[i] > lg[i2]) i2 = i;
         }
-        std::fprintf(stderr, "strata metal: window pos %lld token %d -> %d (top %d %.4f, 2nd %d %.4f, margin %.4f) %.2f ms (GPU %.2f ms, %d dispatches)\n",
+        std::fprintf(stderr, "cortex metal: window pos %lld token %d -> %d (top %d %.4f, 2nd %d %.4f, margin %.4f) %.2f ms (GPU %.2f ms, %d dispatches)\n",
                      (long long) pos0, tokens[0], out[0], i1, lg[i1], i2, lg[i2], lg[i1] - lg[i2], now_ms() - t0, last_gpu_ms_, last_n_disp_);
     }
     return true;
@@ -1395,7 +1395,7 @@ void Window::fold(std::vector<mtl::Dispatch>& ds, int n_keep, int hp) {
     nb_ = false;   // what follows reads the folded state: a barrier
 }
 
-bool Window::checkpoint_save(strata::core::ConversationCheckpoint& c, std::string& err) {
+bool Window::checkpoint_save(cortex::core::ConversationCheckpoint& c, std::string& err) {
     (void) err;
     if (pend_fold_ > 0) {   // the last commit's fold first: the checkpoint is the state after it
         std::vector<mtl::Dispatch> ds;
@@ -1441,7 +1441,7 @@ void Window::reset() {
     }
 }
 
-bool Window::checkpoint_restore(const strata::core::ConversationCheckpoint& c, std::string& err) {
+bool Window::checkpoint_restore(const cortex::core::ConversationCheckpoint& c, std::string& err) {
     const size_t gs = 4 * 128 * 48 * 128, hs = 4 * 10240 * 3, ts = 4 * 4 * 128, dsz = 4 * 128;
     if (c.gdn.size() != gst_.size() * (gs + hs) || c.ple.size() != (size_t) 4 * 9 * 10240 ||
         c.tails.size() != tail_.size() * ts || c.dead.size() != dead_.size() * dsz) {
@@ -1464,12 +1464,12 @@ bool Window::checkpoint_restore(const strata::core::ConversationCheckpoint& c, s
 
 bool Window::commit(int n_keep, std::string& err) {
     if (n_keep < 1 || n_keep > last_T_) { err = "metal window: commit count out of range"; return false; }
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     if (last_T_ > 1) {
         // the GDN layers: the kept prefix folded into the state (gdn_step over n_keep tokens from the window's own
         // inputs, with commit; bitwise the window's trajectory).  K/V and indexer cells past the prefix are rewritten
         // when those positions run again, before anything reads them.
-        static const bool lazy = !(std::getenv("STRATA_METAL_LAZY_FOLD") && std::string(std::getenv("STRATA_METAL_LAZY_FOLD")) == "0");
+        static const bool lazy = !(std::getenv("CORTEX_METAL_LAZY_FOLD") && std::string(std::getenv("CORTEX_METAL_LAZY_FOLD")) == "0");
         int nf = n_keep;
         if (partial_) {
             if (!last_head_) {   // the prompt's window committed every row in its step
@@ -1491,7 +1491,7 @@ bool Window::commit(int n_keep, std::string& err) {
             hp_ = 1 - hp_;
         }
     }
-    strata::core::SessionState& ss = *ss_;
+    cortex::core::SessionState& ss = *ss_;
     for (int t = 0; t < n_keep; ++t) {
         if (ple_on_) {
             const float* norm = normW_.as<float>() + (size_t) t * NG_HC_DIM;
@@ -1526,9 +1526,9 @@ bool Window::mtp_load(const std::string& gguf_path, int max_t, std::string& err)
         float* dst = (float*) (mnorm_.as<uint8_t>() + kv.second);
         for (uint64_t i = 0; i < x.bytes / 4; ++i) dst[i] = src[i] + 1.0f;
     }
-    lmtp_ = cx_->compile({strata_metal::resource("STRATA_METAL_ENGINE_KERNELS", "engine-msl", STRATA_METAL_ENGINE_KERNELS_DEFAULT) + "/mtp.metal"}, "#define NO_GGML_COMMON 1\n");
+    lmtp_ = cx_->compile({cortex_metal::resource("CORTEX_METAL_ENGINE_KERNELS", "engine-msl", CORTEX_METAL_ENGINE_KERNELS_DEFAULT) + "/mtp.metal"}, "#define NO_GGML_COMMON 1\n");
     {
-        const char* e = std::getenv("STRATA_METAL_MTP_Q8");
+        const char* e = std::getenv("CORTEX_METAL_MTP_Q8");
         if (!(e && std::string(e) == "0")) {
             size_t tot = 0;
             std::vector<std::string> names;
@@ -1577,9 +1577,9 @@ bool Window::mtp_load(const std::string& gguf_path, int max_t, std::string& err)
         // the subset setup put beside the draft layer (--draft-vocab: <mtp>/rt/draft_vocab.bin, as CUDA reads it),
         // else the repository's default
         const std::string beside = gguf_path.substr(0, gguf_path.find_last_of('/') + 1) + "rt/draft_vocab.bin";
-        if (const char* e = std::getenv("STRATA_METAL_DRAFT_VOCAB")) vp = e;
+        if (const char* e = std::getenv("CORTEX_METAL_DRAFT_VOCAB")) vp = e;
         else if (FILE* t = std::fopen(beside.c_str(), "rb")) { std::fclose(t); vp = beside; }
-        else vp = strata_metal::resource(nullptr, "data", STRATA_METAL_DATA_DEFAULT) + "/draft_vocab.bin";
+        else vp = cortex_metal::resource(nullptr, "data", CORTEX_METAL_DATA_DEFAULT) + "/draft_vocab.bin";
         FILE* f = vp == "full" ? nullptr : std::fopen(vp.c_str(), "rb");
         if (f) {
             int32_t id;
@@ -1602,10 +1602,10 @@ bool Window::mtp_load(const std::string& gguf_path, int max_t, std::string& err)
     {
         const int ty = T("token_embd.weight").type;
         const int ok_types[] = {30, 8, 2, 6, 20, 23, 42, 21, 11, 12, 13, 14, 18};
-        const char* e = std::getenv("STRATA_METAL_MTP_CHAIN");
+        const char* e = std::getenv("CORTEX_METAL_MTP_CHAIN");
         chain_ = !(e && std::string(e) == "0") && std::find(std::begin(ok_types), std::end(ok_types), ty) != std::end(ok_types);
         if (chain_) {
-            lchain_ = cx_->compile({"quant.metal", "units.metal", strata_metal::resource("STRATA_METAL_ENGINE_KERNELS", "engine-msl", STRATA_METAL_ENGINE_KERNELS_DEFAULT) + "/mtp_chain.metal"});
+            lchain_ = cx_->compile({"quant.metal", "units.metal", cortex_metal::resource("CORTEX_METAL_ENGINE_KERNELS", "engine-msl", CORTEX_METAL_ENGINE_KERNELS_DEFAULT) + "/mtp_chain.metal"});
             dout_ = A(4 * MAXT); dprob_ = A(4 * MAXT); posv_ = A(4 * N);
             for (int i = 0; i < N; ++i) posv_.as<float>()[i] = (float) i;
             dmap_ = A(4 * std::max<size_t>(1, dvocab_.size()));
@@ -1630,15 +1630,15 @@ bool Window::mtp_load(const std::string& gguf_path, int max_t, std::string& err)
                 ref::dequant(te.type, (const uint8_t*) W_.ptr + te.offset + (size_t) probe[k] * rb, ref_row.data(), N);
                 for (int i = 0; i < N; ++i) worst = std::max(worst, (double) std::fabs(ref_row[i] - memb_.as<float>()[i]));
             }
-            std::fprintf(stderr, "strata metal: MTP draft round in one command buffer (embedding type %d on the GPU: max "
+            std::fprintf(stderr, "cortex metal: MTP draft round in one command buffer (embedding type %d on the GPU: max "
                                  "|GPU - host| %.3g over %d rows)\n", ty, worst, MAXT);
             if (worst > 1e-6) {
-                std::fprintf(stderr, "strata metal: the GPU embedding differs from the host's: a command buffer per step\n");
+                std::fprintf(stderr, "cortex metal: the GPU embedding differs from the host's: a command buffer per step\n");
                 chain_ = false;
             }
         }
     }
-    std::fprintf(stderr, "strata metal: MTP draft layer from %s (%.2f GB, %zu norms folded), draft head over %s tokens\n",
+    std::fprintf(stderr, "cortex metal: MTP draft layer from %s (%.2f GB, %zu norms folded), draft head over %s tokens\n",
                  gguf_path.c_str(), fm_.file_bytes / 1e9, mnorm_off_.size(),
                  dvocab_.empty() ? "all" : std::to_string(dvocab_.size()).c_str());
     return true;
@@ -1924,7 +1924,7 @@ void Window::mtp_pick(std::vector<mtl::Dispatch>& ds, int j, bool embed) {
 
 // One round (mtp.hpp's draft()): the window's rows 0..a-1 caught up (K/V), then the full layer on row a (draft 0) and
 // on its own output for the next drafts.  By default the whole round is one command buffer (the pick, its
-// probability and the next step's embedding on the GPU); STRATA_METAL_MTP_CHAIN=0: a command buffer per step, the
+// probability and the next step's embedding on the GPU); CORTEX_METAL_MTP_CHAIN=0: a command buffer per step, the
 // host picking and dequantizing.  The embedding rows: the catch-up's at memb_ rows 0..a-1, draft 0's at row a.
 bool Window::mtp_draft(int Tn, const int32_t* tokens, int64_t p, int a, int max_steps, int32_t* drafts, float* probs,
                        float min_p, int* n_drafts, std::string& err) {
@@ -1996,8 +1996,8 @@ bool Window::copy_logits(int t, float* host) const {
 // as grouped GEMMs (v2 on the M4, v3 on the M5).  The GDN state, the conv history, the K/V and indexer cells and the
 // PLE history are the decode window's own, so decoding goes on from them.  With SSD streaming the experts of a layer
 // are put in place at the layer's handshake (the arena's misses) and the next layer's are streamed in behind it.
-// STRATA_METAL_PROMPT_GEMM=0: prompts through the decode window (8 rows at a time).  Its numerics differ from the
-// window's (fp16 operands): STRATA_METAL_PROMPT_GEMM_MIN (default 64) keeps shorter prompts on the window path.
+// CORTEX_METAL_PROMPT_GEMM=0: prompts through the decode window (8 rows at a time).  Its numerics differ from the
+// window's (fp16 operands): CORTEX_METAL_PROMPT_GEMM_MIN (default 64) keeps shorter prompts on the window path.
 namespace {
 struct PgDq { uint32_t n_in, n_out, row_bytes, perm; };
 struct PgGemm { int M, N, K, pad; };
@@ -2029,11 +2029,11 @@ int Window::prompt_chunk_rows() const { return pg_ ? pg_->MT : 0; }
 
 bool Window::prompt_gemm_on(int64_t n) const {
     static const bool on = [] {
-        const char* e = std::getenv("STRATA_METAL_PROMPT_GEMM");
+        const char* e = std::getenv("CORTEX_METAL_PROMPT_GEMM");
         return e ? std::string(e) != "0" : true;
     }();
     static const int64_t mn = [] {
-        const char* e = std::getenv("STRATA_METAL_PROMPT_GEMM_MIN");
+        const char* e = std::getenv("CORTEX_METAL_PROMPT_GEMM_MIN");
         return e ? (int64_t) std::atoll(e) : (int64_t) 64;
     }();
     return on && n >= mn && pg_ != nullptr;
@@ -2042,7 +2042,7 @@ bool Window::prompt_gemm_on(int64_t n) const {
 bool Window::prompt_gemm_init(std::string& err) {
     if (pg_) return true;
     if (stream_ && !st_->ready()) return stream_arena(err);   // it makes the prompt buffers after the arena
-    const char* ec = std::getenv("STRATA_METAL_PROMPT_CHUNK");
+    const char* ec = std::getenv("CORTEX_METAL_PROMPT_CHUNK");
     // Streaming: every chunk makes one pass over the layer's experts that are not in the arena, so a longer chunk
     // streams each expert fewer times. M5 Max, UD-Q5, warm: 1024 -> 700 tok/s at 4K, 2048 -> 920, 4096 -> 1,100 (32K the
     // same). The longer chunk's buffers (4.3 GB) come out of the arena only while a prompt runs, so it is the default on a
@@ -2061,9 +2061,9 @@ bool Window::prompt_gemm_init(std::string& err) {
     p.lgdn = cx_->compile({"gdn.metal", "gdn_prompt.metal"}, "#define NO_GGML_COMMON 1\n");
     p.lqsa = cx_->compile({"qsa.metal", "qsa_prompt.metal"}, "#define NO_GGML_COMMON 1\n");
     p.k4 = ::coop_k4(*cx_);
-    const char* eg = std::getenv("STRATA_METAL_PROMPT_EXPERTS");   // v2 | v3 (default: v3 with the M5's layout)
+    const char* eg = std::getenv("CORTEX_METAL_PROMPT_EXPERTS");   // v2 | v3 (default: v3 with the M5's layout)
     p.gu_v3 = p.dn_v3 = eg ? std::string(eg) == "v3" : p.k4;
-    const char* eq = std::getenv("STRATA_METAL_PROMPT_QSA");       // v1 | flash (default: flash with the M5's layout)
+    const char* eq = std::getenv("CORTEX_METAL_PROMPT_QSA");       // v1 | flash (default: flash with the M5's layout)
     p.flash = eq ? std::string(eq) == "flash" : p.k4;
     const size_t MT = (size_t) C;
     p.maxrows = C * TOPK + NEXP * p.TM;
@@ -2121,7 +2121,7 @@ bool Window::prompt_gemm_init(std::string& err) {
     }
     make();
     pg_ = pg.release();
-    std::fprintf(stderr, "strata metal: prompts on the matrix units in chunks of %d (experts %s, QSA %s, matmul2d layout %s; "
+    std::fprintf(stderr, "cortex metal: prompts on the matrix units in chunks of %d (experts %s, QSA %s, matmul2d layout %s; "
                          "%.2f GB of buffers%s)\n", C, p.gu_v3 ? "v3" : "v2", p.flash ? "flash" : "v1", p.k4 ? "K4" : "other",
                  need / 1e9, stream_ ? ", in the expert arena while a prompt runs" : "");
     (void) err;
@@ -2156,12 +2156,12 @@ bool Window::prompt_chunk(const int32_t* tokens, int Tn, int64_t pos0, std::stri
             for (int c = 1; c < HC; ++c) std::memcpy(r + (size_t) c * N, r, (size_t) N * 4);
         }
     }
-    strata::core::SessionState& ss = *ss_;
+    cortex::core::SessionState& ss = *ss_;
     if (ple_on_) {
-        std::vector<uint32_t> rows((size_t) T * strata::kernels::PLE_N_HEADS);
+        std::vector<uint32_t> rows((size_t) T * cortex::kernels::PLE_N_HEADS);
         int32_t prev[2] = {ss.ple_prev[0], ss.ple_prev[1]};
         for (int t = 0; t < T; ++t) {
-            strata::kernels::ngram_rows(&tokens[t], prev, 1, ss.ple.consts, rows.data() + (size_t) t * strata::kernels::PLE_N_HEADS);
+            cortex::kernels::ngram_rows(&tokens[t], prev, 1, ss.ple.consts, rows.data() + (size_t) t * cortex::kernels::PLE_N_HEADS);
             prev[0] = prev[1];
             prev[1] = tokens[t];
         }
@@ -2412,7 +2412,7 @@ bool Window::prompt_chunk(const int32_t* tokens, int Tn, int64_t pos0, std::stri
             GrArgs a{N, HC, LR, (uint32_t) T, 1u, eps_};
             D(P(lib_, "gr_norm", {}, "gr_norm"), {mtl::Arg::B(p.R), mtl::Arg::B(p.bo), mtl::Arg::B(p.inj[ci]), mtl::Arg::B(W_, tn.offset),
                                                   mtl::Arg::B(p.YE), mtl::Arg::V(a)}, HC, T, 256);
-            struct PleArgs { uint32_t n_embd, hc; float eps; } pl{N, HC, strata::kernels::NG_RMS_EPS};
+            struct PleArgs { uint32_t n_embd, hc; float eps; } pl{N, HC, cortex::kernels::NG_RMS_EPS};
             auto off = [&](const char* n) { return TN(n).offset; };
             D(P(lple_, "ple_gnorm", {}, "ple_gnorm"), {mtl::Arg::B(p.pkey), mtl::Arg::B(W_, off("blk.1.ple_norm_key.weight")),
                                                       mtl::Arg::B(p.keyn), mtl::Arg::V(pl)}, HC, T, 256);
@@ -2445,12 +2445,12 @@ bool Window::prompt_chunk(const int32_t* tokens, int Tn, int64_t pos0, std::stri
     }
     pg_ms_ += now_ms() - t0;
     pg_tok_ += T;
-    static const bool trace = std::getenv("STRATA_METAL_TRACE") != nullptr;
-    if (trace) std::fprintf(stderr, "strata metal: prompt chunk pos %lld, %d rows: %.0f ms\n", (long long) pos0, T, now_ms() - t0);
+    static const bool trace = std::getenv("CORTEX_METAL_TRACE") != nullptr;
+    if (trace) std::fprintf(stderr, "cortex metal: prompt chunk pos %lld, %d rows: %.0f ms\n", (long long) pos0, T, now_ms() - t0);
     // the window's state after the chunk: the conv history turned, the PLE history and token window advanced
     hp_ = 1 - hp_;
     if (ple_on_) {
-        using namespace strata::kernels;
+        using namespace cortex::kernels;
         float* hist = pleHist_.as<float>();
         const float* nw = p.normW.as<float>();
         for (int c = 0; c < NG_HC_DIM; ++c) {
@@ -2495,7 +2495,7 @@ void window_destroy(void* w) {
         window_register(nullptr);
     }
 }
-bool window_init(void* w, const strata::core::ModelGeometry& g, strata::core::SessionState& ss, int max_t, int64_t max_cells,
+bool window_init(void* w, const cortex::core::ModelGeometry& g, cortex::core::SessionState& ss, int max_t, int64_t max_cells,
                  int64_t* n_vocab, std::string& err) {
     Window* x = (Window*) w;
     if (!x->ready()) {
@@ -2508,24 +2508,24 @@ bool window_init(void* w, const strata::core::ModelGeometry& g, strata::core::Se
     *n_vocab = x->vocab();
     return true;
 }
-bool window_ensure(const strata::core::ModelGeometry& g, strata::core::SessionState& ss, int64_t max_cells, std::string& err) {
+bool window_ensure(const cortex::core::ModelGeometry& g, cortex::core::SessionState& ss, int64_t max_cells, std::string& err) {
     int64_t nv = 0;
     return window_init(window_create(), g, ss, MAXT, max_cells, &nv, err);
 }
 bool window_run(void* w, int T, const int32_t* tokens, int64_t pos0, bool head, int32_t* out, std::string& err) {
-    // STRATA_LOGPOS (the quant yardstick, the KL harness): every window's head logits are read, also the prompt's
+    // CORTEX_LOGPOS (the quant yardstick, the KL harness): every window's head logits are read, also the prompt's
     // windows that sample nothing (head_sampling off)
-    static const bool logpos = std::getenv("STRATA_LOGPOS") != nullptr;
+    static const bool logpos = std::getenv("CORTEX_LOGPOS") != nullptr;
     return ((Window*) w)->run(T, tokens, pos0, head || logpos, out, err);
 }
 void window_reset() {
     if (g_the_window != nullptr && g_the_window->ready()) g_the_window->reset();
 }
-bool window_checkpoint_save(strata::core::ConversationCheckpoint& c, std::string& err) {
+bool window_checkpoint_save(cortex::core::ConversationCheckpoint& c, std::string& err) {
     if (g_the_window == nullptr || !g_the_window->ready()) { err = "metal window: not up"; return false; }
     return g_the_window->checkpoint_save(c, err);
 }
-bool window_checkpoint_restore(const strata::core::ConversationCheckpoint& c, std::string& err) {
+bool window_checkpoint_restore(const cortex::core::ConversationCheckpoint& c, std::string& err) {
     if (g_the_window == nullptr || !g_the_window->ready()) { err = "metal window: not up"; return false; }
     return g_the_window->checkpoint_restore(c, err);
 }
@@ -2537,7 +2537,7 @@ bool window_commit(void* w, int n_keep, std::string& err) {
 }
 bool window_copy_logits(void* w, int t, float* host) { return ((Window*) w)->copy_logits(t, host); }
 
-// the MTP hook (src/core/mtp.cpp under STRATA_GPU_METAL): the drafter lives beside the decode window it reads
+// the MTP hook (src/core/mtp.cpp under CORTEX_GPU_METAL): the drafter lives beside the decode window it reads
 namespace {
 Window* g_window = nullptr;
 }
@@ -2547,10 +2547,10 @@ std::string g_mtp_path;
 int g_mtp_max_t = 0;
 bool mtp_load(const std::string& rt_dir, int max_t, std::string& err) {
     (void) err;
-    // the MTP model in GGUF form (tools/mtp_pack.py) beside the rt directory: STRATA_METAL_MTP_GGUF, else
+    // the MTP model in GGUF form (tools/mtp_pack.py) beside the rt directory: CORTEX_METAL_MTP_GGUF, else
     // <rt>/../mtp-q2_0.gguf
     std::string path;
-    if (const char* e = std::getenv("STRATA_METAL_MTP_GGUF")) path = e;
+    if (const char* e = std::getenv("CORTEX_METAL_MTP_GGUF")) path = e;
     else {
         std::string d = rt_dir;
         while (!d.empty() && d.back() == '/') d.pop_back();
@@ -2579,12 +2579,12 @@ bool prompt_run(const int64_t* tokens, int64_t n, int64_t pos0, const float* con
 bool prompt_run_rows(const int64_t* tokens, int64_t n, int64_t pos0,
                      const std::function<bool(const float*, int64_t, int64_t, std::string&)>& on_chunk, std::string& err) {
     if (g_window == nullptr) { err = "metal prompt: the decode window is not up yet"; return false; }
-    static const bool windows = std::getenv("STRATA_METAL_PROMPT") && std::string(std::getenv("STRATA_METAL_PROMPT")) == "window";
-    static const int64_t min_rows = std::getenv("STRATA_METAL_PROMPT_MIN") ? std::atoll(std::getenv("STRATA_METAL_PROMPT_MIN")) : 32;
+    static const bool windows = std::getenv("CORTEX_METAL_PROMPT") && std::string(std::getenv("CORTEX_METAL_PROMPT")) == "window";
+    static const int64_t min_rows = std::getenv("CORTEX_METAL_PROMPT_MIN") ? std::atoll(std::getenv("CORTEX_METAL_PROMPT_MIN")) : 32;
     if (!windows && !g_window->streaming() && n >= min_rows) return g_window->prompt(tokens, n, pos0, on_chunk, err);
     if (!windows && g_window->streaming()) {
-        const char* e = std::getenv("STRATA_METAL_PROMPT_GEMM");
-        const char* em = std::getenv("STRATA_METAL_PROMPT_GEMM_MIN");
+        const char* e = std::getenv("CORTEX_METAL_PROMPT_GEMM");
+        const char* em = std::getenv("CORTEX_METAL_PROMPT_GEMM_MIN");
         const int64_t mn = em ? std::atoll(em) : 64;
         if (!(e && std::string(e) == "0") && n >= mn) {
             if (!g_window->prompt_gemm_init(err)) return false;
@@ -2625,16 +2625,16 @@ bool mtp_draft(int T, const int32_t* tokens, int64_t p, int a, int max_steps, in
 
 #include "prompt_chain.inc"
 
-}  // namespace strata::metal_engine
-namespace strata::gpu { void* host_view(const void* device_pointer); }
-namespace strata::kernels {
+}  // namespace cortex::metal_engine
+namespace cortex::gpu { void* host_view(const void* device_pointer); }
+namespace cortex::kernels {
 void mrope_table_set(const int32_t* device_table) {
-    strata::metal_engine::g_mrope_dev = device_table;
-    strata::metal_engine::g_mrope_host =
-        device_table ? (const int32_t*) strata::gpu::host_view(device_table) : nullptr;
+    cortex::metal_engine::g_mrope_dev = device_table;
+    cortex::metal_engine::g_mrope_host =
+        device_table ? (const int32_t*) cortex::gpu::host_view(device_table) : nullptr;
 }
-const int32_t* mrope_table() { return strata::metal_engine::g_mrope_dev; }
-}  // namespace strata::kernels
-namespace strata::metal_engine {
+const int32_t* mrope_table() { return cortex::metal_engine::g_mrope_dev; }
+}  // namespace cortex::kernels
+namespace cortex::metal_engine {
 
-}  // namespace strata::metal_engine
+}  // namespace cortex::metal_engine

@@ -10,7 +10,7 @@ import { answerNotice, tunePresetAction, tuneStatus, tuneUndo, type TuneProgress
 type Phase = 'idle' | 'running' | 'result';
 
 /**
- * Tune model: find the fastest settings for this PC and keep them. The tuner is Strata Control's (the same one the Terminal runs,
+ * Tune model: find the fastest settings for this PC and keep them. The tuner is Cortex Control's (the same one the Terminal runs,
  * with the same saved tunings); this dialog only starts it, shows its progress and result in plain words, and lists, switches,
  * renames, deletes and undoes the saved tunings. It reuses the Auto-tune dialog's look.
  */
@@ -83,7 +83,7 @@ export function NativeTune({ open, onClose, model, resourceProfile, vision }: {
                 {notice(active.answers?.class, active.answers?.default_repeatable)}
                 {stale ? <p className="small">{status?.state === 'hard' ? tr("This PC changed since it was tuned, so these settings are not used until you tune again.") : tr("This PC or the engine changed since it was tuned. A short check takes about 2 minutes.")}</p> : null}</div>
                 : <p className="small muted">{tr("No saved tuning for these choices yet.")}</p>}
-            <p className="small muted">{tr("Strata tries different settings on this PC and keeps the ones that make answers faster. Your model is unloaded while this runs, and the computer will be busy.")}</p>
+            <p className="small muted">{tr("Cortex tries different settings on this PC and keeps the ones that make answers faster. Your model is unloaded while this runs, and the computer will be busy.")}</p>
             {other ? <p className="small inline-error" role="alert">{tr("Finish the current operation first.")}</p> : null}
             <label className="input-field"><span>{tr("How long to spend")}</span><Select value={mode} ariaLabel={tr("How long to spend")} options={[{ value: 'quick', label: 'Quick (about 20 minutes)' }, { value: 'thorough', label: 'Thorough (up to 2 hours)' }]} onChange={v => setMode(v as 'quick' | 'thorough')}/></label>
             <label className="input-field"><span>{tr("What you mostly do")}</span><Select value={use} ariaLabel={tr("What you mostly do")} options={[{ value: 'chat', label: 'Chat' }, { value: 'coding', label: 'Coding with long prompts' }]} onChange={v => setUse(v as 'chat' | 'coding')}/></label>

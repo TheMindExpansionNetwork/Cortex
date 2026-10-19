@@ -1,6 +1,6 @@
 // src/kernels/cpu/expert_layout.cpp - plan v0.3 P6: the per-layer expert table.  See the header.
-#include "strata/kernels/cpu/expert_layout.hpp"
-#include "strata/kernels/cpu/hadamard.hpp"
+#include "cortex/kernels/cpu/expert_layout.hpp"
+#include "cortex/kernels/cpu/hadamard.hpp"
 
 #include <atomic>
 #include <cstdio>
@@ -16,7 +16,7 @@
 #include <fstream>
 #include <sstream>
 
-namespace strata::kernels::cpu {
+namespace cortex::kernels::cpu {
 namespace {
 ExpertLayout g_layout;
 }
@@ -24,16 +24,16 @@ ExpertLayout g_layout;
 const ExpertLayout& expert_layout() { return g_layout; }
 
 int cpu_isa_cap() {
-    // STRATA_FORCE_ISA (tests, the experimental older-CPU builds): the engine's own dispatch acts as if this CPU
+    // CORTEX_FORCE_ISA (tests, the experimental older-CPU builds): the engine's own dispatch acts as if this CPU
     // stopped at that level.  ggml-cpu is not affected: it runs what the build compiled it for.
     static const int cap = [] {
-        const char* f = std::getenv("STRATA_FORCE_ISA");
+        const char* f = std::getenv("CORTEX_FORCE_ISA");
         if (f == nullptr || f[0] == '\0') return 3;
         const std::string v(f);
         if (v == "avx2") return 2;
         if (v == "avx") return 1;
         if (v == "sse" || v == "sse4.2" || v == "none") return 0;
-        std::fprintf(stderr, "strata: STRATA_FORCE_ISA=%s is not avx2, avx or sse; ignored\n", f);
+        std::fprintf(stderr, "cortex: CORTEX_FORCE_ISA=%s is not avx2, avx or sse; ignored\n", f);
         return 3;
     }();
     return cap;
@@ -41,7 +41,7 @@ int cpu_isa_cap() {
 
 bool cpu_avx512_ok() {
     static const bool ok = [] {
-        if (const char* f = std::getenv("STRATA_FORCE_AVX2"); f != nullptr && f[0] == '1') return false;
+        if (const char* f = std::getenv("CORTEX_FORCE_AVX2"); f != nullptr && f[0] == '1') return false;
         if (cpu_isa_cap() < 3) return false;
         unsigned r[4] = {0, 0, 0, 0};
         auto cpuid = [&](unsigned leaf, unsigned sub) {
@@ -76,7 +76,7 @@ bool cpu_avx512_ok() {
 
 bool cpu_avx512bw_ok() {
     static const bool ok = [] {
-        if (const char* f = std::getenv("STRATA_FORCE_AVX2"); f != nullptr && f[0] == '1') return false;
+        if (const char* f = std::getenv("CORTEX_FORCE_AVX2"); f != nullptr && f[0] == '1') return false;
         unsigned r[4] = {0, 0, 0, 0};
         auto cpuid = [&](unsigned leaf, unsigned sub) {
 #if defined(_MSC_VER)
@@ -145,7 +145,7 @@ bool cpu_avx2_ok() {
 
 bool cpu_avx1_ok() {
     // AVX (Sandy Bridge, 2011): AVX + OSXSAVE with the OS saving the YMM state; FMA, F16C and AVX2 not needed.
-    // From the Strata_Dirigo fork (rwkeyes).
+    // From the Cortex_Dirigo fork (rwkeyes).
     static const bool ok = [] {
         if (cpu_isa_cap() < 1) return false;
         unsigned r[4] = {0, 0, 0, 0};
@@ -187,9 +187,9 @@ bool cpu_sse42_ok() {
 }
 
 const char* isa_floor_build() {
-#if defined(STRATA_ISA_FLOOR_AVX)
+#if defined(CORTEX_ISA_FLOOR_AVX)
     return "avx";
-#elif defined(STRATA_ISA_FLOOR_NONE)
+#elif defined(CORTEX_ISA_FLOOR_NONE)
     return "sse4.2";
 #else
     return "";
@@ -210,7 +210,7 @@ void cpuid_regs(unsigned leaf, unsigned sub, unsigned r[4]) {
 
 int iq256_gather_setting() {
     static const int s = [] {
-        const char* v = std::getenv("STRATA_IQ256_GATHER");
+        const char* v = std::getenv("CORTEX_IQ256_GATHER");
         if (v == nullptr || v[0] == '\0') return -1;
         return std::atoi(v) != 0 ? 1 : 0;
     }();
@@ -219,7 +219,7 @@ int iq256_gather_setting() {
 
 bool cpu_gather_fast() {
     static const bool ok = [] {
-        if (cpu_isa_cap() < 3) return false;   // STRATA_FORCE_ISA: as on a CPU that stops at AVX2
+        if (cpu_isa_cap() < 3) return false;   // CORTEX_FORCE_ISA: as on a CPU that stops at AVX2
         unsigned r[4];
         cpuid_regs(0, 0, r);
         const unsigned max_leaf = r[0];
@@ -260,7 +260,7 @@ bool cpu_gather_fast_here() {
 
 bool cpu_avxvnni_ok() {
     static const bool ok = [] {
-        if (const char* v = std::getenv("STRATA_NO_AVXVNNI"); v != nullptr && std::atoi(v) != 0) return false;
+        if (const char* v = std::getenv("CORTEX_NO_AVXVNNI"); v != nullptr && std::atoi(v) != 0) return false;
         if (isa_floor_build()[0] != '\0' || cpu_isa_cap() < 3 || !cpu_avx2_ok()) return false;
         unsigned r[4];
         cpuid_regs(0, 0, r);
@@ -347,7 +347,7 @@ void cpu_require_expert_support() {
     const CpuFeatures f = cpu_features();
     if (f.usable()) return;
     std::fprintf(stderr,
-                 "strata: this CPU cannot run the expert kernel: %s.\n"
+                 "cortex: this CPU cannot run the expert kernel: %s.\n"
                  "        The engine needs AVX512-VNNI and AVX512-VBMI (Intel Ice Lake / AMD Zen 4 or newer).\n"
                  "        The scalar fallback exists for tests only and is far too slow to decode with.\n",
                  f.reason());
@@ -374,7 +374,7 @@ void act_quant_any(const float* x, int n, ActQ& a) {
     else act_quant_q8_1_avx1(x, n, a);   // issue #1699
 }
 
-#if !defined(STRATA_NATIVE_EXPERTS)
+#if !defined(CORTEX_NATIVE_EXPERTS)
 // Without ggml-cpu no native pack loads (expert_layout_load refuses), so these are never reached.
 bool native_experts_available() noexcept { return false; }
 bool native_fmt(int, int, int64_t, int64_t, NativeFmt&, std::string& err) { err = "built without native experts"; return false; }
@@ -396,8 +396,8 @@ bool expert_layout_load(const std::string& pack_dir, int64_t n_layers, int64_t n
         g_layout = L;
         return true;
     }
-#if !defined(STRATA_NATIVE_EXPERTS)
-    err = "this pack has native (IQ) experts but the engine was built without STRATA_NATIVE_EXPERTS";
+#if !defined(CORTEX_NATIVE_EXPERTS)
+    err = "this pack has native (IQ) experts but the engine was built without CORTEX_NATIVE_EXPERTS";
     return false;
 #else
     L.native = true;
@@ -409,9 +409,9 @@ bool expert_layout_load(const std::string& pack_dir, int64_t n_layers, int64_t n
     while (std::getline(in, line)) {
         if (line.empty() || line[0] == '#') {
             if (!line.empty() && line[0] == '#') {
-                // "# strata native experts vN: ...".  A version this engine does not know may mean columns it
+                // "# cortex native experts vN: ...".  A version this engine does not know may mean columns it
                 // would misread, so it is refused rather than parsed as far as the known columns go.
-                static const char tag[] = "# strata native experts v";
+                static const char tag[] = "# cortex native experts v";
                 if (line.compare(0, sizeof tag - 1, tag) == 0) {
                     L.version = std::atoi(line.c_str() + sizeof tag - 1);
                     if (L.version > kExpertLayoutVersion) {
@@ -517,7 +517,7 @@ bool expert_layout_load(const std::string& pack_dir, int64_t n_layers, int64_t n
                       std::to_string(l) + "'s expert widths";
                 return false;
             }
-            // the Q2_0 rows quantize their activations with Strata's own act_quant_any, which does not rotate
+            // the Q2_0 rows quantize their activations with Cortex's own act_quant_any, which does not rotate
             if ((f.had_gu && f.gu_type == 42) || (f.had_d && f.d_type == 42)) {
                 err = "hadamard.txt: layer " + std::to_string(l) + " folds a Q2_0 expert, which this engine cannot rotate";
                 return false;
@@ -536,4 +536,4 @@ bool expert_layout_load(const std::string& pack_dir, int64_t n_layers, int64_t n
 #endif
 }
 
-}  // namespace strata::kernels::cpu
+}  // namespace cortex::kernels::cpu

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tool execution, approval and cancellation, end to end (checklist A03, A04, A05).
 
-This drives the real path — a scripted Strata worker, the Harness agent loop with its real bash tool,
+This drives the real path — a scripted Cortex worker, the Harness agent loop with its real bash tool,
 and a durable session — so what it proves is the *integration*, not a mock of it.
 
 The model is scripted. That is a deliberate and limited choice: writing a file via bash is
@@ -14,7 +14,7 @@ Three flows, each with one assertion that matters:
 **A03 — the tool runs once, in the Harness.**
     The scripted turn calls bash to append a line to a file. The assertions are that the file has
     exactly one line (so the tool ran exactly once), that the durable session records a tool call and
-    a tool result, and that the Strata worker was given the transcript rather than executing anything
+    a tool result, and that the Cortex worker was given the transcript rather than executing anything
     itself — the worker has no tool-execution path at all, and the call count is the evidence. The
     call escalates the sandbox, so it cannot run until a peer *grants* it: the flow connects that peer
     and asserts an approval was asked, answered, and recorded as the grant.
@@ -56,14 +56,14 @@ import http.client
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-STRATA = HERE.parents[1]
+CORTEX = HERE.parents[1]
 PROFILE_PATCH = HERE / "profile" / "cordis.patch.yml"
 #: A TEST-ONLY overlay, applied after the product patch. It disables the session-title model
 #: request, which a scripted worker cannot absorb: the worker replays one script per request, so
 #: an extra request shifts every later reply and the run looks like a model that chose not to
 #: call a tool. The product profile must keep answering title requests, so the row lives here.
 SCRIPTED_OVERLAY = HERE / "profile" / "scripted-worker.cordis.patch.yml"
-PYTHON = os.environ.get("STRATA_PYTHON", sys.executable)
+PYTHON = os.environ.get("CORTEX_PYTHON", sys.executable)
 
 #: The bash call the scripted worker emits. It appends exactly one line, so counting the lines counts
 #: the executions -- a replayed tool would leave two.
@@ -386,7 +386,7 @@ def wait_for_worker(port: int, timeout: float = 60.0) -> None:
 
 
 def write_profile(port: int, tmp: Path) -> Path:
-    """The Strata profile patch with this run's worker port.
+    """The Cortex profile patch with this run's worker port.
 
     The shipped patch names 8095, and a worker left over from an earlier session on that port will
     happily answer every request -- producing a green run against the *wrong* worker, which is
@@ -417,7 +417,7 @@ def start_worker(scripts: list[str], port: int, log_path: Path,
     for script in scripts:
         argv += ["--script", script]
     handle = log_path.open("wb")
-    return subprocess.Popen(argv, cwd=str(STRATA), stdout=handle, stderr=subprocess.STDOUT)
+    return subprocess.Popen(argv, cwd=str(CORTEX), stdout=handle, stderr=subprocess.STDOUT)
 
 
 def worker_port_in_use(port: int) -> bool:
@@ -429,7 +429,7 @@ def worker_port_in_use(port: int) -> bool:
 
 def start_agent(dsh: Path, port: int, home: Path, profile: str, log_path: Path,
                 cwd: Path, patch: Path) -> subprocess.Popen:
-    """Boot the agent with the Strata profile.
+    """Boot the agent with the Cortex profile.
 
     The profile is selected the way the working bridge does it: `--profile <base> --patch <file>`, a
     patch layer over a shipped bundle. `dsh web --profile` does not exist, and passing it produces
@@ -760,7 +760,7 @@ def main() -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dsh", required=True, help="path to the dsh executable")
     parser.add_argument("--profile", default="web",
-                        help="the base bundle profile the Strata patch layers over")
+                        help="the base bundle profile the Cortex patch layers over")
     parser.add_argument("--base-port", type=int, default=8300)
     parser.add_argument("--only", default=None, help="run one flow: A03, A04 or A05")
     parser.add_argument("--keep", action="store_true", help="keep the temporary directory")
@@ -775,7 +775,7 @@ def main() -> int:
         if shutil.which(tool) is None:
             raise SystemExit(f"{tool} is required to read the durable session")
 
-    tmp = Path(tempfile.mkdtemp(prefix="strata-tool-flow-"))
+    tmp = Path(tempfile.mkdtemp(prefix="cortex-tool-flow-"))
     print(f"working in {tmp}")
     results: dict = {}
     try:

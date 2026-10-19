@@ -19,7 +19,7 @@ import { createAgentTools } from './agent/tools-settings.mjs';
 import { withPlainStatus } from './agent/status.mjs';
 import { findBrowser, findPlaywrightMcp } from './agent/browser-probe.mjs';
 /**
- * Strata engine host.
+ * Cortex engine host.
  *
  *   node server/index.mjs                 # API only (use with `npm run dev`)
  *   node server/index.mjs --dist dist     # API + the built web app on one port
@@ -78,57 +78,57 @@ const HERE = fileURLToPath(new URL('.', import.meta.url));
 const ROOT = resolve(HERE, '..');
 const argv = process.argv.slice(2);
 const distFlag = argv.indexOf('--dist');
-// `STRATA_DIST` exists for carriers that load this module directly rather than starting it as its
+// `CORTEX_DIST` exists for carriers that load this module directly rather than starting it as its
 // own process (the Electron app does that). Such a carrier cannot rely on `--dist`: when the host
 // runs as the Electron main process, `process.argv` is Chromium's switch list and the host's own
 // flags are not reliably present. An explicit environment variable is unambiguous, and the CLI
 // `--dist` form keeps working unchanged.
-const DIST = process.env.STRATA_DIST
-  ? resolve(process.env.STRATA_DIST)
+const DIST = process.env.CORTEX_DIST
+  ? resolve(process.env.CORTEX_DIST)
   : distFlag >= 0
     ? resolve(argv[distFlag + 1] ?? join(ROOT, 'dist'))
     : join(ROOT, 'dist');
-const PORT = Number(process.env.STRATA_PORT ?? 8791);
-const HOST = process.env.STRATA_BIND ?? '127.0.0.1';
+const PORT = Number(process.env.CORTEX_PORT ?? 8791);
+const HOST = process.env.CORTEX_BIND ?? '127.0.0.1';
 /* The folder chats work in when nothing else is chosen. It is never the app's own folder (the host is started inside its install
    directory, so `process.cwd()` was "host" in the sidebar and the agent could read and write the app): the person's own
-   Documents\Strata\Workspace (the models folder is next to it, not in it), created on first use, unless STRATA_WORKSPACE names one. */
+   Documents\Cortex\Workspace (the models folder is next to it, not in it), created on first use, unless CORTEX_WORKSPACE names one. */
 function defaultWorkspace() {
-  if (process.env.STRATA_WORKSPACE) return resolve(process.env.STRATA_WORKSPACE);
+  if (process.env.CORTEX_WORKSPACE) return resolve(process.env.CORTEX_WORKSPACE);
   const user = process.env.USERPROFILE ?? process.env.HOME ?? homedir();
   for (const base of [join(user, 'Documents'), user]) {
-    const dir = join(base, 'Strata', 'Workspace');
+    const dir = join(base, 'Cortex', 'Workspace');
     try { mkdirSync(dir, { recursive: true }); return dir; } catch { /* try the next place */ }
   }
   return user;
 }
 const WORKSPACE = defaultWorkspace();
-const WORKSPACE_NAME = process.env.STRATA_WORKSPACE ? basename(WORKSPACE) : 'Strata';
+const WORKSPACE_NAME = process.env.CORTEX_WORKSPACE ? basename(WORKSPACE) : 'Cortex';
 /** True for the app's own install/source folder or anything inside it. */
 const insideApp = path => { const rel = relative(ROOT, resolve(path)); return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel)); };
 
 const hub = new EventHub();
 const modelProviders = createModelProviders({ directory: store.DATA_DIR, changed: value => hub.send('providers', withPictureAnswers(value)) });
 const imageModels = createImageModels({ dataDir: store.DATA_DIR, modelsDir: () => store.MODELS_DIR, real: models.REAL, changed: value => hub.send('image-models', value) });
-/* The installed app ships Strata Control (python + strata_control) next to the host; a source checkout has none and keeps its older paths. */
+/* The installed app ships Cortex Control (python + cortex_control) next to the host; a source checkout has none and keeps its older paths. */
 const CONTROL = findControl();
 const control = createControl({ control: CONTROL });
-// Files a run as administrator made in Strata's own folders (owner Administrators) are given back to the user at every start; best effort, never blocks.
-if (control && process.platform === 'win32' && !process.env.STRATA_NO_REPAIR_ACCESS) void control.repairAccess().catch(() => {});
+// Files a run as administrator made in Cortex's own folders (owner Administrators) are given back to the user at every start; best effort, never blocks.
+if (control && process.platform === 'win32' && !process.env.CORTEX_NO_REPAIR_ACCESS) void control.repairAccess().catch(() => {});
 /* Which window shows the page (the app window or, when that cannot run, a browser tab) and what only the app window can do: app-ui.mjs. */
 const appUi = createAppUi({ shutdown: () => shutdown() });
-/* The app's version has one source: the desktop shell passes it (STRATA_APP_VERSION, from apps/desktop/src-tauri/Cargo.toml). Outside the app it is read from the same file in a checkout, else 'dev'. */
+/* The app's version has one source: the desktop shell passes it (CORTEX_APP_VERSION, from apps/desktop/src-tauri/Cargo.toml). Outside the app it is read from the same file in a checkout, else 'dev'. */
 function appVersion() { return appVersionFrom({ env: process.env, here: HERE }); }
 const appUpdater = appUi.updater;
 /* The engine that ships inside the installer is put in the components folder when this PC has none (or an older one); no network, hashes checked. The model list waits for it. */
-const bundledEngine = control && !process.env.STRATA_NO_BUNDLED_ENGINE
-  ? installBundledEngine({ bundleDir: process.env.STRATA_ENGINE_BUNDLE_DIR || resolve(HERE, '..', '..', 'engine-bundle'), components: componentsDirectory(), log: line => console.log(line) })
+const bundledEngine = control && !process.env.CORTEX_NO_BUNDLED_ENGINE
+  ? installBundledEngine({ bundleDir: process.env.CORTEX_ENGINE_BUNDLE_DIR || resolve(HERE, '..', '..', 'engine-bundle'), components: componentsDirectory(), log: line => console.log(line) })
   : Promise.resolve({ action: 'none' });
-let bundledEngineSettled = !(control && !process.env.STRATA_NO_BUNDLED_ENGINE);
+let bundledEngineSettled = !(control && !process.env.CORTEX_NO_BUNDLED_ENGINE);
 bundledEngine.then(() => { bundledEngineSettled = true; }, () => { bundledEngineSettled = true; });
 const native=createNativeControl({control,ready:bundledEngine,appUpdater,hardwareProbe:()=>(hardware.cachedHardware()?.gpus??[]).map((g,n)=>({index:g.index??n,vram_gb:g.vramGb})),directory:store.DATA_DIR,modelsDirectory:()=>store.MODELS_DIR,nativeDataDirectory:store.nativeDataDirectory,beforeLoad:async()=>{if(models.REAL&&models.library().loaded){if(serving.state().requests.some(r=>runtimeModels.state().instances.some(i=>i.id===r.instanceId)&&["queued","generating"].includes(r.state)))throw new Error("Finish requests before switching engines.");await models.unload();runtimeState();}},requests:()=>serving.state().requests,changed:value=>hub.send('native',value)});
 /* The agent: chats become DeepSeek Harness sessions when that component is installed. It is a separate
-   pinned component (STRATA_HARNESS_DIR), not part of this host, so its absence is a visible capability
+   pinned component (CORTEX_HARNESS_DIR), not part of this host, so its absence is a visible capability
    state and the chat falls back to the direct path with a notice, never silently to another model. */
 // What the person chose in Settings -> Tools (tool groups, web search service and key, the browser, their own tools).
 const llmProxy = createLlmProxy({ targetOf: key => agent.llmTarget(key), samplingNow: () => samplingFromExpert(store.get().expert) });
@@ -212,7 +212,7 @@ function runtimeState(){
   return runtimeModels.state();
 }
 
-const startupModelId = process.env.STRATA_REAL_ENGINE === '1' ? (store.get().loaded ?? store.get().current) : null;
+const startupModelId = process.env.CORTEX_REAL_ENGINE === '1' ? (store.get().loaded ?? store.get().current) : null;
 if (startupModelId) {
   monitor.setModel(startupModelId);
   const lastId = startupModelId;
@@ -238,9 +238,9 @@ if (startupModelId) {
 }
 const backend = await detectBackend({ force: true });
 
-console.log(`strata host  ·  http://${HOST}:${PORT}`);
+console.log(`cortex host  ·  http://${HOST}:${PORT}`);
 console.log(`hardware     ·  ${boot.accelerator.label} / ${boot.accelerator.backend} / ${boot.cpu.cores} cores / ${Math.round(boot.memory.totalGb)} GB`);
-console.log(`inference    ·  ${models.REAL ? (bundledEngineSettled ? backend.name : 'unpacking the bundled engine… (about a minute the first time)') : 'simulated (design iteration) — set STRATA_REAL_ENGINE=1 for a real engine'}`);
+console.log(`inference    ·  ${models.REAL ? (bundledEngineSettled ? backend.name : 'unpacking the bundled engine… (about a minute the first time)') : 'simulated (design iteration) — set CORTEX_REAL_ENGINE=1 for a real engine'}`);
 console.log(`models dir   ·  ${store.MODELS_DIR}`);
 console.log(`workspace    ·  ${WORKSPACE}`);
 
@@ -405,10 +405,10 @@ function noteSkillUse(selected) {
 const execFileAsync = promisify(execFile);
 
 /* ---------------------------------------------------------------- prompt ---
-   What Strata puts in front of every conversation. Counted so the context
+   What Cortex puts in front of every conversation. Counted so the context
    breakdown can show where the window actually goes rather than reporting a
    single opaque total. */
-const SYSTEM_PROMPT = `You are Strata, a local inference assistant running entirely on this computer.
+const SYSTEM_PROMPT = `You are Cortex, a local inference assistant running entirely on this computer.
 Answer plainly and briefly. Use only tools actually offered to you. Ask for file content when no file tool is available.
 Say when you do not know. Never claim to have done something you have not done.`;
 
@@ -482,7 +482,7 @@ function saveWorkspaces() {
   }
 }
 
-const SKIP_DIRS = new Set(['node_modules', '.git', '.npm-cache', '.strata', '.shots', 'dist', '.vite', '__pycache__', '.cache']);
+const SKIP_DIRS = new Set(['node_modules', '.git', '.npm-cache', '.cortex', '.shots', 'dist', '.vite', '__pycache__', '.cache']);
 
 function workspaceListing(root = WORKSPACE) {
   const entries = [];
@@ -523,12 +523,12 @@ function workspaceListing(root = WORKSPACE) {
 
 function clientName(req) {
   const ua = req.headers['user-agent'] ?? '';
-  const header = req.headers['x-strata-client'];
+  const header = req.headers['x-cortex-client'];
   if (typeof header === 'string' && header) return header;
   if (/curl/i.test(ua)) return 'curl';
   if (/python|httpx|requests/i.test(ua)) return 'Python client';
   if (/node|undici|axios/i.test(ua)) return 'Node client';
-  if (/strata/i.test(ua)) return 'Strata chat';
+  if (/cortex/i.test(ua)) return 'Cortex chat';
   return 'Local client';
 }
 
@@ -540,9 +540,9 @@ async function runRemoteTurn({ selection, message, history, images = [], onFrame
   try {
     const { connection, model } = modelProviders.resolve(selection);
     const appliedSkills = selectSkills(skillState, message, workspaceId);
-    entry = serving.open({ client: 'Strata chat', endpoint: connection.protocol === 'anthropic' ? '/messages' : connection.protocol === 'openai-responses' ? '/responses' : '/chat/completions', model: `${connection.name} · ${model.name}`, cancel: () => controller.abort(new DOMException('Cancelled by the user', 'AbortError')) });
+    entry = serving.open({ client: 'Cortex chat', endpoint: connection.protocol === 'anthropic' ? '/messages' : connection.protocol === 'openai-responses' ? '/responses' : '/chat/completions', model: `${connection.name} · ${model.name}`, cancel: () => controller.abort(new DOMException('Cancelled by the user', 'AbortError')) });
     serving.mark(entry.id, { state: 'generating' });
-    const result = await modelProviders.stream({ selection, message, history, images, signal: requestSignal, systemPrompt: ['You are Strata, a helpful assistant. Answer clearly. Do not claim to have read files or performed actions unless their results are included in the conversation.', skillInstructions(appliedSkills)].filter(Boolean).join('\n\n'), onFrame: frame => {
+    const result = await modelProviders.stream({ selection, message, history, images, signal: requestSignal, systemPrompt: ['You are Cortex, a helpful assistant. Answer clearly. Do not claim to have read files or performed actions unless their results are included in the conversation.', skillInstructions(appliedSkills)].filter(Boolean).join('\n\n'), onFrame: frame => {
       if (frame.type === 'start') noteSkillUse(appliedSkills);
       if (frame.type === 'done') serving.mark(entry.id, { tokensIn: frame.tokensIn, tokensOut: frame.tokensOut, usageSource: frame.usageSource });
       onFrame({ ...frame, requestId: entry.id, model: model.name, contextMax: model.contextMax, remoteModel: true, ...(frame.type === 'start' ? { skills: appliedSkills.map(s => s.name) } : {}) });
@@ -577,7 +577,7 @@ async function runAgentTurn({ res, controller, chatId, body, message, workspaceI
   }
   const started = Date.now();
   // A turn the engine is serving must be visible to the rest of the host (Serving, unload guards).
-  const entry = instance ? serving.open({ client: 'Strata chat', endpoint: '/agent', model: instance.apiModelId, instanceId: instance.id, gpuIds: instance.gpus.map(String), cancel: () => { void agent.stop(chatId); } }) : null;
+  const entry = instance ? serving.open({ client: 'Cortex chat', endpoint: '/agent', model: instance.apiModelId, instanceId: instance.id, gpuIds: instance.gpus.map(String), cancel: () => { void agent.stop(chatId); } }) : null;
   if (entry) serving.mark(entry.id, { state: 'generating' });
   const settle = (tokensOut, error) => { if (entry) serving.finish(entry.id, { tokensOut, durationMs: Date.now() - started, ...(error ? { error } : {}) }); };
   try {
@@ -605,8 +605,8 @@ async function runTurn({ message, history = [], onFrame, signal, client, workspa
   if (remoteModel) return runRemoteTurn({ selection: remoteModel, message, history, images, onFrame, signal, workspaceId });
   if(native.hasLive()||nativeModelId){
     let instance;try{instance=native.resolveInstance(nativeModelId??native.state().defaultId);}catch(e){onFrame({type:'error',message:e.message});return {error:e.message};}const started=Date.now(),cancel=new AbortController();
-    const entry=serving.open({client:client??'Strata chat',endpoint:'/chat/completions',model:instance.apiModelId,instanceId:instance.id,gpuIds:instance.gpus.map(String),cancel:()=>cancel.abort()});
-    try{serving.mark(entry.id,{state:'generating'});const applied=selectSkills(skillState,message,workspaceId);const result=await proxyCompletion({baseUrl:`http://127.0.0.1:${instance.port}/v1`,modelId:instance.apiModelId,authorization:instance.key,message,history,images,extra:{strata_mcp:useTools===true,...(thinkingBudget>0&&String(thinking).toLowerCase()!=='off'?{reasoning_budget_tokens:thinkingBudget}:{}),reasoning_effort:({off:'none',max:'high'}[String(thinking).toLowerCase()]??String(thinking).toLowerCase())},systemPrompt:[SYSTEM_PROMPT,skillInstructions(applied)].filter(Boolean).join('\n\n'),signal:signal?AbortSignal.any([signal,cancel.signal]):cancel.signal,onFrame:frame=>onFrame({...frame,requestId:entry.id,model:instance.label,contextMax:instance.metrics?.engine?.max_context??instance.context,skills:applied.map(s=>s.name)})});serving.mark(entry.id,{...result,usageSource:result.usageSource});serving.finish(entry.id,{tokensOut:result.tokensOut,durationMs:Date.now()-started});return result;}catch(e){serving.finish(entry.id,{durationMs:Date.now()-started,error:e.message});onFrame({type:'error',message:e.message,requestId:entry.id});return {error:e.message};}
+    const entry=serving.open({client:client??'Cortex chat',endpoint:'/chat/completions',model:instance.apiModelId,instanceId:instance.id,gpuIds:instance.gpus.map(String),cancel:()=>cancel.abort()});
+    try{serving.mark(entry.id,{state:'generating'});const applied=selectSkills(skillState,message,workspaceId);const result=await proxyCompletion({baseUrl:`http://127.0.0.1:${instance.port}/v1`,modelId:instance.apiModelId,authorization:instance.key,message,history,images,extra:{cortex_mcp:useTools===true,...(thinkingBudget>0&&String(thinking).toLowerCase()!=='off'?{reasoning_budget_tokens:thinkingBudget}:{}),reasoning_effort:({off:'none',max:'high'}[String(thinking).toLowerCase()]??String(thinking).toLowerCase())},systemPrompt:[SYSTEM_PROMPT,skillInstructions(applied)].filter(Boolean).join('\n\n'),signal:signal?AbortSignal.any([signal,cancel.signal]):cancel.signal,onFrame:frame=>onFrame({...frame,requestId:entry.id,model:instance.label,contextMax:instance.metrics?.engine?.max_context??instance.context,skills:applied.map(s=>s.name)})});serving.mark(entry.id,{...result,usageSource:result.usageSource});serving.finish(entry.id,{tokensOut:result.tokensOut,durationMs:Date.now()-started});return result;}catch(e){serving.finish(entry.id,{durationMs:Date.now()-started,error:e.message});onFrame({type:'error',message:e.message,requestId:entry.id});return {error:e.message};}
   }
   runtimeState();
   let instance;
@@ -621,7 +621,7 @@ async function runTurn({ message, history = [], onFrame, signal, client, workspa
 
   const controller = new AbortController();
   const requestSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
-  const entry = serving.open({ client: client ?? 'Strata chat', endpoint: '/chat/completions', model: instance.apiModelId, instanceId:instance.id, gpuIds:instance.gpuIds, cancel: () => controller.abort(new DOMException('Cancelled by the user', 'AbortError')) });
+  const entry = serving.open({ client: client ?? 'Cortex chat', endpoint: '/chat/completions', model: instance.apiModelId, instanceId:instance.id, gpuIds:instance.gpuIds, cancel: () => controller.abort(new DOMException('Cancelled by the user', 'AbortError')) });
   const started = Date.now();
   let result = { tokensIn: null, tokensOut: null };
   // Time to first token: the gap between asking and the first token arriving.
@@ -728,7 +728,7 @@ const REVISE_SCRIPT = resolve(REPO_ROOT, 'integrations', 'harness', 'revise_once
 // The default revision step is the app's own assistant (server/timeskip-revise.mjs, run by Node), not the Harness's Python bridge, which
 // needs a Harness build next to the checkout that the installed app does not have.
 const REVISE_NODE_SCRIPT = resolve(HERE, 'timeskip-revise.mjs');
-const TIMESKIP_REVISE = process.env.STRATA_TIMESKIP_REVISE
+const TIMESKIP_REVISE = process.env.CORTEX_TIMESKIP_REVISE
   ?? `"${process.execPath}" "${REVISE_NODE_SCRIPT}"`;
 /** Proves a revision request comes from a job this host started, not from some other program on this PC. */
 const INTERNAL_SECRET = randomBytes(24).toString('hex');
@@ -775,8 +775,8 @@ async function stopTrial(id) {
 /**
  * Tuning, from the App Host.
  *
- * The job contract is Strata Control's (`strata_control/tuning.py`) and is driven through
- * `strata tune`. Two things the UI needs and neither is computable here:
+ * The job contract is Cortex Control's (`cortex_control/tuning.py`) and is driven through
+ * `cortex tune`. Two things the UI needs and neither is computable here:
  *
  *   * **what a sweep would search, and why the rest was excluded** — that depends on the selected
  *     engine binary's own flag list, so it is asked of the CLI rather than guessed;
@@ -787,13 +787,13 @@ async function stopTrial(id) {
  * The plan and the report are real; the sweep is gated on that harness.
  */
 function createTuning({ repoRoot, python, pythonArgs = [], env = process.env } = {}) {
-  const cli = join(repoRoot, 'strata.py');
+  const cli = join(repoRoot, 'cortex.py');
   const stateDir = () => tuningDir(env);
 
   function runCli(args) {
     return new Promise((resolve) => {
       const child = spawn(python, [...pythonArgs, cli, ...args, '--output', 'json'], {
-        cwd: repoRoot, windowsHide: true, env: { ...env, STRATA_TUNE_DIR: stateDir() },
+        cwd: repoRoot, windowsHide: true, env: { ...env, CORTEX_TUNE_DIR: stateDir() },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       let out = '', err = '';
@@ -862,15 +862,15 @@ const timeskip = createTimeSkip({
   repoRoot: REPO_ROOT,
   python: TS_PYTHON,
   pythonArgs: PYTHON.args,
-  env: { ...process.env, STRATA_TIMESKIP_DIR: process.env.STRATA_TIMESKIP_DIR ?? '' },
+  env: { ...process.env, CORTEX_TIMESKIP_DIR: process.env.CORTEX_TIMESKIP_DIR ?? '' },
 });
 
 const runAgentTask = createAgentTaskRunner({
   agent, workspace: WORKSPACE,
-  // The loaded local model. (STRATA_TASK_REMOTE_MODEL="<connection id>:<model id>" lets a developer or an API-only setup name a saved API model instead.)
+  // The loaded local model. (CORTEX_TASK_REMOTE_MODEL="<connection id>:<model id>" lets a developer or an API-only setup name a saved API model instead.)
   choice: () => {
     try { return { instanceId: native.resolveInstance(native.state().defaultId).id }; } catch { /* no local model is ready */ }
-    const [connectionId, ...rest] = String(process.env.STRATA_TASK_REMOTE_MODEL ?? '').split(':');
+    const [connectionId, ...rest] = String(process.env.CORTEX_TASK_REMOTE_MODEL ?? '').split(':');
     return connectionId && rest.length ? { connectionId, modelId: rest.join(':') } : null;
   },
 });
@@ -895,8 +895,8 @@ const tasks = createTaskService({
 const taskTimer = setInterval(() => tasks.tick(), 15000);
 taskTimer.unref();
 
-const localShare = createLocalShare({ handle: openai, hasKey: () => !!store.get().serving?.apiKey, port: Number(process.env.STRATA_SHARE_PORT ?? PORT + 1), changed: () => serving.setSharing(localShare.state()) });
-const tunnelPort = Number(process.env.STRATA_TUNNEL_PORT ?? PORT + 2);
+const localShare = createLocalShare({ handle: openai, hasKey: () => !!store.get().serving?.apiKey, port: Number(process.env.CORTEX_SHARE_PORT ?? PORT + 1), changed: () => serving.setSharing(localShare.state()) });
+const tunnelPort = Number(process.env.CORTEX_TUNNEL_PORT ?? PORT + 2);
 const tunnelOrigin = createLocalShare({ handle: openai, hasKey: () => !!store.get().serving?.apiKey, host: '127.0.0.1', port: tunnelPort });
 const connector = createConnectorInstaller({ directory: join(store.HOME, 'engine', 'cloudflare'), componentDirectory: join(componentsDirectory(), 'cloudflared') });
 const cloudflare = createCloudflare({ origin: tunnelOrigin, originUrl: `http://127.0.0.1:${tunnelPort}`, hasKey: () => !!store.get().serving?.apiKey, changed: serving.setTunnel, locate: connector.locate, prepareConnector: connector.ensure, connectorInfo: connector.connector, findRunning: findRunningConnector });
@@ -910,7 +910,7 @@ const server = http.createServer(async (req, res) => {
   const method = req.method ?? 'GET';
 
   res.setHeader('access-control-allow-origin', '*');
-  res.setHeader('access-control-allow-headers', 'content-type, authorization, x-api-key, x-strata-client');
+  res.setHeader('access-control-allow-headers', 'content-type, authorization, x-api-key, x-cortex-client');
   res.setHeader('access-control-allow-methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   if (method === 'OPTIONS') {
     res.writeHead(204);
@@ -921,7 +921,7 @@ const server = http.createServer(async (req, res) => {
   try {
     if (path.startsWith('/api/') && req.headers.origin) {
       const origin = new URL(req.headers.origin);
-      if (!['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)) return error(res, 403, 'Open the local Strata app to use host controls.');
+      if (!['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)) return error(res, 403, 'Open the local Cortex app to use host controls.');
     }
     if (path.startsWith('/api/')) {
       const modelOperation = !['GET', 'OPTIONS'].includes(method) && /^\/api\/(models|local-models|runtime|image-models|engine|native)(\/|$)/.test(path) && !['/api/runtime/plan', '/api/engine/validate', '/api/local-models/inspect'].includes(path);
@@ -935,7 +935,7 @@ const server = http.createServer(async (req, res) => {
     }
     return await staticFile(req, res, path);
   } catch (err) {
-    console.error('[strata]', err);
+    console.error('[cortex]', err);
     error(res, 500, err.message ?? 'Internal error');
   }
 });
@@ -956,13 +956,13 @@ async function api(req, res, path, method, url) {
    /* Diagnostics to a file: the engine messages the app kept, failed operations, and the tail of each model's server log under Control.
       Written to the user's Downloads folder (the window cannot save a download); the path is returned to show. */
    const NL=String.fromCharCode(10);
-   const lines=[`Strata diagnostics ${new Date().toISOString()}`,`Version ${native.state().version??'unknown'}`,'','== Engine messages =='];
+   const lines=[`Cortex diagnostics ${new Date().toISOString()}`,`Version ${native.state().version??'unknown'}`,'','== Engine messages =='];
    for(const l of native.logs())lines.push(`${l.at} ${l.instanceId}: ${l.line}`);
    lines.push('','== Operations ==');for(const j of native.state().jobs)lines.push(`${j.startedAt} ${j.kind} ${j.state}${j.error?`: ${j.error}`:''}${j.details?`${NL}  ${j.details}`:''}`);
    try{const logs=join(dirname(componentsDirectory()),'logs');const names=readdirSync(logs).filter(n=>/^desktop-.*\.log$/.test(n)).sort();const crash=names.filter(n=>n.startsWith('desktop-crash-')).slice(-3).reverse();const runs=names.filter(n=>!n.startsWith('desktop-crash-')).slice(-2).reverse();lines.push('',`== Desktop shell: window crash logs (${crash.length} newest) ==`);for(const n of crash)lines.push('',`-- ${n}`,readFileSync(join(logs,n),'utf8'));lines.push('',`== Desktop shell: last lines of the newest ${runs.length} run logs ==`);for(const n of runs)lines.push('',`-- ${n}`,...readFileSync(join(logs,n),'utf8').split(NL).slice(-300));}catch{/* no desktop logs (not the Linux app, or no crash) */}
-   try{const runtime=process.env.STRATA_RUNTIME_DIR??join(dirname(componentsDirectory()),'runtime');for(const name of readdirSync(runtime).filter(n=>n.endsWith('.server.log'))){lines.push('',`== ${name} (last lines) ==`,...readFileSync(join(runtime,name),'utf8').split(NL).slice(-200));}}catch{/* no server logs yet */}
+   try{const runtime=process.env.CORTEX_RUNTIME_DIR??join(dirname(componentsDirectory()),'runtime');for(const name of readdirSync(runtime).filter(n=>n.endsWith('.server.log'))){lines.push('',`== ${name} (last lines) ==`,...readFileSync(join(runtime,name),'utf8').split(NL).slice(-200));}}catch{/* no server logs yet */}
    const folder=join(process.env.USERPROFILE??process.env.HOME??homedir(),'Downloads');mkdirSync(folder,{recursive:true});
-   const file=join(folder,`strata-diagnostics-${new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)}.txt`);writeFileSync(file,lines.join(NL),'utf8');
+   const file=join(folder,`cortex-diagnostics-${new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)}.txt`);writeFileSync(file,lines.join(NL),'utf8');
    return json(res,200,{path:file});}
   if(path==='/api/native/local/preview'&&method==='POST'){
    /* "Use a local GGUF": pick (or type) the folder, and Control says what is in it. Nothing is copied or changed. */
@@ -972,7 +972,7 @@ async function api(req, res, path, method, url) {
    if(picked.cancelled)return json(res,200,{cancelled:true});
    return json(res,200,{path:picked.path,preview:await native.localPreview(picked.path)});}
   if(path==='/api/native/benchmark'&&method==='GET')return json(res,200,native.benchmarkReport());
-  /* The auto-tuner's saved tunings (Strata Control's presets, shared with the Terminal). Starting a tune or a re-check is POST /api/native/operations with kind autotune / recheck. */
+  /* The auto-tuner's saved tunings (Cortex Control's presets, shared with the Terminal). Starting a tune or a re-check is POST /api/native/operations with kind autotune / recheck. */
   if(path==='/api/native/tune/status'&&method==='GET')return json(res,200,await native.tuneStatus({model:url.searchParams.get('model'),resourceProfile:url.searchParams.get('resourceProfile')||undefined,vision:url.searchParams.get('vision')||undefined}));
   if(path==='/api/native/tune/effective'&&method==='GET')return json(res,200,await native.tuneEffective({model:url.searchParams.get('model'),resourceProfile:url.searchParams.get('resourceProfile')||undefined,vision:url.searchParams.get('vision')||undefined}));
   if(path==='/api/native/tune/off'&&method==='POST'){const body=await readBody(req);return json(res,200,await native.tuneOff({model:body.model,resourceProfile:body.resourceProfile,vision:body.vision}));}
@@ -1057,7 +1057,7 @@ async function api(req, res, path, method, url) {
 
   // ---------------------------------------------------------------- Time-skip
   //
-  // The job lives in Strata Control (`strata_control/time_skip.py`) and is driven through its CLI.
+  // The job lives in Cortex Control (`cortex_control/time_skip.py`) and is driven through its CLI.
   // These routes only start it, follow it and apply its result; they never compute a status or a
   // score of their own, so the UI cannot show progress the job did not report.
   if (path === '/api/timeskip' && method === 'GET') {
@@ -1102,7 +1102,7 @@ async function api(req, res, path, method, url) {
       workspace, prompt,
       attempts: body.attempts ?? 1,
       reviseCommand,
-      extraEnv: { STRATA_HOST_URL: `http://127.0.0.1:${PORT}`, STRATA_INTERNAL_SECRET: INTERNAL_SECRET },
+      extraEnv: { CORTEX_HOST_URL: `http://127.0.0.1:${PORT}`, CORTEX_INTERNAL_SECRET: INTERNAL_SECRET },
     });
     if (!result.ok) return error(res, result.code === 2 ? 400 : 502, result.error);
     const chatId = typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : null;
@@ -1134,7 +1134,7 @@ async function api(req, res, path, method, url) {
   }
   // One revision attempt for a job this host started: the app's assistant works inside the candidate folder.
   if (path === '/api/internal/timeskip-revise' && method === 'POST') {
-    const given = Buffer.from(String(req.headers['x-strata-internal'] ?? ''));
+    const given = Buffer.from(String(req.headers['x-cortex-internal'] ?? ''));
     const want = Buffer.from(INTERNAL_SECRET);
     if (given.length !== want.length || !timingSafeEqual(given, want)) return error(res, 403, 'Not allowed.');
     const body = await readBody(req);
@@ -1229,31 +1229,31 @@ async function api(req, res, path, method, url) {
     });
   }
 
-  // --- Strata Control: what the installed app runs on, and what it will not do ---------------------
+  // --- Cortex Control: what the installed app runs on, and what it will not do ---------------------
   if (path === '/api/control/status' && method === 'GET') {
     const engine = control ? await control.engine().catch(e => ({ usable: false, notice: e.message })) : null;
     // the first start copies the engine that came with the app (about a minute): say so instead of "no engine"
     if (engine && !engine.usable && !bundledEngineSettled) engine.notice = 'The engine that came with the app is being set up. This takes a minute the first time.';
     return json(res, 200, {
-      packaged: process.env.STRATA_PACKAGED === '1',
+      packaged: process.env.CORTEX_PACKAGED === '1',
       control: CONTROL ? { dir: CONTROL.dir, python: CONTROL.python, version: control.version, bundle: CONTROL.bundle } : null,
       engine,
       engineSetup: !bundledEngineSettled,
       componentsDir: componentsDirectory(),
-      acquisition: { forbidden: acquisitionForbidden(), env: process.env.STRATA_NO_ACQUIRE ?? null },
+      acquisition: { forbidden: acquisitionForbidden(), env: process.env.CORTEX_NO_ACQUIRE ?? null },
     });
   }
   // The shell (and nothing else) holds the secret that lets it end the host or tell it which window is in use.
   const fromShell = () => {
-    const token = process.env.STRATA_SHUTDOWN_TOKEN ?? '';
-    const given = String(req.headers['x-strata-shutdown'] ?? '');
+    const token = process.env.CORTEX_SHUTDOWN_TOKEN ?? '';
+    const given = String(req.headers['x-cortex-shutdown'] ?? '');
     return token.length >= 32 && given.length === token.length && timingSafeEqual(Buffer.from(given), Buffer.from(token));
   };
-  // Which window the person is using: the page shows "Quit Strata" in browser mode only.
+  // Which window the person is using: the page shows "Quit Cortex" in browser mode only.
   if (path === '/api/app/mode' && method === 'GET') return json(res, 200, appUi.state());
   if (path === '/api/app/quit' && method === 'POST') {
     // A web page cannot send this header without the browser asking the host first, and the host refuses pages that are not local (above).
-    if (!req.headers['x-strata-client']) return error(res, 403, 'Not allowed.');
+    if (!req.headers['x-cortex-client']) return error(res, 403, 'Not allowed.');
     const verdict = appUi.quit();
     return verdict.ok ? json(res, verdict.status, { stopping: true }) : error(res, verdict.status, verdict.error);
   }
@@ -1289,7 +1289,7 @@ async function api(req, res, path, method, url) {
   }
 
   if (path === '/api/setup' && method === 'GET') return json(res, 200, setupState());
-  if (path === '/api/updates/check' && method === 'GET' && control?.updateCheck) return json(res, 200, await checkComponentUpdates({ control, appUpdater, appVersion: process.env.STRATA_APP_VERSION || null }));
+  if (path === '/api/updates/check' && method === 'GET' && control?.updateCheck) return json(res, 200, await checkComponentUpdates({ control, appUpdater, appVersion: process.env.CORTEX_APP_VERSION || null }));
   if (path === '/api/updates/check' && method === 'GET') return json(res, 200, await checkUpdates({ appVersion:appVersionToShow(setupState().app.version,native.state().version), engineVersion:native.state().available?(native.state().installed?.engine?.version??null):(await engine.config()).engine.version }));
 
   if (path === '/api/setup/step' && method === 'POST') {
@@ -1423,7 +1423,7 @@ async function api(req, res, path, method, url) {
         await monitor.setModel(id);engine.markRunning(hw.accelerator.backend);hub.send('engine',await engine.config());
         return json(res,200,runtimeModels.libraryState(models.library()));
       }
-      if(!supervisor.findBinary())return error(res,409,'Install a compatible llama-server engine before switching from native Strata.');const candidate=models.library().variants.find(v=>v.id===id);if(!candidate||!['installed','loaded'].includes(candidate.state))return error(res,409,'Download this model before loading it.');for(const instance of native.state().instances)await native.unload(instance.id);
+      if(!supervisor.findBinary())return error(res,409,'Install a compatible llama-server engine before switching from native Cortex.');const candidate=models.library().variants.find(v=>v.id===id);if(!candidate||!['installed','loaded'].includes(candidate.state))return error(res,409,'Download this model before loading it.');for(const instance of native.state().instances)await native.unload(instance.id);
       const lib = await models.load(id, {
         hardware: hw,
         config: { beginner: store.get().beginner, expert: engine.params(), serving: store.get().serving },
@@ -1786,7 +1786,7 @@ async function api(req, res, path, method, url) {
   if (path === '/api/workspaces/pick' && method === 'POST') {
     try {
       const typed = await typedFolder((await readBody(req)).path, { isAbsolute });
-      const picked = typed ? { path: typed } : await chooseFolder('Choose a folder for Strata');
+      const picked = typed ? { path: typed } : await chooseFolder('Choose a folder for Cortex');
       if (picked.unavailable) {const u=chooserUnavailable(picked);return error(res,501,u.message,{code:u.code});};
       if (picked.cancelled) return json(res, 200, { cancelled: true });
       return json(res, 200, { path: picked.path });
@@ -1896,10 +1896,10 @@ async function api(req, res, path, method, url) {
     /* Agent turn, when the component is there and this request can use it. A client that disappears
        detaches from the turn (it keeps running in the Harness); Stop is its own request. */
     const chatId = typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : null;
-    const agentSkip = process.env.STRATA_AGENT === 'off' ? 'The agent is turned off (STRATA_AGENT=off).'
+    const agentSkip = process.env.CORTEX_AGENT === 'off' ? 'The agent is turned off (CORTEX_AGENT=off).'
       : body.agent === false || body.tools === false ? 'This chat runs without the agent.'
       : !chatId ? 'This request did not name a chat.'
-      : !(body.remoteModel || native.hasLive()) ? 'The agent needs a loaded Strata model or an API model.'
+      : !(body.remoteModel || native.hasLive()) ? 'The agent needs a loaded Cortex model or an API model.'
       : null;
     if (chatId && !agentSkip) {
       const capability = agent.status();
@@ -1909,7 +1909,7 @@ async function api(req, res, path, method, url) {
         return undefined;
       }
       res.write(`${JSON.stringify({ type: 'notice', code: 'agent-unavailable', message: `${capability.reason}`, ...(capability.detail ? { details: capability.detail } : {}) })}\n`);
-    } else if (agentSkip && chatId && body.agent !== false && body.tools !== false && process.env.STRATA_AGENT !== 'off') {
+    } else if (agentSkip && chatId && body.agent !== false && body.tools !== false && process.env.CORTEX_AGENT !== 'off') {
       res.write(`${JSON.stringify({ type: 'notice', code: 'agent-skipped', message: agentSkip })}\n`);
     }
 
@@ -1922,7 +1922,7 @@ async function api(req, res, path, method, url) {
       onFrame: plain,
       signal: controller.signal,
       req,
-      client: 'Strata chat',
+      client: 'Cortex chat',
       workspaceId,
       sessionId: typeof body.sessionId === 'string' ? body.sessionId : null,
       remoteModel: body.remoteModel ?? null,
@@ -1941,14 +1941,14 @@ async function api(req, res, path, method, url) {
 async function openai(req, res, path, method) {
   if (!serving.authorized(req)) return error(res, 401, 'Invalid API key');
   if(native.state().instances.length){
-    if(path==='/v1/models'&&method==='GET')return json(res,200,{object:'list',data:native.state().instances.filter(i=>i.status==='ready').map(i=>({id:i.apiModelId,object:'model',owned_by:'strata',meta:{instanceId:i.id,gpus:i.gpus,label:i.label,aliases:i.aliases}}))});
-    if(method==='POST'&&['/v1/chat/completions','/v1/messages','/v1/responses'].includes(path)){if(store.get().serving?.pauseServing)return error(res,503,'New API requests are paused.');if(path==='/v1/responses'&&!native.state().capabilities.responses)return error(res,501,'Update the native Strata installation to use the Responses API.');return nativeGateway({req,res,path,body:await readBody(req,12*1024*1024),control:native,serving});}
+    if(path==='/v1/models'&&method==='GET')return json(res,200,{object:'list',data:native.state().instances.filter(i=>i.status==='ready').map(i=>({id:i.apiModelId,object:'model',owned_by:'cortex',meta:{instanceId:i.id,gpus:i.gpus,label:i.label,aliases:i.aliases}}))});
+    if(method==='POST'&&['/v1/chat/completions','/v1/messages','/v1/responses'].includes(path)){if(store.get().serving?.pauseServing)return error(res,503,'New API requests are paused.');if(path==='/v1/responses'&&!native.state().capabilities.responses)return error(res,501,'Update the native Cortex installation to use the Responses API.');return nativeGateway({req,res,path,body:await readBody(req,12*1024*1024),control:native,serving});}
   }
-  if(path==='/v1/responses'&&method==='POST')return error(res,503,'Load a native Strata model to use the Responses API.');
+  if(path==='/v1/responses'&&method==='POST')return error(res,503,'Load a native Cortex model to use the Responses API.');
 
   if (path === '/v1/models' && method === 'GET') {
     const runtime=runtimeState();
-    return json(res,200,{object:'list',data:runtime.instances.map(i=>({id:i.apiModelId,object:'model',created:Math.floor(new Date(i.loadedAt).getTime()/1000),owned_by:'strata',meta:{label:i.family,context:i.memory.context,instanceId:i.id,gpuIds:i.gpuIds,mode:runtime.mode}}))});
+    return json(res,200,{object:'list',data:runtime.instances.map(i=>({id:i.apiModelId,object:'model',created:Math.floor(new Date(i.loadedAt).getTime()/1000),owned_by:'cortex',meta:{label:i.family,context:i.memory.context,instanceId:i.id,gpuIds:i.gpuIds,mode:runtime.mode}}))});
   }
 
   if ((path === '/v1/chat/completions' || path === '/v1/messages') && method === 'POST') {
@@ -2104,9 +2104,9 @@ async function staticFile(req, res, path) {
   if (!existsSync(DIST)) {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     res.end(
-      `<!doctype html><meta charset="utf-8"><title>Strata host</title>
+      `<!doctype html><meta charset="utf-8"><title>Cortex host</title>
        <body style="font:16px/1.6 -apple-system,system-ui;background:#0e1113;color:#eef1f3;padding:48px">
-       <h1 style="margin:0 0 8px">Strata host is running</h1>
+       <h1 style="margin:0 0 8px">Cortex host is running</h1>
        <p style="color:#8e979f">No built web app found at <code>${DIST}</code>.</p>
        <p>For development run <code>npm run dev</code> (Vite on :5199 proxies /api here).<br>
        For a single port run <code>npm run build:web &amp;&amp; npm run serve</code>.</p>
@@ -2147,9 +2147,9 @@ async function staticFile(req, res, path) {
 /* ------------------------------------------------------------------ start --- */
 
 server.listen(PORT, HOST, () => {
-  if (process.send) process.send({ type: 'strata-ready', port: PORT });
+  if (process.send) process.send({ type: 'cortex-ready', port: PORT });
   // Engines a lost owner left behind (an earlier crash, an older version): ended after a PID + start time + command-line check.
-  if (control && process.env.STRATA_PACKAGED === '1') control.cleanup().catch(() => {});
+  if (control && process.env.CORTEX_PACKAGED === '1') control.cleanup().catch(() => {});
 });
 
 let stopping=false;
@@ -2165,7 +2165,7 @@ const shutdown = async () => {
 for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK']) { try { process.on(signal, shutdown); } catch { /* not on this platform */ } }
 // Started by the desktop shell: when the shell is gone (killed, crashed, logged off) stop what this app started and leave.
 // POSIX re-parents us (ppid changes); Windows keeps the old ppid, so the pid is probed (signal 0 never signals).
-if (process.env.STRATA_EXIT_WITH_PARENT === '1') {
+if (process.env.CORTEX_EXIT_WITH_PARENT === '1') {
   const parent = process.ppid;
   const gone = () => {
     if (process.ppid !== parent) return true;

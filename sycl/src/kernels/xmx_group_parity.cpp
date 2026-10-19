@@ -1,8 +1,8 @@
 // xmx_group_parity: iq_xmx_grouped (the A770 port's fused decode + grouped XMX) against the engine's dequant +
 // oneMKL per expert, on random expert blobs of each format the native packs use.  Also times both.
 //   xmx_group_parity [mean_rows=160] [n=16]
-#include "strata/kernels/iq_kernels.hpp"
-#include "strata/sycl_queue.hpp"
+#include "cortex/kernels/iq_kernels.hpp"
+#include "cortex/sycl_queue.hpp"
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
 #include <dpct/blas_utils.hpp>
@@ -17,12 +17,12 @@ int main(int argc, char** argv) {
     const int mean = argc > 1 ? std::atoi(argv[1]) : 160;
     const int n = argc > 2 ? std::atoi(argv[2]) : 16;
     sycl::queue* q = &dpct::get_in_order_queue();
-#ifdef STRATA_NO_DG2_XMX
+#ifdef CORTEX_NO_DG2_XMX
     std::printf("xmx_group_parity: SKIP (the sub-group 8 / 8x8x16 kernels are not built for this AOT device)");
     return 0;
 #else
-#ifndef STRATA_XMX_SG16
-    if (strata::intel_gpu_gen(q->get_device()) == strata::IntelGpuGen::Battlemage) {
+#ifndef CORTEX_XMX_SG16
+    if (cortex::intel_gpu_gen(q->get_device()) == cortex::IntelGpuGen::Battlemage) {
         std::printf("xmx_group_parity: SKIP (this build has the sub-group 8 / 8x8x16 kernels; Battlemage needs the AOT bmg build)");
         return 0;
     }
@@ -41,8 +41,8 @@ int main(int argc, char** argv) {
     for (Case cs : {Case{18, true}, Case{21, true}, Case{22, true}, Case{23, true}, Case{20, false}, Case{42, false}}) {
         const int64_t K = cs.gu ? 2560 : 640, N = cs.gu ? 1280 : 2560, n_ff = 640;
         const int blk_elems = cs.ty == 20 ? 32 : cs.ty == 42 ? 64 : 256;
-        const size_t blk_bytes = strata::kernels::iq_row_bytes(cs.ty, blk_elems);
-        const size_t mat_bytes = strata::kernels::iq_row_bytes(cs.ty, K) * (cs.gu ? n_ff : N);
+        const size_t blk_bytes = cortex::kernels::iq_row_bytes(cs.ty, blk_elems);
+        const size_t mat_bytes = cortex::kernels::iq_row_bytes(cs.ty, K) * (cs.gu ? n_ff : N);
         if (blk_bytes == 0 || mat_bytes == 0) { std::printf("type %d: not supported\n", cs.ty); continue; }
         auto blob = [&]() {
             std::vector<uint8_t> b(mat_bytes);
@@ -77,8 +77,8 @@ int main(int argc, char** argv) {
         auto ref = [&]() {
             int64_t o = 0;
             for (int i = 0; i < n; ++i) {
-                if (cs.gu) strata::kernels::iq_dequant_gu_f16(cs.ty, dg[i], du[i], n_ff, K, dw, q);
-                else strata::kernels::iq_dequant_f16(cs.ty, dg[i], N * K, dw, q);
+                if (cs.gu) cortex::kernels::iq_dequant_gu_f16(cs.ty, dg[i], du[i], n_ff, K, dw, q);
+                else cortex::kernels::iq_dequant_f16(cs.ty, dg[i], N * K, dw, q);
                 const float a = 1.f, b = 0.f;
                 dpct::blas::gemm(hd, oneapi::mkl::transpose::trans, oneapi::mkl::transpose::nontrans, (int) N, cnt[i],
                                  (int) K, &a, dw, dpct::library_data_t::real_half, (int) K, dx + o * K,
@@ -88,7 +88,7 @@ int main(int argc, char** argv) {
             }
         };
         auto mine = [&]() {
-            strata::kernels::iq_xmx_grouped(cs.ty, pg.data(), cs.gu ? pu.data() : nullptr, cnt.data(), n, dx, yx,
+            cortex::kernels::iq_xmx_grouped(cs.ty, pg.data(), cs.gu ? pu.data() : nullptr, cnt.data(), n, dx, yx,
                                             (int) N, (int) K, q);
         };
         auto tm = [&](auto f) {

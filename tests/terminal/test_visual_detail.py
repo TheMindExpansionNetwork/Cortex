@@ -6,8 +6,8 @@ import unittest
 
 try:
     from rich.console import Console
-    from strata_cli.dashboard import MonitorHistory
-    from strata_cli.detail_dashboard import render_detail_dashboard
+    from cortex_cli.dashboard import MonitorHistory
+    from cortex_cli.detail_dashboard import render_detail_dashboard
 except ImportError:
     Console = None
 
@@ -74,7 +74,7 @@ class VisualDetailTests(unittest.TestCase):
             for view in ("serving", "requests", "engine", "hardware", "logs"):
                 with self.subTest(width=width, view=view):
                     shown = self.render(sample, view, width, height)
-                    self.assertIn(f"STRATA  /  {view.upper()}", shown)
+                    self.assertIn(f"CORTEX  /  {view.upper()}", shown)
                     self.assertNotIn("SECRET_PROMPT", shown)
                     self.assertLessEqual(len(shown.splitlines()), height - 2)
                     self.assertTrue(all(len(line) <= width - 2 for line in shown.splitlines()))

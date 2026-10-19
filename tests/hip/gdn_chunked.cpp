@@ -1,7 +1,7 @@
 // Exercise the public opt-in dispatch, including tails, padded rows and a nonzero carried state.  The FP32
 // recurrence is the all-head reference; short cases also use an independent double-precision CPU recurrence.
-#include "strata/prefill/kernels.hpp"
-#include "strata/kernels/gfx_arch.hpp"
+#include "cortex/prefill/kernels.hpp"
+#include "cortex/kernels/gfx_arch.hpp"
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
 #include <algorithm>
@@ -84,10 +84,10 @@ Output run(const Input& in, int ld, bool reference, int64_t split = 0) {
     auto scratch = upload(std::vector<float>(std::max<int64_t>(in.n, 1) * ROW));
     auto call = [&](int64_t start, int64_t n) {
         if (reference)
-            strata::prefill::gdn_recurrence_variant(5, state, h + start * C, g + start * HV, b + start * HV,
+            cortex::prefill::gdn_recurrence_variant(5, state, h + start * C, g + start * HV, b + start * HV,
                 z + start * ROW, gm, 1e-6f, scratch, y + start * ld, n, nullptr, ld);
         else
-            strata::prefill::gdn_recurrence(state, h + start * C, g + start * HV, b + start * HV,
+            cortex::prefill::gdn_recurrence(state, h + start * C, g + start * HV, b + start * HV,
                 z + start * ROW, gm, 1e-6f, scratch, y + start * ld, n, nullptr, ld);
         ck(cudaDeviceSynchronize(), "recurrence");
     };
@@ -157,8 +157,8 @@ bool cpu_check(const Input& in, int ld, const Output& got) {
     return ok;
 }
 // One path's time for one layer's recurrence + norm (GPU-event median of 7 runs after 2 warmups, the same start state each
-// run).  STRATA_GDN_CHUNKED is read once per process, so --bench (this path) and --bench-default (gfx1151's default: the
-// existing kernels with STRATA_GDN_PP=2 and STRATA_GDN_NOY=1) are separate runs of this binary.
+// run).  CORTEX_GDN_CHUNKED is read once per process, so --bench (this path) and --bench-default (gfx1151's default: the
+// existing kernels with CORTEX_GDN_PP=2 and CORTEX_GDN_NOY=1) are separate runs of this binary.
 void bench(const char* path) {
     for (int64_t t : {64, 256, 2048, 16384, 32768}) {
         const Input in(t, 2, 1, false);
@@ -172,7 +172,7 @@ void bench(const char* path) {
         for (int round = -2; round < 7; ++round) {
             ck(cudaMemcpy(state, in.state.data(), in.state.size() * sizeof(float), cudaMemcpyHostToDevice), "reset");
             ck(cudaEventRecord(start), "event");
-            strata::prefill::gdn_recurrence(state, h, g, b, z, gm, 1e-6f, scratch, y, t, nullptr, ROW + 8);
+            cortex::prefill::gdn_recurrence(state, h, g, b, z, gm, 1e-6f, scratch, y, t, nullptr, ROW + 8);
             ck(cudaEventRecord(end), "event"); ck(cudaEventSynchronize(end), "time");
             float ms = 0;
             ck(cudaEventElapsedTime(&ms, start, end), "time");
@@ -189,20 +189,20 @@ void bench(const char* path) {
 int main(int argc, char** argv) {
     const bool bench_default = argc > 1 && std::strcmp(argv[1], "--bench-default") == 0;
     const bool off = argc > 1 && (std::strcmp(argv[1], "--off") == 0 || std::strcmp(argv[1], "--default") == 0 || bench_default);
-    setting("STRATA_GDN_CHUNKED", off ? "0" : "1");
-    setting("STRATA_GDN_HEAD", "1"); setting("STRATA_GDN_PP", "2");
-    if (argc > 1 && std::strncmp(argv[1], "--bench", 7) == 0) setting("STRATA_GDN_NOY", "1");   // gfx1151's default
+    setting("CORTEX_GDN_CHUNKED", off ? "0" : "1");
+    setting("CORTEX_GDN_HEAD", "1"); setting("CORTEX_GDN_PP", "2");
+    if (argc > 1 && std::strncmp(argv[1], "--bench", 7) == 0) setting("CORTEX_GDN_NOY", "1");   // gfx1151's default
 #ifdef _WIN32
-    _putenv_s("STRATA_GDN_REC_HEADS", "");
-    if (argc > 1 && std::strcmp(argv[1], "--default") == 0) _putenv_s("STRATA_GDN_CHUNKED", "");
+    _putenv_s("CORTEX_GDN_REC_HEADS", "");
+    if (argc > 1 && std::strcmp(argv[1], "--default") == 0) _putenv_s("CORTEX_GDN_CHUNKED", "");
 #else
-    unsetenv("STRATA_GDN_REC_HEADS");
-    if (argc > 1 && std::strcmp(argv[1], "--default") == 0) unsetenv("STRATA_GDN_CHUNKED");
+    unsetenv("CORTEX_GDN_REC_HEADS");
+    if (argc > 1 && std::strcmp(argv[1], "--default") == 0) unsetenv("CORTEX_GDN_CHUNKED");
 #endif
     int device = 0;
     cudaDeviceProp props{};
     ck(cudaGetDevice(&device), "device"); ck(cudaGetDeviceProperties(&props, device), "properties");
-    const bool wmma = strata::kernels::gfx_arch_is_gfx11_wmma(props.gcnArchName);
+    const bool wmma = cortex::kernels::gfx_arch_is_gfx11_wmma(props.gcnArchName);
     std::printf("device=%s chunked=%d wmma=%d\n", props.gcnArchName, !off, wmma);
     if (argc > 1 && std::strcmp(argv[1], "--bench") == 0) { bench("chunked"); return 0; }
     if (bench_default) { bench("default"); return 0; }

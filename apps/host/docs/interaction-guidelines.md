@@ -115,7 +115,7 @@ and one rule that overrides enthusiasm:
 > **Glass is for the floating navigation/control layer only. Never apply it to
 > content.** Glass cannot sample glass.
 
-**Strata complies, and the audit keeps it that way.** The surfaces carrying a
+**Cortex complies, and the audit keeps it that way.** The surfaces carrying a
 material are exactly six, all control-layer: `.main__head`, `.focusbar`,
 `.composer`, `.slashmenu`, `.scrim`, `.st-toast--toned`. No card, list, table or
 media container has one. `npm run luminance` walks every route and fails if a
@@ -136,7 +136,7 @@ material is ever found inside another material.
 - **Content dissolves under the bar** via a `mask-image` fade rather than meeting
   a hard rule. A mask is not a gradient, so the flat-surface rule still holds.
 - **`.clear` glass is not implemented.** Apple reserves it for bold foreground
-  over media-rich content; Strata has no media.
+  over media-rich content; Cortex has no media.
 
 ### Lensing: measured, then declined
 
@@ -157,7 +157,7 @@ It was still declined, on evidence:
 
 The effect works and costs nothing; it simply has nothing to act on. Shipping it
 would add a per-resize canvas rebuild and a Chromium-only code path for a change
-no one can see. Revisit if Strata ever puts glass over media.
+no one can see. Revisit if Cortex ever puts glass over media.
 
 ## 11. Materials are rationed
 

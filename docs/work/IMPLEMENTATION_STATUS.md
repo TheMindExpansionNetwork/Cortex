@@ -1,4 +1,4 @@
-# Strata rebuild — implementation status
+# Cortex rebuild — implementation status
 
 Requirement/checklist IDs follow the handoff packet in
 `/Users/nikoveit/Documents/deepseek-harness/ENDING PLAN` (work plan M0–M8, acceptance checklist
@@ -15,21 +15,21 @@ volume with ~22 GiB free at the time of writing.
 | Path | What it is |
 | --- | --- |
 | `/Users/nikoveit/Documents/deepseek-harness/ENDING PLAN` | The handoff packet (authoritative inputs). Manifest verified: `shasum -a 256 -c MANIFEST.sha256` → all OK. |
-| `…/deepseek-harness/strata-work/strata-rebuild` | **The integration checkout.** Branch `strata/rebuild-2026-10`. This is where implementation happens. |
-| `…/strata-work/Strata` | Pristine reference checkout of `Niko1221/Strata` at `main` (= reviewed pin `296b59d2`). Do not edit. |
-| `…/strata-work/deepseek-harness` | Pristine clone of `deepseek-ai/deepseek-harness` at `57190202` (= reviewed pin). |
-| `…/strata-work/HyperCore-Tune` | Pristine clone at `4f9ab7fa` (= reviewed pin). |
-| `…/strata-work/handover/ui` | Extracted authoritative UI ZIP (14 Oct). |
-| `…/strata-work/handover/tui` | Extracted terminal ZIP. The older UI it contains is parked in `ui/legacy-tui-ui-snapshot/old-ui-2026-10-11` and **must not** replace the 14 Oct UI. |
-| `…/strata-work/toolchain` | Build toolchain: `venv` (cmake 4.4.4, ninja 1.13.2), `llama.cpp` at pinned `3cf03257`, `metal-cpp` (SHA-256 verified against `metal/setup_mac.py`'s pin). |
-| `…/strata-work/python311` | Python 3.11.15 venv with runtime + test dependencies. The system `python3` is 3.9.6, below Strata's 3.10 floor. |
-| `…/strata-work/evidence` | Retained raw evidence (logs, results). |
+| `…/deepseek-harness/cortex-work/cortex-rebuild` | **The integration checkout.** Branch `cortex/rebuild-2026-10`. This is where implementation happens. |
+| `…/cortex-work/Cortex` | Pristine reference checkout of `Niko1221/Strata` at `main` (= reviewed pin `296b59d2`). Do not edit. |
+| `…/cortex-work/deepseek-harness` | Pristine clone of `deepseek-ai/deepseek-harness` at `57190202` (= reviewed pin). |
+| `…/cortex-work/HyperCore-Tune` | Pristine clone at `4f9ab7fa` (= reviewed pin). |
+| `…/cortex-work/handover/ui` | Extracted authoritative UI ZIP (14 Oct). |
+| `…/cortex-work/handover/tui` | Extracted terminal ZIP. The older UI it contains is parked in `ui/legacy-tui-ui-snapshot/old-ui-2026-10-11` and **must not** replace the 14 Oct UI. |
+| `…/cortex-work/toolchain` | Build toolchain: `venv` (cmake 4.4.4, ninja 1.13.2), `llama.cpp` at pinned `3cf03257`, `metal-cpp` (SHA-256 verified against `metal/setup_mac.py`'s pin). |
+| `…/cortex-work/python311` | Python 3.11.15 venv with runtime + test dependencies. The system `python3` is 3.9.6, below Cortex's 3.10 floor. |
+| `…/cortex-work/evidence` | Retained raw evidence (logs, results). |
 
 ### Source revisions actually selected
 
 | Input | Reviewed pin | Selected revision | Note |
 | --- | --- | --- | --- |
-| Strata | `296b59d2f73c8f04a805df29c2fa97655adace78` | same (HEAD of `main`, no drift) | Base of `strata/rebuild-2026-10`. |
+| Cortex | `296b59d2f73c8f04a805df29c2fa97655adace78` | same (HEAD of `main`, no drift) | Base of `cortex/rebuild-2026-10`. |
 | DeepSeek Harness | `571902028a75c64c1d767f4ae5fd099485f0ddf0` | same (HEAD of `master`, no drift) | |
 | HyperCore-Tune | `4f9ab7fa689771b0f44a251475d8911ef42057ac` | same (HEAD of `main`, no drift) | |
 | Terminal checkpoint | `29b577b2` (not an upstream branch) | reconstructed (`2a9e0024`) | See §2. |
@@ -50,20 +50,20 @@ This was the largest unknown and it is now closed: the engine is **not** aspirat
 from the pinned sources on this Mac and the binary runs.
 
 ```
-cd …/strata-work/strata-rebuild
+cd …/cortex-work/cortex-rebuild
 …/toolchain/venv/bin/cmake -S metal -B build-metal -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_MAKE_PROGRAM=…/toolchain/venv/bin/ninja \
     -DMETAL_CPP_DIR=…/toolchain/metal-cpp \
-    -DSTRATA_GGML_DIR=…/toolchain/llama.cpp
-…/toolchain/venv/bin/ninja -C build-metal strata -j 6
-./build-metal/strata --version     # -> strata 0.1.44.1-metal
-file ./build-metal/strata          # -> Mach-O 64-bit executable arm64
+    -DCORTEX_GGML_DIR=…/toolchain/llama.cpp
+…/toolchain/venv/bin/ninja -C build-metal cortex -j 6
+./build-metal/cortex --version     # -> cortex 0.1.44.1-metal
+file ./build-metal/cortex          # -> Mach-O 64-bit executable arm64
 ```
 
 * ggml version 0.24.0, commit `3cf03257f` (matches the pin).
-* The kernel-parity tree builds separately with `-DSTRATA_METAL_ENGINE=OFF` and needs no model.
+* The kernel-parity tree builds separately with `-DCORTEX_METAL_ENGINE=OFF` and needs no model.
 
-**Evidence:** `…/strata-work/evidence/metal-parity/*.log`.
+**Evidence:** `…/cortex-work/evidence/metal-parity/*.log`.
 
 ### 1.2 Metal kernel parity on real GPU hardware (M0.2)
 
@@ -89,16 +89,16 @@ Apple M4:
 `rt_bench` reports the real device: `device: Apple M4 apple9 … metal4 … working set 11.8 GiB`,
 measured device read bandwidth up to **96.1 GB/s**.
 
-### 1.3 Terminal layer integrated onto current Strata (M0.1)
+### 1.3 Terminal layer integrated onto current Cortex (M0.1)
 
 The supplied terminal checkpoint is **not** an upstream branch, so it was reconstructed exactly
 from the supplied cumulative patch rather than copied:
 
 1. `git checkout -b terminal/reconstructed 61b3fb5d` (the patch's declared merge base).
-2. `git apply --index` of `Handover/tui/patches/strata-terminal-current-29b577b2-from-61b3fb5.patch`
+2. `git apply --index` of `Handover/tui/patches/cortex-terminal-current-29b577b2-from-61b3fb5.patch`
    → applied clean, 380 files.
 3. **Verified byte-identical** to the extracted snapshot: `diff -rq --exclude=.git` against
-   `handover/tui/source/strata-terminal-current-29b577b2` reported only the two build directories
+   `handover/tui/source/cortex-terminal-current-29b577b2` reported only the two build directories
    I had created. Commit `2a9e0024`.
 4. Merged onto current `main` as `05bfff68`.
 
@@ -138,19 +138,19 @@ passes the full suite below.
 These run without a GPU or model weights (the server suite uses `MockEngine`). They are contract
 and behaviour tests, **not** inference evidence.
 
-**Evidence:** `…/strata-work/evidence/terminal-suite.txt`, `…/strata-work/evidence/serve-suite.txt`.
+**Evidence:** `…/cortex-work/evidence/terminal-suite.txt`, `…/cortex-work/evidence/serve-suite.txt`.
 
-### 1.5 The real Strata engine is reachable end to end (M1.1 groundwork)
+### 1.5 The real Cortex engine is reachable end to end (M1.1 groundwork)
 
-The App Host, the Strata API worker and the terminal client were exercised against each other:
+The App Host, the Cortex API worker and the terminal client were exercised against each other:
 
 * `serve/server.py` starts, serves `/health`, `/v1/status`, `/v1/telemetry`, `/v1/chat/completions`
   (SSE) and the three dialects.
-* `strata.py status` in the terminal renders the six-view monitor against that live worker
+* `cortex.py status` in the terminal renders the six-view monitor against that live worker
   (`Sample age 0.0 s   Source server-v1`), i.e. the terminal layer and the server layer agree on
   the telemetry contract after the merge.
 * The App Host's inference bridge was pointed at that worker and detected it correctly
-  (`kind: "strata"`, `modelId: "qwen3.8-flash-next"`, `context: 32768`, three dialects), then
+  (`kind: "cortex"`, `modelId: "qwen3.8-flash-next"`, `context: 32768`, three dialects), then
   streamed a completion through it and reported real usage
   (`usageSource: "reported"`, 249 prompt / 34 completion tokens).
 
@@ -173,7 +173,7 @@ apps/desktop/
     icons/              generated from the supplied brand masters by `tauri icon`
   package.json          build scripts only; no runtime dependencies
 apps/host/              App Host + the supplied UI, carrier-neutral and shared with Terminal
-  server/               the Node host (as supplied, plus STRATA_DIST)
+  server/               the Node host (as supplied, plus CORTEX_DIST)
   dist/                 the built supplied UI
 ```
 
@@ -196,11 +196,11 @@ Why Tauri is the better carrier here, in evidence:
 
 | Artifact | Path | Size | SHA-256 |
 | --- | --- | --- | --- |
-| DMG | `apps/desktop/src-tauri/target/release/bundle/dmg/Strata_0.1.0_aarch64.dmg` | 43 MiB | `` |
-| `.app` | `apps/desktop/src-tauri/target/release/bundle/macos/Strata.app` |  | — |
+| DMG | `apps/desktop/src-tauri/target/release/bundle/dmg/Cortex_0.1.0_aarch64.dmg` | 43 MiB | `` |
+| `.app` | `apps/desktop/src-tauri/target/release/bundle/macos/Cortex.app` |  | — |
 
 `hdiutil verify` reports the checksum **VALID**, the image mounts read-only, and it contains
-`Strata.app` plus the `Applications` drop link.
+`Cortex.app` plus the `Applications` drop link.
 
 **The app was verified from inside the mounted DMG** — a read-only install path, which is the
 closest thing to a clean-user launch available without a second machine. The shell's self-test
@@ -217,7 +217,7 @@ passed all eight steps there:
 | `ui-served` | `/` served the UI |
 | `api-reachable-on-same-origin` | the renderer's API is on the same origin |
 
-A real GUI launch was also exercised: `open -a Strata.app` started both the shell process and the
+A real GUI launch was also exercised: `open -a Cortex.app` started both the shell process and the
 sidecar host listening on loopback, and quitting removed **both** processes with none left behind.
 
 **Headless DMG builds.** Tauri's default DMG step runs an AppleScript that asks Finder to arrange
@@ -239,29 +239,29 @@ rather than one per client, which is what the architecture's artifact rules ask 
 ### 1.7 No demo path in a packaged build (U12)
 
 The supplied host fabricates monitor readings (randomised GPU utilisation, temperature, VRAM, and
-`promptTps = 1400 + rand*500`) whenever `STRATA_REAL_ENGINE !== '1'` — and that was the **default**.
+`promptTps = 1400 + rand*500`) whenever `CORTEX_REAL_ENGINE !== '1'` — and that was the **default**.
 It also fell back to a token-streaming "demo engine" for chat.
 
 That is a production success path built from simulated data, which acceptance row U12 forbids. It
 is now closed at three points:
 
-1. `server/inference.mjs` probes **Strata's own API worker first** and adopts an endpoint only after
-   `/v1/status` identifies it (`service === "strata"`) — an unrelated OpenAI-compatible listener is
+1. `server/inference.mjs` probes **Cortex's own API worker first** and adopts an endpoint only after
+   `/v1/status` identifies it (`service === "cortex"`) — an unrelated OpenAI-compatible listener is
    no longer adopted just because it holds a port.
 2. `requiresRealEngine()` returns true for a packaged build unconditionally. When no engine
    answers, the backend becomes `kind: "unavailable"` with a typed, actionable error; the demo
-   branch is unreachable. `STRATA_FORCE_DEMO=1` can only select demo mode in an **unpackaged**
+   branch is unreachable. `CORTEX_FORCE_DEMO=1` can only select demo mode in an **unpackaged**
    run.
-3. The Tauri shell sets `STRATA_PACKAGED=1` and `STRATA_REAL_ENGINE=1` on the host process, so the
+3. The Tauri shell sets `CORTEX_PACKAGED=1` and `CORTEX_REAL_ENGINE=1` on the host process, so the
    monitor's derived fields report `none` rather than invented numbers.
 
 Verified behaviour:
 
 | Condition | Backend kind |
 | --- | --- |
-| `STRATA_PACKAGED=1`, no engine running | `unavailable` + typed error (no simulation) |
+| `CORTEX_PACKAGED=1`, no engine running | `unavailable` + typed error (no simulation) |
 | development, no engine running | `demo` (labelled `simulated: true`) |
-| `STRATA_PACKAGED=1`, Strata worker live | `strata` (real, with model/context/dialects) |
+| `CORTEX_PACKAGED=1`, Cortex worker live | `cortex` (real, with model/context/dialects) |
 
 ### 1.8 The agent bridge works end to end (A01/A03 groundwork)
 
@@ -275,7 +275,7 @@ installed Harness CLI (`0.2.0-rc.2`, from the DeepSeek Harness app bundle):
 
 | Case | Result |
 | --- | --- |
-| `completion` | **PASS** — one turn reached the Strata worker and completed; the durable assistant message records `provider: strata-local`, `model: qwen3.8-flash-next`; the worker independently recorded the requests |
+| `completion` | **PASS** — one turn reached the Cortex worker and completed; the durable assistant message records `provider: cortex-local`, `model: qwen3.8-flash-next`; the worker independently recorded the requests |
 | `cancel` | **INCONCLUSIVE on this host** — see below |
 | `approval` | **NOT EXERCISED** — no tool in this session's set required approval |
 
@@ -288,13 +288,13 @@ would have caught.** They are recorded because they will recur on the real machi
 
 1. **The provider schema is nested.** `llm-pi-ai`'s config is `{ providers: { "<route>": {...} } }`,
    not route keys at the top level. A top-level route key is *silently ignored*, and the failure
-   appears much later as `no adapter registered for provider "strata-local"`.
+   appears much later as `no adapter registered for provider "cortex-local"`.
 2. **Naming a credential reference is not the same as needing a credential.**
-   `apiKeyEnv: STRATA_LOCAL_API_KEY` fails with `no credential for provider route` when the
+   `apiKeyEnv: CORTEX_LOCAL_API_KEY` fails with `no credential for provider route` when the
    variable is unset, *before* the request reaches the worker.
 3. **But omitting the credential entirely also fails.** pi-ai's OpenAI-compatible client insists on
    a key before it will send anything (`No API key for provider`, `PI_AI_ERROR`). The route
-   therefore carries a literal loopback placeholder `Authorization: Bearer strata-local` — not a
+   therefore carries a literal loopback placeholder `Authorization: Bearer cortex-local` — not a
    secret, scoped to `127.0.0.1` by `baseURL`, and it must become an `apiKeyEnv` reference if the
    worker is ever started with `--api-key`.
 4. **The output budget must fit the *whole* request.** The Harness system prompt plus its tool
@@ -322,17 +322,17 @@ lists this as a required Phase B observation.
 
 The supplied Time-skip was a 28-second scripted animation: nine fixed moments, three sample
 documents chosen by regex, and a text table labelled "Simulated comparison checks". It is now a real
-state machine in `strata_control/time_skip.py`, driven from the CLI and shared by Desktop and
+state machine in `cortex_control/time_skip.py`, driven from the CLI and shared by Desktop and
 Terminal:
 
     queued -> checkpointing -> generating -> checking -> decision -> completed
     plus cancelled | failed | interrupted | needs_user_review
 
 ```
-strata timeskip run   --workspace DIR --prompt "..." [--attempts N] [--revise-command CMD]
-strata timeskip list
-strata timeskip status RUN_ID
-strata timeskip apply  RUN_ID [--dry-run] [--restore]
+cortex timeskip run   --workspace DIR --prompt "..." [--attempts N] [--revise-command CMD]
+cortex timeskip list
+cortex timeskip status RUN_ID
+cortex timeskip apply  RUN_ID [--dry-run] [--restore]
 python -m unittest discover -s tests/time_skip -t tests/time_skip   # 24 tests, OK
 ```
 
@@ -364,12 +364,12 @@ original back, and a subsequent apply on a user-edited workspace was refused.
 one bounded agent turn:
 
 ```
-strata timeskip run --workspace DIR --prompt "..." --attempts 1 \
+cortex timeskip run --workspace DIR --prompt "..." --attempts 1 \
     --revise-command "<python> <abs>/integrations/harness/revise_once.py --deadline 200"
 ```
 
-It runs with the **candidate directory** as its cwd, takes the prompt from `STRATA_TIMESKIP_PROMPT`
-and the attempt number from `STRATA_TIMESKIP_ATTEMPT`, and returns when the turn reaches a terminal
+It runs with the **candidate directory** as its cwd, takes the prompt from `CORTEX_TIMESKIP_PROMPT`
+and the attempt number from `CORTEX_TIMESKIP_ATTEMPT`, and returns when the turn reaches a terminal
 state. Its contract with Time-skip is narrow on purpose: **exit 0 means an attempt was made, not that
 it succeeded.** Whether it improved anything is decided by the checks, never by the runner.
 
@@ -387,7 +387,7 @@ stuck agent cannot hold a run open.
 | retained | `cp1-baseline`, flagged `needs user review` |
 | the user's workspace | **unchanged** (`title: notes / owner: nik`) |
 | the rejected candidate | kept on disk for inspection |
-| worker | 2 requests served by the local Strata worker |
+| worker | 2 requests served by the local Cortex worker |
 
 The candidate was correctly rejected because the engine on this Mac is the built-in `MockEngine`,
 which returns a fixed reply and cannot actually edit a file. **That is the point of the result**: a
@@ -403,11 +403,11 @@ backend contract the UI needs is the `timeskip` CLI's JSON output and `run.json`
 
 ### 1.11 Windows owner transport (R03/R04 groundwork)
 
-`strata_control/runtime.py` was POSIX-only: `_supported()` raised on Windows, so `strata runtime`
+`cortex_control/runtime.py` was POSIX-only: `_supported()` raised on Windows, so `cortex runtime`
 refused everything there and the terminal had no managed-owner mode at all. That is now a real
 transport with an explicit, honest difference between the platforms.
 
-`strata_control/owner_transport.py` provides the two operations the runtime needs (listen, connect)
+`cortex_control/owner_transport.py` provides the two operations the runtime needs (listen, connect)
 plus addressing and state-file validation:
 
 | Platform | Mechanism | What the channel's security rests on |
@@ -439,8 +439,8 @@ oversized inputs. The POSIX stale-socket recovery keeps its existing checks unch
 
 ### 1.12 Engine tuning: the job contract, and the HyperCore-Tune decision (T01–T08 groundwork)
 
-`strata_control/tuning.py` implements the tuning job: a bounded search over runtime configuration
-that produces a **recommendation**, never an automatic change. `strata tune plan|status|list` is the
+`cortex_control/tuning.py` implements the tuning job: a bounded search over runtime configuration
+that produces a **recommendation**, never an automatic change. `cortex tune plan|status|list` is the
 interface, shared by Desktop and Terminal. **31 tests pass.**
 
 **Decision D07 — HyperCore-Tune is a candidate optimizer, not the optimizer.** The handoff asks for
@@ -451,18 +451,18 @@ it to be adapted and tested rather than assumed portable. The evidence, from the
 | --- | --- |
 | Its search space is CUDA/HIP engine flags | `search_space.py` names `--vram-reserve-mib`, `--pcie-frac`, `--pool-workers`, `--host-core`, `--pool-affinity`, `--ple-io`, `--kv`, `--kv-grow`, `--prompt-cache-tail`, `--spec-min-p` |
 | Two of those do not exist on Apple Silicon | the Metal engine's `--help` lists neither `--vram-reserve-mib` nor `--pcie-frac` — they are NVIDIA/AMD device concepts, so a HyperCore sweep on Metal could only record `FAIL_BOOT` rows |
-| It finds Strata by walking up from its own directory | `strata_env.py`; unacceptable for a packaged app, where the component registry must name an exact engine build |
+| It finds Cortex by walking up from its own directory | `cortex_env.py`; unacceptable for a packaged app, where the component registry must name an exact engine build |
 | It writes deliverables next to that root | `max_run_<model>.json/.sh/.bat`; the active profile must not be mutated by a search |
 | Its README claims Linux/Windows, its tests use stub engines | a claim about the harness, not a qualification of any GPU |
 
-So Strata owns the job, the lease, the evidence and the apply step, and HyperCore-Tune remains a
+So Cortex owns the job, the lease, the evidence and the apply step, and HyperCore-Tune remains a
 candidate optimizer behind that job for the backends whose flags it actually targets. If it is later
 qualified on CUDA, it plugs in where the measurement function is; nothing about the contract below
 changes.
 
 **The dimension table is what makes a sweep safe.** A dimension is offered only when *every* flag it
 drives is both a concept of the selected backend and accepted by the actual engine binary —
-`engine_flag_inventory()` runs `strata --help` and the result decides. Anything else is excluded
+`engine_flag_inventory()` runs `cortex --help` and the result decides. Anything else is excluded
 **with its reason**, so a sweep can never "measure" a configuration the engine would refuse. For this
 machine's Metal engine the plan reports exactly that:
 
@@ -492,7 +492,7 @@ excluded:  vram_reserve, pcie_frac, expert_cache   (not Apple Silicon concepts)
 
 ### 1.12a The measurement harness (T04 groundwork)
 
-`strata_control/tune_engine.py` is the `measure` callable the job needs: it boots the engine with one
+`cortex_control/tune_engine.py` is the `measure` callable the job needs: it boots the engine with one
 candidate's flags, sends the declared workload, reads the engine's own protocol output, and returns
 measurements. **26 tests pass against a stub engine that speaks the real protocol.**
 
@@ -538,7 +538,7 @@ The supplied Time-skip design is preserved exactly. What changed is where its nu
 
 `apps/host/src/lib/time-skip.ts` already exported `timeSkipResultState(run, now)`, and
 `TimeSkipPanel` renders from what that returns. A run now optionally carries a `job` — the App Host's
-projection of Strata Control's durable record — and when it is present the result state is derived
+projection of Cortex Control's durable record — and when it is present the result state is derived
 from the **job's phase, decision and check outcomes** instead of from elapsed time:
 
 | Value | Preview run | Real run |
@@ -617,15 +617,15 @@ the candidates that could not be measured with their reasons.
 UI suite: **194 pass / 1 fail** (195 total); the single failure is the pre-existing
 `request-flow` flake recorded in §1.14, unchanged by this work.
 
-### 1.16 `strata tune run` — a real sweep, end to end
+### 1.16 `cortex tune run` — a real sweep, end to end
 
-`strata tune run` performs the whole job: it plans from the engine binary's own flags, measures the
+`cortex tune run` performs the whole job: it plans from the engine binary's own flags, measures the
 baseline, enumerates candidates, measures each with paired repeats, re-measures the baseline, and
 writes a report. **63 tuning tests pass.** Verified end to end against a stub engine that speaks the
 real serve protocol and makes its decode speed depend on one flag:
 
 ```
-$ strata tune run --engine tests/tuning/stub_engine.sh --backend metal --model stub \
+$ cortex tune run --engine tests/tuning/stub_engine.sh --backend metal --model stub \
       --trials 4 --repeats 3 --hold ple_io --hold kv_grow --hold spec_min_p
 sweeping kv
   baseline  median 20.0 over 3 runs
@@ -678,7 +678,7 @@ implementation gap and is never recorded as `pending-hardware`.** Deferring a de
 machine is how a defect becomes permanent. The nine failures are named in the matrix with what is
 missing.
 
-**T06 closed — tuning history.** `strata_control/tune_history.py` makes identity a content digest
+**T06 closed — tuning history.** `cortex_control/tune_history.py` makes identity a content digest
 rather than a label: a re-quantised model with the same filename is a different model. The comparison
 key is the engine digest, model digest, digest method, backend, workload, context and machine; a
 completed sweep records itself, and its report states how many earlier sweeps are comparable and, for
@@ -698,28 +698,28 @@ no replacement character, an SSE line split mid-JSON is reassembled, a stream en
 trailing newline still yields its last delta, a malformed frame is skipped without losing its
 neighbours, and an error frame reaches the caller in the provider's own words.
 
-### 1.18 `strata tune apply` and `rollback` — explicit, verified, reversible (T07 closed)
+### 1.18 `cortex tune apply` and `rollback` — explicit, verified, reversible (T07 closed)
 
 The sweep recommends and never writes; applying is now a separate deliberate command. **115 tuning
 tests pass.** Verified end to end:
 
 ```
-$ strata tune apply <job> --config strata-demo.json          # no model identity -> REFUSED
-strata: the sweep recorded no model digest, so its recommendation cannot be matched to the
+$ cortex tune apply <job> --config cortex-demo.json          # no model identity -> REFUSED
+cortex: the sweep recorded no model digest, so its recommendation cannot be matched to the
         installed weights; re-run the sweep with --model-path and apply that result instead
 config byte-identical: yes
 
-$ strata tune apply <job> --config strata-demo.json --model-path model.gguf --state-dir state
-applied to strata-demo.json
+$ cortex tune apply <job> --config cortex-demo.json --model-path model.gguf --state-dir state
+applied to cortex-demo.json
   + --kv int8
   - --kv fp16
-  rollback: strata tune rollback 20261015T052436Z-aa873d11c569
+  rollback: cortex tune rollback 20261015T052436Z-aa873d11c569
 
-$ strata tune rollback 20261015T052436Z-aa873d11c569
-restored strata-demo.json          # exact previous bytes
+$ cortex tune rollback 20261015T052436Z-aa873d11c569
+restored cortex-demo.json          # exact previous bytes
 ```
 
-`env.STRATA_TOKEN` and `aliases` survive the edit — an apply that dropped a user's token would be
+`env.CORTEX_TOKEN` and `aliases` survive the edit — an apply that dropped a user's token would be
 worse than no apply at all. Every refusal leaves the configuration **byte-identical**, which the
 tests assert directly rather than inferring from a return value.
 
@@ -765,7 +765,7 @@ answer cannot be told from a fast right one."* That refusal is the point of the 
 **Three real defects this found, all in code I had just written:**
 
 1. **The worker never started.** I passed `--profile`, which is the *terminal launcher's* flag. The
-   worker's own spelling is `--engine {mock,strata} --config <path>`. It exited 2 with a usage
+   worker's own spelling is `--engine {mock,cortex} --config <path>`. It exited 2 with a usage
    message — and my first instinct was to blame the config file rather than read the flag list.
 2. **Reasoning streams were measured as nothing.** The worker streams reasoning into
    `reasoning_content` and the answer into `content`; I read only `content`, so a reasoning model
@@ -785,7 +785,7 @@ API-mode sweep needs a model that fits a machine, which this one is not.
 ### 1.20 Component packages: manifests, safe unpacking, atomic activation (P06, P07, P11, P12, P13)
 
 Five requirement rows shared one missing root: there was no component package system. There is now —
-`strata_control/components.py`, **47 tests** — and the rows are closed together because they are one
+`cortex_control/components.py`, **47 tests** — and the rows are closed together because they are one
 mechanism seen from five angles.
 
 **What a component is.** A manifest declares its kind (`application`, `runtime`, `agent-runtime`,
@@ -830,13 +830,13 @@ ignores restarts rather than appending to a prefix (which would produce a corrup
 fails at verification, much later); a partial larger than the declared size is discarded as stale; and
 the `.complete` marker is written last so an interrupted install is never mistaken for a finished one.
 
-**Two CLI surfaces, both read-only:** `strata components plan <manifest>` says whether a package may
-be used here, and `strata components backends` prints the matrix. Verified that a Metal engine
+**Two CLI surfaces, both read-only:** `cortex components plan <manifest>` says whether a package may
+be used here, and `cortex components backends` prints the matrix. Verified that a Metal engine
 manifest is *usable* on this Mac and refused for `linux-x86_64` with both reasons named.
 
 ### 1.21 Offline policy: two claims, tested separately (U08)
 
-The checklist asks for two things that are easy to conflate, so `strata_control/offline.py` keeps
+The checklist asks for two things that are easy to conflate, so `cortex_control/offline.py` keeps
 them apart and they are tested separately — because a passing runtime-only test says **nothing** about
 the strict one. The first is about the server's own code paths; the second is about every process it
 can start.
@@ -850,7 +850,7 @@ can start.
 the policy by naming the same variable:
 
 ```
-offline=True:  HF_HUB_OFFLINE=1  TRANSFORMERS_OFFLINE=1  PIP_NO_INDEX=1  NO_PROXY=*  STRATA_OFFLINE=1
+offline=True:  HF_HUB_OFFLINE=1  TRANSFORMERS_OFFLINE=1  PIP_NO_INDEX=1  NO_PROXY=*  CORTEX_OFFLINE=1
                HTTP_PROXY/HTTPS_PROXY emptied so an accidental call fails fast rather than hanging
 profile asked HF_HUB_OFFLINE=0 -> '1'   (the policy wins)
 ```
@@ -883,7 +883,7 @@ kind of thing this rebuild exists to remove.
 
 ### 1.22 Tool execution and approval, end to end (A04 closed; A03/A05 in progress)
 
-`integrations/harness/tool_flow_e2e.py` drives the real path: a scripted Strata worker emits a bash
+`integrations/harness/tool_flow_e2e.py` drives the real path: a scripted Cortex worker emits a bash
 tool call, the Harness agent loop executes it against a real workspace, and the turn is recorded in a
 durable session. The model is scripted — writing a file via bash is deterministic, and a scripted tool
 call exercises the same code as a model-chosen one (the worker's parser, the Harness tool executor,
@@ -1031,19 +1031,19 @@ staging explicitly is the fix.
 ## 2. Deviations and decisions (material)
 
 **D01 — Merge strategy for the terminal checkpoint.** The handoff says to port terminal changes
-"in small commits" onto current Strata. The terminal branch is not fetchable upstream, so the
+"in small commits" onto current Cortex. The terminal branch is not fetchable upstream, so the
 only faithful reproduction is to rebuild it from the supplied cumulative patch at its declared
 merge base and merge that. This is recorded here because it is a deviation from the literal
-"small commits" instruction, made to avoid copying an old engine tree over current Strata.
+"small commits" instruction, made to avoid copying an old engine tree over current Cortex.
 *Preserved:* all current engine/server behaviour — verified by the 801-test server suite.
 
-**D02 — Python interpreter.** The system `python3` is 3.9.6; Strata requires 3.10+. `setup.sh`
+**D02 — Python interpreter.** The system `python3` is 3.9.6; Cortex requires 3.10+. `setup.sh`
 downloads a pinned standalone CPython 3.12 into `.python` on macOS for exactly this case. For
 development and testing I used the Homebrew `python3.11` in a venv. The shipped runtime must use
 the setup path (bundled interpreter), not a developer interpreter — that work is still open (§4).
 
 **D03 — Harness embedding surface is the Gateway, not the SDK.** Reconnaissance
-(`…/strata-work/RECON-HARNESS.md`, every claim cited to `file:line`) shows the handoff's two
+(`…/cortex-work/RECON-HARNESS.md`, every claim cited to `file:line`) shows the handoff's two
 stated gaps are **scoped to the SDK wire only**:
 
 | Surface | cancel | approval out/in |
@@ -1090,7 +1090,7 @@ passes, so this is a narrow gap rather than a broken backend.
 
 This is the precise limitation the goal anticipates. The evidence:
 
-* **The Mac engine runs exactly one model family.** `include/strata/core/geometry.hpp` fixes the
+* **The Mac engine runs exactly one model family.** `include/cortex/core/geometry.hpp` fixes the
   shape the kernels are *compiled* for — `n_embd 2560`, `n_layers 48`, `n_expert 512`,
   `n_vocab 248320`, `n_ff 640` — and a model file of another shape is refused at load with the
   differing metadata key. There is no smaller-model fallback to substitute, and substituting a
@@ -1116,7 +1116,7 @@ Under Electron the packaged bundle started but its host never ran, with no outpu
 investigation is kept here because the lessons are carrier-independent and cost real time:
 
 1. **A packaged macOS GUI app has no attached stdout.** Adding a boot trace that writes to a file
-   (`STRATA_BOOT_TRACE`) was the prerequisite for every later finding. Before it the app simply
+   (`CORTEX_BOOT_TRACE`) was the prerequisite for every later finding. Before it the app simply
    hung with no evidence at all. Any future packaging work should make the packaged app
    self-report first.
 2. **The host cannot be a child process of a packaged Electron bundle, but it can be loaded
@@ -1146,7 +1146,7 @@ runtime.**
 
 ### 3.4b ~~The terminal distribution has no bundled runtime~~ — **RESOLVED**
 
-`release/artifacts/strata-terminal-0.1.44.1-darwin-arm64.tar.gz` (42 MB, sha256
+`release/artifacts/cortex-terminal-0.1.44.1-darwin-arm64.tar.gz` (42 MB, sha256
 `fafa0076fd30f9fa3d3f1250d8afbf39225bddb80e07a3d818bae2b01e2814d8`, 42480892 bytes) is a **self-contained** terminal distribution: it carries a pinned standalone CPython
 3.12.15 and its runtime dependencies, so a user needs no Python, pip, Node, compiler or checkout.
 
@@ -1168,16 +1168,16 @@ Python on that PATH is macOS's own 3.9, which the launcher correctly rejects as 
 
 | Command | Result |
 | --- | --- |
-| `./bin/strata --help` | the full command set, including `timeskip` and `tune` |
-| `./bin/strata status --url <dead>` | exit **3**, the documented "control unreachable" code |
-| `./bin/strata timeskip list` | `{"schema_version":1,"ok":true,"runs":[]}` |
-| `./bin/strata tune plan --engine <metal>` | read the real engine's flags and planned the sweep |
+| `./bin/cortex --help` | the full command set, including `timeskip` and `tune` |
+| `./bin/cortex status --url <dead>` | exit **3**, the documented "control unreachable" code |
+| `./bin/cortex timeskip list` | `{"schema_version":1,"ok":true,"runs":[]}` |
+| `./bin/cortex tune plan --engine <metal>` | read the real engine's flags and planned the sweep |
 | `./python/bin/python3 -m serve.server --engine mock` | `/health` ok, a chat completion returned, and the bundled CLI showed it LIVE |
 
 That last row is also the R02 evidence asked for: pure serving ran with **no agent runtime, no
 Tuning packages, no Textual and no UI present**. The import graph of `serve/` remains stdlib plus
 relative `serve.*` modules, verified both by inspection and by importing
-`strata_control.management` and `strata_cli.cli` on a bare interpreter.
+`cortex_control.management` and `cortex_cli.cli` on a bare interpreter.
 
 One defect was found and fixed by this test: the launcher looked for the bundled runtime at
 `/python/bin/python3` while the distribution puts it at `/../python/bin/python3`. That
@@ -1192,7 +1192,7 @@ quietly stops being self-contained — which is exactly why the clean-environmen
 * App Host ↔ Harness Gateway bridge (the vertical slice's agent half).
 * Time-skip: replace the scripted 28-second flow with a real checkpoint/candidate/check/decision
   state machine (S01–S05).
-* Tuning: the Strata job contract plus a bounded search adapter, and a HyperCore-Tune evaluation
+* Tuning: the Cortex job contract plus a bounded search adapter, and a HyperCore-Tune evaluation
   (T01–T08).
 * Acquisition/component/update ownership per M3 (the reuse contract: app-only update transfers
   zero engine/model bytes).
@@ -1210,7 +1210,7 @@ quietly stops being self-contained — which is exactly why the clean-environmen
 2. Give the Host a **server-side tool executor** so `useTools` is real rather than a UI affordance,
    with the approval policy in the backend (A03/A04), and prove a denial never executes.
 3. Replace Time-skip's scripted flow (S01–S05).
-4. Implement the tuning job contract with a Strata-owned bounded search adapter and evaluate
+4. Implement the tuning job contract with a Cortex-owned bounded search adapter and evaluate
    HyperCore-Tune against it (T01–T08).
 5. Windows/Linux packaging recipes and dependency locks.
 6. Signing/notarization and a compiled `.icns` from the supplied brand masters (blocked on owner
@@ -1232,21 +1232,21 @@ path. This development Mac (16 GiB, ~22 GiB free) is below the tested floor.
 ## 6. Reproducing everything in §1 from scratch
 
 ```sh
-ROOT=/Users/nikoveit/Documents/deepseek-harness/strata-work
-cd "$ROOT/strata-rebuild"
+ROOT=/Users/nikoveit/Documents/deepseek-harness/cortex-work
+cd "$ROOT/cortex-rebuild"
 
 # 1. Engine (needs the toolchain venv, llama.cpp at the pin, metal-cpp)
 "$ROOT/toolchain/venv/bin/cmake" -S metal -B build-metal -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_MAKE_PROGRAM="$ROOT/toolchain/venv/bin/ninja" \
   -DMETAL_CPP_DIR="$ROOT/toolchain/metal-cpp" \
-  -DSTRATA_GGML_DIR="$ROOT/toolchain/llama.cpp"
-"$ROOT/toolchain/venv/bin/ninja" -C build-metal strata -j 6
-./build-metal/strata --version
+  -DCORTEX_GGML_DIR="$ROOT/toolchain/llama.cpp"
+"$ROOT/toolchain/venv/bin/ninja" -C build-metal cortex -j 6
+./build-metal/cortex --version
 
 # 2. Metal kernel parity (no model needed)
 "$ROOT/toolchain/venv/bin/cmake" -S metal -B build-metal-kern -G Ninja \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_MAKE_PROGRAM="$ROOT/toolchain/venv/bin/ninja" \
-  -DSTRATA_METAL_ENGINE=OFF
+  -DCORTEX_METAL_ENGINE=OFF
 "$ROOT/toolchain/venv/bin/ninja" -C build-metal-kern -j 8
 for t in gemv_parity mma_parity dense_mm_parity expert_parity gdn_parity gdn_prompt_parity \
          qsa_parity qsa_prompt_parity prompt_parity gr_parity gr2_parity fuse_parity \

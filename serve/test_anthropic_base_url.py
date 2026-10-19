@@ -58,33 +58,33 @@ class AnthropicBase(unittest.TestCase):
     @unittest.skipIf(anthropic is None, "the anthropic package is not installed")
     def test_sdk_with_the_root_address_works(self):
         client = anthropic.Anthropic(base_url=self.root, api_key="not-needed", max_retries=0)
-        msg = client.messages.create(model="strata", max_tokens=32, messages=[{"role": "user", "content": "hi"}])
+        msg = client.messages.create(model="cortex", max_tokens=32, messages=[{"role": "user", "content": "hi"}])
         self.assertEqual(msg.type, "message")
         self.assertIn("hello", "".join(b.text for b in msg.content if b.type == "text"))
 
     @unittest.skipIf(anthropic is None, "the anthropic package is not installed")
     def test_sdk_with_the_old_v1_address_works_through_the_alias(self):
         client = anthropic.Anthropic(base_url=self.root + "/v1", api_key="not-needed", max_retries=0)
-        msg = client.messages.create(model="strata", max_tokens=32, messages=[{"role": "user", "content": "hi"}])
+        msg = client.messages.create(model="cortex", max_tokens=32, messages=[{"role": "user", "content": "hi"}])
         self.assertEqual(msg.type, "message")
         self.assertIn("hello", "".join(b.text for b in msg.content if b.type == "text"))
 
     @unittest.skipIf(anthropic is None, "the anthropic package is not installed")
     def test_sdk_streaming_through_the_alias(self):
         client = anthropic.Anthropic(base_url=self.root + "/v1", api_key="not-needed", max_retries=0)
-        with client.messages.stream(model="strata", max_tokens=32, messages=[{"role": "user", "content": "hi"}]) as stream:
+        with client.messages.stream(model="cortex", max_tokens=32, messages=[{"role": "user", "content": "hi"}]) as stream:
             text = "".join(stream.text_stream)
         self.assertIn("hello", text)
 
     def test_count_tokens_alias(self):
-        body = {"model": "strata", "messages": [{"role": "user", "content": "hi"}]}
+        body = {"model": "cortex", "messages": [{"role": "user", "content": "hi"}]}
         code, real = self.raw("/v1/messages/count_tokens", body)
         code2, aliased = self.raw("/v1/v1/messages/count_tokens", body)
         self.assertEqual((code, code2), (200, 200))
         self.assertEqual(real, aliased)
 
     def test_only_the_two_messages_paths_are_aliased(self):
-        body = {"model": "strata", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 8}
+        body = {"model": "cortex", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 8}
         for path in ("/v1/v1/chat/completions", "/v1/v1/responses", "/v1/v1/v1/messages", "/v1/v2/messages"):
             code, _ = self.raw(path, body)
             self.assertEqual(code, 404, path)

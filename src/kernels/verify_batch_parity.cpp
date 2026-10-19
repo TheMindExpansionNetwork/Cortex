@@ -4,18 +4,18 @@
 //     build/verify_batch_parity
 //
 // 1. native_gr_post_multi against n native_gr_post calls (the hyper-connection write before the PLE block).
-// 2. native_ple_postops_batch_snap (STRATA_DF_PLE) against the per-token loop of the verify window: per token
+// 2. native_ple_postops_batch_snap (CORTEX_DF_PLE) against the per-token loop of the verify window: per token
 //    native_ple_postops, ple_history_advance and a copy of the history (the commit's snapshot); the results, the final
 //    history and every snapshot, for windows of 2..8 tokens.
 // GPU, synthetic, no model.
-#include "strata/kernels/f16_bits.hpp"
-#include "strata/kernels/kv_q4.hpp"
-#include "strata/kernels/kv_stream.hpp"
-#include "strata/kernels/native_gr_postops.hpp"
-#include "strata/kernels/native_ple_postops.hpp"
-#include "strata/kernels/ngram.hpp"
-#include "strata/kernels/ple.hpp"
-#include "strata/kernels/qsa.hpp"
+#include "cortex/kernels/f16_bits.hpp"
+#include "cortex/kernels/kv_q4.hpp"
+#include "cortex/kernels/kv_stream.hpp"
+#include "cortex/kernels/native_gr_postops.hpp"
+#include "cortex/kernels/native_ple_postops.hpp"
+#include "cortex/kernels/ngram.hpp"
+#include "cortex/kernels/ple.hpp"
+#include "cortex/kernels/qsa.hpp"
 
 #include <cuda_runtime.h>
 
@@ -26,7 +26,7 @@
 #include <random>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 

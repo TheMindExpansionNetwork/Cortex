@@ -1,27 +1,27 @@
 {
   "carrier": "tauri",
   "error": "",
-  "kind": "strata-desktop-self-test",
+  "kind": "cortex-desktop-self-test",
   "ok": true,
   "schemaVersion": 1,
   "steps": [
     {
-      "detail": "/Users/nikoveit/Documents/deepseek-harness/strata-work/strata-rebuild/apps/desktop/src-tauri/target/release/bundle/macos/Strata.app/Contents/Resources",
+      "detail": "/Users/nikoveit/Documents/deepseek-harness/cortex-work/cortex-rebuild/apps/desktop/src-tauri/target/release/bundle/macos/Cortex.app/Contents/Resources",
       "name": "resources-packaged",
       "ok": true
     },
     {
-      "detail": "/Users/nikoveit/Documents/deepseek-harness/strata-work/strata-rebuild/apps/desktop/src-tauri/target/release/bundle/macos/Strata.app/Contents/Resources/host/server/index.mjs",
+      "detail": "/Users/nikoveit/Documents/deepseek-harness/cortex-work/cortex-rebuild/apps/desktop/src-tauri/target/release/bundle/macos/Cortex.app/Contents/Resources/host/server/index.mjs",
       "name": "host-entry-present",
       "ok": true
     },
     {
-      "detail": "/Users/nikoveit/Documents/deepseek-harness/strata-work/strata-rebuild/apps/desktop/src-tauri/target/release/bundle/macos/Strata.app/Contents/Resources/host/dist",
+      "detail": "/Users/nikoveit/Documents/deepseek-harness/cortex-work/cortex-rebuild/apps/desktop/src-tauri/target/release/bundle/macos/Cortex.app/Contents/Resources/host/dist",
       "name": "ui-dist-present",
       "ok": true
     },
     {
-      "detail": "/Users/nikoveit/Documents/deepseek-harness/strata-work/strata-rebuild/apps/desktop/src-tauri/target/release/bundle/macos/Strata.app/Contents/Resources/node/node",
+      "detail": "/Users/nikoveit/Documents/deepseek-harness/cortex-work/cortex-rebuild/apps/desktop/src-tauri/target/release/bundle/macos/Cortex.app/Contents/Resources/node/node",
       "name": "private-node-runtime",
       "ok": true
     },

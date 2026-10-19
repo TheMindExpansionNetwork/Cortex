@@ -93,14 +93,14 @@ export function createLlmProxy({ targetOf, samplingNow }) {
     req.on('error', () => res.destroy());
     req.on('end', () => {
       let body = Buffer.concat(chunks);
-      const budget = nearestBudget(req.headers['x-strata-budget']);
+      const budget = nearestBudget(req.headers['x-cortex-budget']);
       if (req.method === 'POST' && /\/chat\/completions\/?$/.test(rest) && body.length) {
         try { body = Buffer.from(JSON.stringify(shapeBody(JSON.parse(body.toString('utf8')), { sampling: samplingNow(), budget }))); } catch { /* not JSON: pass it on untouched */ }
       }
       // The route's address is the model's own base (it ends in /v1): the assistant's /v1 is that same prefix.
       const target = new URL(base.replace(/\/+$/, '') + rest.replace(/^\/v1(?=\/|$|\?)/, ''));
       const headers = {};
-      for (const [k, v] of Object.entries(req.headers)) if (!HOP.has(k) && !k.startsWith('x-strata-')) headers[k] = v;
+      for (const [k, v] of Object.entries(req.headers)) if (!HOP.has(k) && !k.startsWith('x-cortex-')) headers[k] = v;
       headers['content-length'] = String(body.length);
       const lib = target.protocol === 'https:' ? https : http;
       const upstream = lib.request(target, { method: req.method, headers }, reply => {

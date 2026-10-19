@@ -10,9 +10,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from strata_cli.launch import settings as S
-from strata_cli.launch.app import Ctx, LaunchApp
-from strata_cli.launch import params as P
+from cortex_cli.launch import settings as S
+from cortex_cli.launch.app import Ctx, LaunchApp
+from cortex_cli.launch import params as P
 from tests.terminal.launch_support import HW_12, Home, text_of
 from tests.terminal.test_launch_tui import FakeRunner, make_ctx, press, flat, typed
 
@@ -26,7 +26,7 @@ class Base(unittest.TestCase):
         FakeRunner.instances.clear()
         FakeRunner.behaviour = "ok"
         FakeRunner.download = 0.0
-        p = mock.patch("strata_cli.launch.app.Runner", FakeRunner)
+        p = mock.patch("cortex_cli.launch.app.Runner", FakeRunner)
         p.start()
         self.addCleanup(p.stop)
 
@@ -87,12 +87,12 @@ class AdvancedLayout(Base):
         ctx.settings.family, ctx.settings.model = "qwen", "IQ3_XXS"
         for k, v in choices.items():
             setattr(ctx.settings, k, v)
-        base = {"exe": "component:strata-engine", "vision": {"mmproj": "/x/mmproj.gguf", "gpu": False},
+        base = {"exe": "component:cortex-engine", "vision": {"mmproj": "/x/mmproj.gguf", "gpu": False},
                 "args": ["--native", "/very/long/path/to/the/models/folder/Qwen3.8-Flash-Next-Something-IQ3_XXS-00001-of-00002.gguf",
                          "--pack", "/very/long/path/to/the/data/packs/iq3_xxs", "--max-context", "131072", "--kv", "int8", "--prefill", "auto",
                          "--vision"]}
-        for p in (mock.patch.object(Ctx, "base_config", lambda self: base), mock.patch.object(Ctx, "engine_exe", lambda self: "/engine/strata"),
-                  mock.patch("strata_cli.launch.params.engine_help_text", return_value=self.HELP)):
+        for p in (mock.patch.object(Ctx, "base_config", lambda self: base), mock.patch.object(Ctx, "engine_exe", lambda self: "/engine/cortex"),
+                  mock.patch("cortex_cli.launch.params.engine_help_text", return_value=self.HELP)):
             p.start()
             self.addCleanup(p.stop)
         return ctx
@@ -176,7 +176,7 @@ class InstalledModelFolder(Base):
 
     def build(self):
         base = Path(os.environ["LOCALAPPDATA"]).parent / "gui"
-        docs = base / "Documents" / "Strata"
+        docs = base / "Documents" / "Cortex"
         gguf = docs / "Models" / "qwen-IQ3_XXS" / "Qwen3.8-Flash-Next-GSQ-RCO-IQ3_XXS-00001-of-00002.gguf"
         gguf.parent.mkdir(parents=True)
         gguf.write_bytes(b"x")
@@ -184,12 +184,12 @@ class InstalledModelFolder(Base):
         pack.mkdir(parents=True)
         mm = docs / "Models" / "mmproj-Qwen3.8-Flash-Next-BF16.gguf"
         mm.write_bytes(b"x")
-        install = Path(os.environ["STRATA_INSTALL_DIR"])
+        install = Path(os.environ["CORTEX_INSTALL_DIR"])
         install.mkdir(parents=True, exist_ok=True)
-        cfg = {"exe": "component:strata-engine", "tokenizer": str(pack), "args": ["--pack", str(pack), "--native", str(gguf), "--mtp", str(docs / "mtp" / "rt"),
+        cfg = {"exe": "component:cortex-engine", "tokenizer": str(pack), "args": ["--pack", str(pack), "--native", str(gguf), "--mtp", str(docs / "mtp" / "rt"),
                                                                                  "--max-context", "32768", "--kv", "int8"],
                "vision": {"mmproj": str(mm), "gpu": False}}
-        (install / "strata-iq3_xxs.json").write_text(json.dumps(cfg))
+        (install / "cortex-iq3_xxs.json").write_text(json.dumps(cfg))
         return docs
 
     def test_the_folder_starts_where_the_model_is_and_says_what_is_missing(self):

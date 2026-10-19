@@ -1,4 +1,4 @@
-// src/core/spec_prob_test.cpp - probabilistic draft acceptance (include/strata/core/spec_prob.hpp), no GPU.
+// src/core/spec_prob_test.cpp - probabilistic draft acceptance (include/cortex/core/spec_prob.hpp), no GPU.
 //
 // A reference rejection sampler on synthetic target distributions p and drafter distributions q over a 16-token
 // vocabulary; 2,000,000 trials per case.  Each trial draws a draft d from q, judges it with spec_verify_row and
@@ -14,7 +14,7 @@
 // up in the pairs first), with a draft of depth 2 whose second row is conditioned on the first draft.
 // Truncation regressions: a point-mass row inside a window that also has q rows (a lookup chain's tail) behaves as
 // exact match (accept probability p(d)), and "no list" is never "q = 0".
-#include "strata/core/spec_prob.hpp"
+#include "cortex/core/spec_prob.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -22,7 +22,7 @@
 #include <random>
 #include <vector>
 
-using namespace strata::core;
+using namespace cortex::core;
 
 namespace {
 

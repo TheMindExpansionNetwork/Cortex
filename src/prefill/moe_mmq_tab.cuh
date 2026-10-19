@@ -1,4 +1,4 @@
-// src/prefill/moe_mmq_tab.cuh - STRATA_MMQ_DIRECT: llama.cpp's MMQ outer scheduler (ggml-cuda mmq.cuh, MIT) with a
+// src/prefill/moe_mmq_tab.cuh - CORTEX_MMQ_DIRECT: llama.cpp's MMQ outer scheduler (ggml-cuda mmq.cuh, MIT) with a
 // per-expert pointer table, so the prompt path's MMQ reads resident experts in their expert-cache slots instead of
 // a gathered copy.  Included only by the per-type instance TUs (CMake: mmq_tab_instance.cu.in); moe_mmq.cu sees
 // the declarations in moe_mmq_tab.hpp.
@@ -12,7 +12,7 @@
 // mul_mat_q_process_tile, the tile loaders, vec_dot, write_back and mul_mat_q_stream_k_fixup are upstream's own
 // templates from the same mmq.cuh, compiled in the same target with the same flags.  Deliberate deviations:
 //   1. upstream's `const char * __restrict__ x` parameter becomes 16 such parameters x0..x15 (the table, see
-//      STRATA_MMQ_TAB_PARAMS); at the three offset_x sites the expert's base is the one picked by
+//      CORTEX_MMQ_TAB_PARAMS); at the three offset_x sites the expert's base is the one picked by
 //      fastdiv(zt, channel_ratio), and the fastdiv(zt, channel_ratio)*stride_channel_x term leaves offset_x
 //      (stride_channel_x is still passed, unused);
 //   2. the launcher raises the shared-memory limit of mul_mat_q_tab<type, J> only - upstream's line for
@@ -20,9 +20,9 @@
 // The launch geometry (J, tiles, the stream-k grid and k split, the fixup) is computed from the same mmq_args as
 // upstream's, so every output tile is summed in the same order: the results are bitwise the same as gathering the
 // experts `stride_channel_x` apart (tests/cuda/prefill_mmq_tab_test.cu checks it per type and J).
-// CMake turns STRATA_MMQ_TAB off unless the SHA-256 of mmq.cuh's mirrored region (mul_mat_q_process_tile through
+// CMake turns CORTEX_MMQ_TAB off unless the SHA-256 of mmq.cuh's mirrored region (mul_mat_q_process_tile through
 // mul_mat_q_case, which includes struct mmq_args) is one this copy was verified against; when the llama.cpp pin
-// moves, re-sync this file, re-run the test and record the new hash in CMakeLists.txt (_strata_mmq_tab_known).
+// moves, re-sync this file, re-run the test and record the new hash in CMakeLists.txt (_cortex_mmq_tab_known).
 //
 // MIT License
 // Copyright (c) 2023-2026 The ggml authors
@@ -51,7 +51,7 @@
 
 #include <type_traits>
 
-namespace strata::prefill::mmq {
+namespace cortex::prefill::mmq {
 
 // A second net behind the configure fingerprint: the upstream templates this copy calls keep their signatures.
 static_assert(std::is_same<decltype(&mul_mat_q_process_tile<GGML_TYPE_Q8_0, 8, false, false>),
@@ -67,18 +67,18 @@ static_assert(std::is_same<decltype(&mul_mat_q_stream_k_fixup<GGML_TYPE_Q8_0, 8,
 // expert's entry is picked with a select chain: a pointer picked from read-only kernel parameters keeps upstream's
 // non-coherent global loads (LDG.CONSTANT) of the weights; a dynamically indexed array parameter would be copied to
 // local memory and its pointers read through generic loads (measured ~1.2-2.5x slower products).
-#define STRATA_MMQ_TAB_PARAMS                                                                                     \
+#define CORTEX_MMQ_TAB_PARAMS                                                                                     \
     const char * __restrict__ x0, const char * __restrict__ x1, const char * __restrict__ x2,                  \
     const char * __restrict__ x3, const char * __restrict__ x4, const char * __restrict__ x5,                  \
     const char * __restrict__ x6, const char * __restrict__ x7, const char * __restrict__ x8,                  \
     const char * __restrict__ x9, const char * __restrict__ x10, const char * __restrict__ x11,                \
     const char * __restrict__ x12, const char * __restrict__ x13, const char * __restrict__ x14,               \
     const char * __restrict__ x15
-#define STRATA_MMQ_TAB_PICK(z)                                                                                    \
+#define CORTEX_MMQ_TAB_PICK(z)                                                                                    \
     ((z) == 0 ? x0 : (z) == 1 ? x1 : (z) == 2 ? x2 : (z) == 3 ? x3 : (z) == 4 ? x4 : (z) == 5 ? x5 :            \
      (z) == 6 ? x6 : (z) == 7 ? x7 : (z) == 8 ? x8 : (z) == 9 ? x9 : (z) == 10 ? x10 : (z) == 11 ? x11 :        \
      (z) == 12 ? x12 : (z) == 13 ? x13 : (z) == 14 ? x14 : x15)
-#define STRATA_MMQ_TAB_ARGS(t)                                                                                    \
+#define CORTEX_MMQ_TAB_ARGS(t)                                                                                    \
     (t).p[0], (t).p[1], (t).p[2], (t).p[3], (t).p[4], (t).p[5], (t).p[6], (t).p[7], (t).p[8], (t).p[9],        \
     (t).p[10], (t).p[11], (t).p[12], (t).p[13], (t).p[14], (t).p[15]
 
@@ -86,14 +86,14 @@ static_assert(std::is_same<decltype(&mul_mat_q_stream_k_fixup<GGML_TYPE_Q8_0, 8,
 template <ggml_type type, int J>
 __launch_bounds__(ggml_cuda_mmq_get_nthreads(type, J, false), ggml_cuda_mmq_get_occupancy(type, J, false))
 static __global__ void mul_mat_q_tab(
-        STRATA_MMQ_TAB_PARAMS, const int * __restrict__ y, const int32_t * __restrict__ ids_dst,
+        CORTEX_MMQ_TAB_PARAMS, const int * __restrict__ y, const int32_t * __restrict__ ids_dst,
         const int32_t * __restrict__ expert_bounds, float * __restrict__ dst, float * __restrict__ tmp_fixup,
         const float * __restrict__ y_scale,
         const uint3 blocks_per_ne00, const int nrows_x, const int ncols_dst, const int stride_row_x, const int ncols_y, const int stride_col_dst,
         const uint3 channel_ratio, const uint3 nchannels_y, const int stride_channel_x, const int stride_channel_y, const int stride_channel_dst,
         const uint3 sample_ratio, const uint3 nsamples_y, const int stride_sample_x, const int stride_sample_y, const int stride_sample_dst,
         const uint3 ntx) {
-    constexpr bool fallback = false;  // STRATA: the tab copy has no fallback (rows % 128 == 0) instantiation
+    constexpr bool fallback = false;  // CORTEX: the tab copy has no fallback (rows % 128 == 0) instantiation
 
     // Skip unused template specializations for faster compilation:
     if (ggml_cuda_mmq_get_config(type, J, fallback).type == GGML_TYPE_COUNT) {
@@ -184,7 +184,7 @@ static __global__ void mul_mat_q_tab(
         const int tile_x_max_i = nrows_x  - it*I - 1;
         const int tile_y_max_j = col_diff - jt*J - 1;
 
-        const char * xz = STRATA_MMQ_TAB_PICK(fastdiv(zt, channel_ratio));  // STRATA: per-expert base
+        const char * xz = CORTEX_MMQ_TAB_PICK(fastdiv(zt, channel_ratio));  // CORTEX: per-expert base
         const int offset_x = fastdiv(wt, sample_ratio)*stride_sample_x + it*I*stride_row_x;
 
         constexpr bool fixup = false;
@@ -279,7 +279,7 @@ static __global__ void mul_mat_q_tab(
         const int tile_x_max_i = nrows_x  - it*I - 1;
         const int tile_y_max_j = col_diff - jt*J - 1;
 
-        const char * xz = STRATA_MMQ_TAB_PICK(fastdiv(zt, channel_ratio));  // STRATA: per-expert base
+        const char * xz = CORTEX_MMQ_TAB_PICK(fastdiv(zt, channel_ratio));  // CORTEX: per-expert base
         const int offset_x = fastdiv(wt, sample_ratio)*stride_sample_x + it*I*stride_row_x;
 
         constexpr bool fixup = false; // All but (potentially) the last iterations write their data to dst rather than the fixup buffer.
@@ -364,7 +364,7 @@ static __global__ void mul_mat_q_tab(
     const int tile_x_max_i = nrows_x  - it*I - 1;
     const int tile_y_max_j = col_diff - jt*J - 1;
 
-    const char * xz = STRATA_MMQ_TAB_PICK(fastdiv(zt, channel_ratio));  // STRATA: per-expert base
+    const char * xz = CORTEX_MMQ_TAB_PICK(fastdiv(zt, channel_ratio));  // CORTEX: per-expert base
     const int offset_x = fastdiv(wt, sample_ratio)*stride_sample_x + it*I*stride_row_x;
 
     constexpr bool fixup = true; // Last index writes its data to fixup buffer to avoid data races with other blocks.
@@ -390,7 +390,7 @@ static void launch_mul_mat_q_tab(ggml_backend_cuda_context & ctx, const mmq_args
 
     const dim3 block_dims(warp_size, nwarps, 1);
 
-    CUDA_SET_SHARED_MEMORY_LIMIT((mul_mat_q_tab<type, J>), nbytes_shared);  // STRATA: no fallback=true line
+    CUDA_SET_SHARED_MEMORY_LIMIT((mul_mat_q_tab<type, J>), nbytes_shared);  // CORTEX: no fallback=true line
 
     const int nty  = (args.nrows_x   + config.I - 1) / config.I;
     const int ntx  = (args.ncols_max + config.J - 1) / config.J;
@@ -411,7 +411,7 @@ static void launch_mul_mat_q_tab(ggml_backend_cuda_context & ctx, const mmq_args
 
     if (!ggml_cuda_mmq_get_stream_k(type, J, fallback, cc)) {
         mul_mat_q_tab<type, J><<<block_nums_xy_tiling, block_dims, nbytes_shared, stream>>>
-            (STRATA_MMQ_TAB_ARGS(tab), args.y, args.ids_dst, args.expert_bounds, args.dst, nullptr, args.y_scale,
+            (CORTEX_MMQ_TAB_ARGS(tab), args.y, args.ids_dst, args.expert_bounds, args.dst, nullptr, args.y_scale,
              blocks_per_ne00_fd, args.nrows_x, args.ncols_dst, args.stride_row_x, args.ncols_y, args.nrows_dst,
              channel_ratio_fd, nchannels_y_fd, args.stride_channel_x, args.stride_channel_y, args.stride_channel_dst,
              sample_ratio_fd, nsamples_y_fd, args.stride_sample_x, args.stride_sample_y, args.stride_sample_dst,
@@ -440,7 +440,7 @@ static void launch_mul_mat_q_tab(ggml_backend_cuda_context & ctx, const mmq_args
     const dim3 block_dims_fixup(block_dims.x, block_dims.y/2, block_dims.z);
 
     mul_mat_q_tab<type, J><<<block_nums_stream_k, block_dims, nbytes_shared, stream>>>
-        (STRATA_MMQ_TAB_ARGS(tab), args.y, args.ids_dst, args.expert_bounds, args.dst, tmp_fixup.ptr, args.y_scale,
+        (CORTEX_MMQ_TAB_ARGS(tab), args.y, args.ids_dst, args.expert_bounds, args.dst, tmp_fixup.ptr, args.y_scale,
          blocks_per_ne00_fd, args.nrows_x, args.ncols_dst, args.stride_row_x, args.ncols_y, args.nrows_dst,
          channel_ratio_fd, nchannels_y_fd, args.stride_channel_x, args.stride_channel_y, args.stride_channel_dst,
          sample_ratio_fd, nsamples_y_fd, args.stride_sample_x, args.stride_sample_y, args.stride_sample_dst,
@@ -549,4 +549,4 @@ bool mul_mat_q_tab_case(ggml_backend_cuda_context& ctx, const mmq_args& a, const
     return true;
 }
 
-}  // namespace strata::prefill::mmq
+}  // namespace cortex::prefill::mmq

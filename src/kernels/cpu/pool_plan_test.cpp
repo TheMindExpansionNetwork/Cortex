@@ -1,11 +1,11 @@
-// pool_plan_test: the default CPU expert worker count on mock CPUs (include/strata/kernels/cpu/pool_plan.hpp).
+// pool_plan_test: the default CPU expert worker count on mock CPUs (include/cortex/kernels/cpu/pool_plan.hpp).
 // Pure arithmetic, no threads and no OS calls: it runs on any machine.
-#include "strata/kernels/cpu/pool_plan.hpp"
+#include "cortex/kernels/cpu/pool_plan.hpp"
 
 #include <cstdio>
 #include <string>
 
-namespace cpu = strata::kernels::cpu;
+namespace cpu = cortex::kernels::cpu;
 
 static int g_fail = 0;
 

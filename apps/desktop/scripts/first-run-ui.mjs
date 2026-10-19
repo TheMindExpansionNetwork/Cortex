@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The first run of the installed app, headless: the host as the Tauri shell starts it (STRATA_PACKAGED=1, STRATA_NO_ACQUIRE=1,
+ * The first run of the installed app, headless: the host as the Tauri shell starts it (CORTEX_PACKAGED=1, CORTEX_NO_ACQUIRE=1,
  * the staged Control, nothing installed, nothing in the per-user folders) and Chrome on its onboarding.
  *
  *   node apps/desktop/scripts/first-run-ui.mjs [--control <staged control>] [--node <node.exe>] [--work <scratch>] [--shots <dir>]
@@ -10,7 +10,7 @@
  *   (from Control's bundled installer on Control's Python); the page shows "Let's get started", and after it the model
  *   list with sizes (no "couldn't show this screen"); no page error; the install plan for the recommended model is a
  *   plan (nothing is downloaded or started: a plan changes nothing); the spy sees no pip/git/compiler/engine fetch.
- * Per-user folders (STRATA_HOME, APPDATA, LOCALAPPDATA, the components and install folders) are all under --work.
+ * Per-user folders (CORTEX_HOME, APPDATA, LOCALAPPDATA, the components and install folders) are all under --work.
  * No model is downloaded and no engine runs.
  */
 import { spawn } from 'node:child_process';
@@ -26,7 +26,7 @@ const repoHost = resolve(here, '../../host');
 const staged = resolve(here, '../src-tauri/resources');
 const control = resolve(args.control ?? join(staged, 'control'));
 const nodeExe = resolve(args.node ?? join(staged, 'node', process.platform === 'win32' ? 'node.exe' : 'node'));
-const work = resolve(args.work ?? mkdtempSync(join(tmpdir(), 'strata-first-run-')));
+const work = resolve(args.work ?? mkdtempSync(join(tmpdir(), 'cortex-first-run-')));
 const shots = resolve(args.shots ?? join(work, 'shots'));
 mkdirSync(work, { recursive: true }); mkdirSync(shots, { recursive: true });
 const spy = pathToFileURL(join(repoHost, 'tests/helpers/acquire-spy.mjs')).href;
@@ -40,20 +40,20 @@ const check = (ok, label, detail = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'}
 const delay = ms => new Promise(r => setTimeout(r, ms));
 const freePort = async () => { const s = createServer(); await new Promise(r => s.listen(0, '127.0.0.1', r)); const p = s.address().port; await new Promise(r => s.close(r)); return p; };
 
-for (const need of [nodeExe, join(control, 'strata.py'), join(repoHost, 'dist', 'index.html')]) if (!existsSync(need)) { console.error(`missing ${need} (run stage-control.py, fetch-node and "npm run build" in apps/host first)`); process.exit(2); }
+for (const need of [nodeExe, join(control, 'cortex.py'), join(repoHost, 'dist', 'index.html')]) if (!existsSync(need)) { console.error(`missing ${need} (run stage-control.py, fetch-node and "npm run build" in apps/host first)`); process.exit(2); }
 
-const dirs = { home: join(work, 'home'), appdata: join(work, 'appdata'), local: join(work, 'local'), components: join(work, 'local', 'Strata', 'components') };
+const dirs = { home: join(work, 'home'), appdata: join(work, 'appdata'), local: join(work, 'local'), components: join(work, 'local', 'Cortex', 'components') };
 for (const d of Object.values(dirs)) mkdirSync(d, { recursive: true });
 const port = await freePort();
 const env = {
   ...process.env,
-  STRATA_PORT: String(port), STRATA_DIST: join(repoHost, 'dist'), STRATA_PACKAGED: '1', STRATA_REAL_ENGINE: '1', STRATA_NO_ACQUIRE: '1',
-  STRATA_CONTROL_DIR: control, STRATA_HOME: dirs.home, STRATA_MODELS_DIR: join(work, 'models'), STRATA_COMPONENTS_DIR: dirs.components,
+  CORTEX_PORT: String(port), CORTEX_DIST: join(repoHost, 'dist'), CORTEX_PACKAGED: '1', CORTEX_REAL_ENGINE: '1', CORTEX_NO_ACQUIRE: '1',
+  CORTEX_CONTROL_DIR: control, CORTEX_HOME: dirs.home, CORTEX_MODELS_DIR: join(work, 'models'), CORTEX_COMPONENTS_DIR: dirs.components,
   APPDATA: dirs.appdata, LOCALAPPDATA: dirs.local, XDG_CONFIG_HOME: join(work, 'xdg'), XDG_DATA_HOME: join(work, 'xdgdata'),
-  STRATA_PROFILE_DIR: join(work, 'profiles'), STRATA_RUNTIME_DIR: join(work, 'runtime'), ACQUIRE_SPY_LOG: spyLog,
+  CORTEX_PROFILE_DIR: join(work, 'profiles'), CORTEX_RUNTIME_DIR: join(work, 'runtime'), ACQUIRE_SPY_LOG: spyLog,
 };
-delete env.STRATA_INSTALL_DIR;
-mkdirSync(env.STRATA_MODELS_DIR, { recursive: true });
+delete env.CORTEX_INSTALL_DIR;
+mkdirSync(env.CORTEX_MODELS_DIR, { recursive: true });
 const host = spawn(nodeExe, [...(args['no-spy'] === undefined ? ['--import', spy] : []), join(repoHost, 'server', 'index.mjs')], { cwd: repoHost, env, stdio: ['ignore', 'pipe', 'pipe'] });
 let hostLog = '';
 host.stdout.on('data', c => { hostLog += c; }); host.stderr.on('data', c => { hostLog += c; });
@@ -84,10 +84,10 @@ try {
   const problems = [];
   page.on('pageerror', e => problems.push(`pageerror: ${e.message}`));
   await page.goto(base, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('text=/Let.s get started|Choose a version|Connect your Strata/i', { timeout: 30000 }).catch(() => {});
+  await page.waitForSelector('text=/Let.s get started|Choose a version|Connect your Cortex/i', { timeout: 30000 }).catch(() => {});
   await page.screenshot({ path: join(shots, '1-welcome.png') });
   const broken = await page.locator('text=/couldn.t show this screen/i').count();
-  check(broken === 0, 'the first screen renders (not "Strata couldn\'t show this screen")');
+  check(broken === 0, 'the first screen renders (not "Cortex couldn\'t show this screen")');
   const start = page.getByRole('button', { name: /get started/i });
   check(await start.count() > 0, 'the welcome step offers "Let\'s get started"');
   if (await start.count()) await start.first().click();
@@ -103,9 +103,9 @@ try {
 
   const recommended = state?.catalog?.recommendation;
   if (recommended?.model) {
-    const plan = await api('/api/native/plan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ family: recommended.family, model: recommended.model, context: recommended.context, data_dir: join(work, 'Strata-data') }) });
+    const plan = await api('/api/native/plan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ family: recommended.family, model: recommended.model, context: recommended.context, data_dir: join(work, 'Cortex-data') }) });
     check(plan.status === 200 && !!plan.body?.plan, 'the install plan for the recommended model is a plan (nothing downloaded)', plan.body?.summary?.slice(0, 100) ?? JSON.stringify(plan.body).slice(0, 150));
-    check(!existsSync(join(work, 'Strata-data', 'models')), 'a plan wrote no model files');
+    check(!existsSync(join(work, 'Cortex-data', 'models')), 'a plan wrote no model files');
   }
 } catch (error) {
   check(false, 'the run', String(error?.message ?? error).slice(0, 600));

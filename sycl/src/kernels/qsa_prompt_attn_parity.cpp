@@ -7,15 +7,15 @@
 //   1. against FP64, the new kernel's error is no larger than a small multiple of the old kernel's (both FP32 math);
 //   2. the new and old outputs agree to a relative 1e-4 of the output scale;
 // then times both over a prompt chunk (the old one in batches of 32, as prefill.cpp calls it).
-// HIP builds (S6): the same checks for the RDNA4 matrix-core kernel (STRATA_HIP_WMMA), skipped (77) off gfx12.
+// HIP builds (S6): the same checks for the RDNA4 matrix-core kernel (CORTEX_HIP_WMMA), skipped (77) off gfx12.
 // Usage: qsa_prompt_attn_parity [context=32768] [queries=2048] [reps=5]
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/kernels/qsa.hpp"
-#include "strata/kernels/qsa_decode_attn.hpp"
-#include "strata/kernels/qsa_prompt_attn.hpp"
-#include "strata/kernels/kv_q4.hpp"
+#include "cortex/kernels/qsa.hpp"
+#include "cortex/kernels/qsa_decode_attn.hpp"
+#include "cortex/kernels/qsa_prompt_attn.hpp"
+#include "cortex/kernels/kv_q4.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -25,7 +25,7 @@
 #include <random>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 void ck(dpct::err0 e, const char *w) {
@@ -65,7 +65,7 @@ uint16_t f2h(float f) {
 }
 
 int run(int fmt, int64_t ctx, int64_t nq, int reps) {   // fmt 1 int8, 0 fp16, 2 q4_0
-#if !defined(__HIPCC__) && !defined(STRATA_USE_HIP)
+#if !defined(__HIPCC__) && !defined(CORTEX_USE_HIP)
     if (fmt == 2) {   // mode 4 (Q4_0 KV) runs on sm_80 and newer only: below that the dispatcher keeps the old kernel
         int dev = 0, major = 0;
         ck(DPCT_CHECK_ERROR(dev = dpct::get_current_device_id()), "device");
@@ -173,7 +173,7 @@ int run(int fmt, int64_t ctx, int64_t nq, int reps) {   // fmt 1 int8, 0 fp16, 2
             for (int64_t c = 0; c < w; ++c) ids[i * cap + c] = (int32_t) (base + c);
         }
     }
-    // QA_DUMP=<file> QA_LAYER=n (S23 probe): the engine's own selections (STRATA_QSA_DUMP records {layer, pos0, T, cap} +
+    // QA_DUMP=<file> QA_LAYER=n (S23 probe): the engine's own selections (CORTEX_QSA_DUMP records {layer, pos0, T, cap} +
     // T*cap cells): the last record of that layer, whose T must be nq and pos0 + T ctx
     if (const char* df = std::getenv("QA_DUMP")) {
         const int want = std::getenv("QA_LAYER") ? std::atoi(std::getenv("QA_LAYER")) : 3;
@@ -357,7 +357,7 @@ int run(int fmt, int64_t ctx, int64_t nq, int reps) {   // fmt 1 int8, 0 fp16, 2
 }  // namespace
 
 int main(int argc, char** argv) {
-    setenv("STRATA_PROMPT_ATTN_XMX", "1", 0);   // SYCL port: the batched kernel under test is the XMX one (opt-in in the engine)
+    setenv("CORTEX_PROMPT_ATTN_XMX", "1", 0);   // SYCL port: the batched kernel under test is the XMX one (opt-in in the engine)
 #if defined(__HIP_PLATFORM_AMD__)
     // S6: on AMD the kernel under test is the RDNA4 matrix-core one (opt-in in the engine); other cards skip
     {
@@ -369,9 +369,9 @@ int main(int argc, char** argv) {
             return 77;
         }
 #if defined(_WIN32)
-        _putenv_s("STRATA_HIP_WMMA", "1");
+        _putenv_s("CORTEX_HIP_WMMA", "1");
 #else
-        setenv("STRATA_HIP_WMMA", "1", 1);
+        setenv("CORTEX_HIP_WMMA", "1", 1);
 #endif
     }
 #endif

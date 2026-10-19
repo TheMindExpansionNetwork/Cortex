@@ -8,7 +8,7 @@
  * while keeping the host's own module graph unchanged.
  *
  * It intentionally does nothing else: no supervision, no lifecycle, no policy. All of that belongs
- * to the host and to Strata Control.
+ * to the host and to Cortex Control.
  */
 'use strict';
 
@@ -18,6 +18,6 @@ const { join } = require('node:path');
 const entry = join(__dirname, 'index.mjs');
 
 import(pathToFileURL(entry).href).catch((err) => {
-  process.stderr.write(`[strata] the App Host failed to load from ${entry}: ${err && err.stack ? err.stack : err}\n`);
+  process.stderr.write(`[cortex] the App Host failed to load from ${entry}: ${err && err.stack ? err.stack : err}\n`);
   process.exitCode = 1;
 });

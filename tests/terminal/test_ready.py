@@ -1,4 +1,4 @@
-"""Ready-file lifecycle checked against a live mock Strata API process."""
+"""Ready-file lifecycle checked against a live mock Cortex API process."""
 
 import json
 import os
@@ -35,8 +35,8 @@ class ReadyFileTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "ready.json"
             env = os.environ.copy()
-            env.pop("STRATA_API_KEY", None)
-            env.pop("STRATA_TELEMETRY_KEY", None)
+            env.pop("CORTEX_API_KEY", None)
+            env.pop("CORTEX_TELEMETRY_KEY", None)
             process = subprocess.Popen([sys.executable, "-m", "serve.server", "--engine", "mock", "--port", "0",
                                         "--ready-file", str(path)], cwd=root, env=env,
                                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)

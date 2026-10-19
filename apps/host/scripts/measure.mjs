@@ -21,7 +21,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
-const BASE = process.env.STRATA_URL ?? 'http://localhost:5199';
+const BASE = process.env.CORTEX_URL ?? 'http://localhost:5199';
 const MIN = 45;
 const MAX = 75;
 

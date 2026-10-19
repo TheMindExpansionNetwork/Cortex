@@ -18,15 +18,15 @@
 // The legacy canonical projections use their explicit Q8_0/Q8_K activation images. The optional native
 // BF16 path affects only the scalar gate: it reads the original F32 input and uses pinned CUDA MMVF plus
 // an FP32 sigmoid. Native projection overrides independently select CUDA Q8_1 MMVQ and FP32 SwiGLU.
-#include "strata/kernels/shared_expert.hpp"
-#include "strata/kernels/fuse_decode.hpp"
-#include "strata/kernels/bf16_gemv.hpp"
-#include "strata/kernels/bf16_bits.hpp"
-#include "strata/kernels/f16_bits.hpp"
-#include "strata/kernels/quantize_act.hpp"
-#include "strata/kernels/s2_gemv_q8.hpp"
-#include "strata/kernels/s_gemv.hpp"
-#include "strata/kernels/native_mmvq.hpp"
+#include "cortex/kernels/shared_expert.hpp"
+#include "cortex/kernels/fuse_decode.hpp"
+#include "cortex/kernels/bf16_gemv.hpp"
+#include "cortex/kernels/bf16_bits.hpp"
+#include "cortex/kernels/f16_bits.hpp"
+#include "cortex/kernels/quantize_act.hpp"
+#include "cortex/kernels/s2_gemv_q8.hpp"
+#include "cortex/kernels/s_gemv.hpp"
+#include "cortex/kernels/native_mmvq.hpp"
 
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
@@ -39,7 +39,7 @@
 #include <cstring>
 #include <stdexcept>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
 constexpr int THREADS = 128;
@@ -205,7 +205,7 @@ void launch_sigmoid_scale_rows(float* out, const float* g, int n_embd, int n_tok
 
 bool fused_swiglu_q81_enabled() {
     static const bool on = [] {
-        const char* v = std::getenv("STRATA_FUSED_SWIGLU_Q81");
+        const char* v = std::getenv("CORTEX_FUSED_SWIGLU_Q81");
         return v == nullptr || std::atoi(v) != 0;
     }();
     return on;
@@ -219,13 +219,13 @@ void shared_expert_multi(int n_tok, const float* x, const uint16_t* x_bf16, cons
     if (n_tok < 1 || n_tok > 8 || !nw.q8_1 || !nw.gate_data || !nw.up_data || !nw.down_data || !stream)
         throw std::invalid_argument("shared_expert_multi: needs 1..8 tokens, native weights, scratch and a stream");
     cudaStream_t cs = (cudaStream_t) stream;
-    // the activation's q8_1: the caller's (STRATA_VERIFY_QDEDUP, x_q8_1_ready) or the descriptor's, else quantized here
+    // the activation's q8_1: the caller's (CORTEX_VERIFY_QDEDUP, x_q8_1_ready) or the descriptor's, else quantized here
     const void* x_q8_1 = x_q8_1_ready ? x_q8_1_ready : nw.x_q8_1;
     if (!x_q8_1) {
         native_quantize_q8_1(x, nw.q8_1, (int) n_embd, n_tok, stream);
         x_q8_1 = nw.q8_1;
     }
-    // S26 STRATA_LFUSE (gate_deferred): gate and up in one launch where the pair applies (bitwise the two calls)
+    // S26 CORTEX_LFUSE (gate_deferred): gate and up in one launch where the pair applies (bitwise the two calls)
     if (!(pair && nw.gate_type == nw.up_type &&
           native_mmvq_pair(nw.gate_type, nw.gate_data, nw.up_data, x_q8_1, gate, up, (int) n_embd, (int) n_ff, n_tok, stream))) {
         native_mmvq(nw.gate_type, nw.gate_data, x_q8_1, gate, (int) n_embd, (int) n_ff, n_tok, stream);
@@ -244,7 +244,7 @@ void shared_expert_multi(int n_tok, const float* x, const uint16_t* x_bf16, cons
         if (e != cudaSuccess) throw std::runtime_error(std::string("shared_expert_multi: ") + cudaGetErrorString(e));
         return;
     }
-    static const bool batch = [] { const char* v = std::getenv("STRATA_DEC_BATCH"); return v == nullptr || std::atoi(v) != 0; }();
+    static const bool batch = [] { const char* v = std::getenv("CORTEX_DEC_BATCH"); return v == nullptr || std::atoi(v) != 0; }();
     if (native_bf16 && batch && n_tok > 1) {   // one gemv for all rows (outputs identical), fused sigmoid+scale
         bf16_gemv_fp32_mmvf_multi(x, n_embd, gate_inp_bf16, g, 1, n_embd, 1, n_tok, stream);
         launch_sigmoid_scale_rows(out, g, (int) n_embd, n_tok, cs);
@@ -331,8 +331,8 @@ void shared_expert(const uint8_t* x_q8_0, const uint8_t* x_q8k, const uint16_t* 
     const unsigned g_ff = (unsigned) ((n_ff + THREADS - 1) / THREADS);
     const unsigned g_embd = (unsigned) ((n_embd + THREADS - 1) / THREADS);
 
-#if defined(STRATA_EXPERIMENTAL_SM60)
-        if (strata::kernels::fuse_decode()) {
+#if defined(CORTEX_EXPERIMENTAL_SM60)
+        if (cortex::kernels::fuse_decode()) {
     // V100 (experimental sm_70 build): gate and up projections, then silu(gate) * up - ONE kernel when both
     // projections are S-family (`s_gemv_pair_silu`: one read of x, SwiGLU in the epilogue, `up` never
     // materialised).  The pair kernel is bit-exact vs the three-kernel sequence (shared row math, shared
@@ -502,4 +502,4 @@ void moe_combine(const float* parts, const float* weights, const float* shared, 
     }
 }
 
-}  // namespace strata::kernels
+}  // namespace cortex::kernels

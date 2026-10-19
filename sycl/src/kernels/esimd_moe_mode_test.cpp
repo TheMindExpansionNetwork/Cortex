@@ -1,10 +1,10 @@
-// 151-b70: the default choice of the prompt-expert chain (strata::prefill::i8::choose_mode), no GPU needed.
+// 151-b70: the default choice of the prompt-expert chain (cortex::prefill::i8::choose_mode), no GPU needed.
 //   unset            : auto on a Battlemage device whose kernels are available, else the FP16 chain
-//   STRATA_PREFILL_MMQ=0 / 1 / auto : off / forced / auto, whatever the device
+//   CORTEX_PREFILL_MMQ=0 / 1 / auto : off / forced / auto, whatever the device
 #include <cstdio>
-#include "strata/prefill/esimd_moe.hpp"
+#include "cortex/prefill/esimd_moe.hpp"
 
-using strata::prefill::i8::choose_mode;
+using cortex::prefill::i8::choose_mode;
 static int bad = 0;
 #define CHECK(cond, what) do { if (!(cond)) { std::printf("FAIL: %s\n", what); ++bad; } } while (0)
 

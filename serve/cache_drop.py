@@ -1,4 +1,4 @@
-"""Opt-in: give the model files' page cache back when the server stops (STRATA_DROP_CACHE_ON_EXIT=1).
+"""Opt-in: give the model files' page cache back when the server stops (CORTEX_DROP_CACHE_ON_EXIT=1).
 
 Linux keeps a stopped model's GGUF/pack files in the page cache (MemAvailable counts it, `free` shows it as used), which
 helps a restart of the SAME model.  On a host that then starts a different, large model (a dual-socket server whose second
@@ -13,7 +13,7 @@ from pathlib import Path
 
 def enabled(env=None) -> bool:
     env = os.environ if env is None else env
-    return os.name != "nt" and env.get("STRATA_DROP_CACHE_ON_EXIT", "").strip().lower() in ("1", "true", "yes", "on")
+    return os.name != "nt" and env.get("CORTEX_DROP_CACHE_ON_EXIT", "").strip().lower() in ("1", "true", "yes", "on")
 
 
 def model_files(paths) -> list[str]:
@@ -66,5 +66,5 @@ def drop_after_exit(engine, env=None, advise=None) -> int:
     wanted = {"--native", "--pack", "--mmproj", "--model"}
     paths = [v for k, v in zip(args, args[1:]) if k in wanted]
     n = drop(paths or [getattr(engine, "model_path", None)], advise)
-    print(f"[strata] STRATA_DROP_CACHE_ON_EXIT: released the page cache of {n} model files", flush=True)
+    print(f"[cortex] CORTEX_DROP_CACHE_ON_EXIT: released the page cache of {n} model files", flush=True)
     return n

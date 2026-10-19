@@ -74,7 +74,7 @@ test('an edit keeps order, drops empty lines and refuses an empty plan', () => {
 });
 
 test('plans survive a restart', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'strata-plans-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-plans-'));
   try {
     const file = join(dir, 'plans.json');
     const a = new PlanStore(file);

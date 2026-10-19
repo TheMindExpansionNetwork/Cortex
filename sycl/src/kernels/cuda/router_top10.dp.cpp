@@ -54,16 +54,16 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/sycl_queue.hpp"
-#include "strata/sycl_doorbell.hpp"
-#include "strata/kernels/router_top10.hpp"
+#include "cortex/sycl_queue.hpp"
+#include "cortex/sycl_doorbell.hpp"
+#include "cortex/kernels/router_top10.hpp"
 
 #include <cmath>
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
 constexpr int RT_MAX_THREADS = 512;
@@ -426,7 +426,7 @@ runtimes. You may need to adjust the code.
 }
 
 
-#if defined(STRATA_HIP_GFX906)
+#if defined(CORTEX_HIP_GFX906)
 // AMD (wave64): the same routing in ONE wavefront per token.  The block-wide kernel above spends its time in
 // barriers - 10 selection passes with two __syncthreads each over 8 logical warps - not in arithmetic (43 us per
 // token on gfx906).  Here every lane holds up to RW_PER probabilities in registers and each pass is a 64-lane
@@ -500,7 +500,7 @@ __global__ void __launch_bounds__(64) router_top10_wave_kernel(const float* __re
             weights[(size_t) t * k + i] = (float) ((double) weights[(size_t) t * k + i] / sc);
     }
 }
-#endif  // STRATA_HIP_GFX906
+#endif  // CORTEX_HIP_GFX906
 
 #if defined(__HIPCC__)
 // ---- S6, AMD: the same router, BIT-IDENTICAL, without its serial parts. Measured on RDNA4 (gfx1201) the kernel
@@ -516,7 +516,7 @@ __global__ void __launch_bounds__(64) router_top10_wave_kernel(const float* __re
 //     lowest index on ties is unique, so the butterfly finds the same expert as the block reduction did;
 //   * the renormalisation sums the ten weights in rank order from registers and divides them in parallel.
 // Same expressions, same operands: the ids and weights are bitwise those of router_top10_kernel (hip_router_fast
-// checks it on 65,536 rows with ties, near-ties, NaN rows and the forced serial path). STRATA_HIP_ROUTER_OLD=1: the
+// checks it on 65,536 rows with ties, near-ties, NaN rows and the forced serial path). CORTEX_HIP_ROUTER_OLD=1: the
 // kernel above.
 template <bool FORCE_SERIAL>
 __global__ void router_top10_fast_kernel(const float* __restrict__ logits, int n_tokens, int n_expert, int k,
@@ -654,7 +654,7 @@ bool router_top10_variant(const float* logits, int n_tokens, int n_expert, int k
 #else
     if (n_tokens <= 0 || n_expert <= 64 || n_expert > 512 || k <= 0 || k > 32 || variant < 0 || variant > 2)
         return false;
-    auto& q = *strata::q_of(stream);
+    auto& q = *cortex::q_of(stream);
     if (variant == 1) launch_sycl_fast<false>(q, logits, n_tokens, n_expert, k, ids, weights);
     else if (variant == 2) launch_sycl_fast<true>(q, logits, n_tokens, n_expert, k, ids, weights);
     else {
@@ -678,20 +678,20 @@ bool router_top10_variant(const float* logits, int n_tokens, int n_expert, int k
 
 void router_top10(const float *logits, int n_tokens, int n_expert, int k,
                   int *ids, float *weights, void *stream) try {
-    if (strata::a770_fast() && n_tokens > 0 && n_expert > 64 && n_expert <= 512 && k > 0 && k <= 32) {
-        auto& q = *strata::q_of(stream);
+    if (cortex::a770_fast() && n_tokens > 0 && n_expert > 64 && n_expert <= 512 && k > 0 && k <= 32) {
+        auto& q = *cortex::q_of(stream);
         launch_sycl_fast<false>(q, logits, n_tokens, n_expert, k, ids, weights);
         if (stream == nullptr) q.wait_and_throw();
         return;
     }
 #if defined(__HIPCC__)
     {
-#if defined(STRATA_HIP_GFX906)
+#if defined(CORTEX_HIP_GFX906)
         // gfx906 (wave64): the one-wavefront kernel below stays the default; the S6 kernel is wave32-shaped and only
-        // runs here on request (STRATA_HIP_ROUTER_FAST=1) until it is measured on this card
-        static const bool old = std::getenv("STRATA_HIP_ROUTER_FAST") == nullptr;
+        // runs here on request (CORTEX_HIP_ROUTER_FAST=1) until it is measured on this card
+        static const bool old = std::getenv("CORTEX_HIP_ROUTER_FAST") == nullptr;
 #else
-        static const bool old = std::getenv("STRATA_HIP_ROUTER_OLD") != nullptr;
+        static const bool old = std::getenv("CORTEX_HIP_ROUTER_OLD") != nullptr;
 #endif
         if (!old && n_tokens > 0 && n_expert > 64 && n_expert <= 512 && k > 0 && k <= 32) {
             launch_generic(logits, n_tokens, n_expert, k, ids, weights, stream, 1);
@@ -721,8 +721,8 @@ void router_top10(const float *logits, int n_tokens, int n_expert, int k,
                      RT_MAX_THREADS * 64);
         std::exit(1);
     }
-#if defined(STRATA_HIP_GFX906)
-    if (n_expert <= 64 * RW_PER && !std::getenv("STRATA_ROUTER_BLOCK")) {
+#if defined(CORTEX_HIP_GFX906)
+    if (n_expert <= 64 * RW_PER && !std::getenv("CORTEX_ROUTER_BLOCK")) {
         router_top10_wave_kernel<<<(unsigned) n_tokens, 64, 0, (cudaStream_t) stream>>>(logits, n_tokens, n_expert, k,
                                                                                        ids, weights);
         const cudaError_t e = cudaGetLastError();
@@ -756,10 +756,10 @@ void router_top10(const float *logits, int n_tokens, int n_expert, int k,
         auto exp_props = sycl::ext::oneapi::experimental::properties{
             sycl::ext::oneapi::experimental::use_root_sync};
         dpct::has_capability_or_fail(
-            strata::q_of(stream)->get_device(),
+            cortex::q_of(stream)->get_device(),
             {sycl::aspect::fp64});
 
-        strata::q_of(stream)
+        cortex::q_of(stream)
             ->submit([&](sycl::handler &cgh) {
                 sycl::local_accessor<uint8_t, 1> dpct_local_acc_ct1(
                     sycl::range(smem), cgh);
@@ -798,4 +798,4 @@ catch (sycl::exception const &exc) {
   std::exit(1);
 }
 
-}  // namespace strata::kernels
+}  // namespace cortex::kernels

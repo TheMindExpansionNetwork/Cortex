@@ -11,7 +11,7 @@ import { readGGUF } from '../server/gguf.mjs';
 import { browseLocalModels, inspectLocalModel, createLocalModels } from '../server/local-models.mjs';
 import { ggufFixture } from './helpers/local-gguf.mjs';
 const cwd=fileURLToPath(new URL('..',import.meta.url)),pause=ms=>new Promise(r=>setTimeout(r,ms));
-function fixture(t){const root=mkdtempSync(join(tmpdir(),'strata-local-model-'));t.after(()=>rmSync(root,{recursive:true,force:true}));return root;}
+function fixture(t){const root=mkdtempSync(join(tmpdir(),'cortex-local-model-'));t.after(()=>rmSync(root,{recursive:true,force:true}));return root;}
 
 test('bounded reader gets real metadata and rejects fake extensions, partial tensors, unsupported versions and duplicate metadata',t=>{
  const root=fixture(t),file=join(root,'huihui.gguf');ggufFixture(file,{version:2});const info=readGGUF(file);assert.equal(info.metadata['general.architecture'],'qwen3next');assert.equal(info.metadata['tokenizer.ggml.tokens'].count,1);assert.equal(info.parameters,16);
@@ -54,14 +54,14 @@ test('native library uses the exact imported path and keeps its reference across
  const v=catalog.variant(preview.variant.id);assert.equal(models.pathFor(v),v.local.path);assert.ok(models.isOnDisk(v.id));assert.equal(models.library().variants.find(row=>row.id===v.id).state,'installed');
  store.changeModelsDirectory(${JSON.stringify(next)});models.init({send(){}});assert.ok(models.isOnDisk(v.id));
  models.remove(v.id);assert.equal(catalog.variant(v.id),null);assert.ok(fs.existsSync(${JSON.stringify(file)}));
- `],{cwd,env:{...process.env,STRATA_HOME:join(root,'host'),STRATA_MODELS_DIR:join(root,'host','models'),STRATA_REAL_ENGINE:'1'},encoding:'utf8'});assert.equal(result.status,0,result.stderr);
+ `],{cwd,env:{...process.env,CORTEX_HOME:join(root,'host'),CORTEX_MODELS_DIR:join(root,'host','models'),CORTEX_REAL_ENGINE:'1'},encoding:'utf8'});assert.equal(result.status,0,result.stderr);
 });
 
 async function freePort(){const server=createServer();await new Promise(r=>server.listen(0,'127.0.0.1',r));const port=server.address().port;await new Promise(r=>server.close(r));return port;}
 test('HTTP import leaves the running model intact, loads through normal controls, protects active references and preserves files on removal',{timeout:30000},async t=>{
  const root=fixture(t),home=join(root,'host'),file=join(root,'huihui-Orca.gguf');mkdirSync(join(home,'data'),{recursive:true});ggufFixture(file);
  writeFileSync(join(home,'data','state.json'),JSON.stringify({setup:{complete:true,step:4,flowVersion:2},installed:{'qwen38-q4_k_m':{simulated:true}},loaded:'qwen38-q4_k_m'}));
- const port=await freePort(),base=`http://127.0.0.1:${port}`,host=spawn(process.execPath,['server/index.mjs'],{cwd,env:{...process.env,STRATA_HOME:home,STRATA_MODELS_DIR:join(home,'models'),STRATA_REAL_ENGINE:'0',STRATA_TEST_HARDWARE:ROOMY_HOST,STRATA_PORT:String(port),STRATA_BIND:'127.0.0.1'},stdio:'ignore'});
+ const port=await freePort(),base=`http://127.0.0.1:${port}`,host=spawn(process.execPath,['server/index.mjs'],{cwd,env:{...process.env,CORTEX_HOME:home,CORTEX_MODELS_DIR:join(home,'models'),CORTEX_REAL_ENGINE:'0',CORTEX_TEST_HARDWARE:ROOMY_HOST,CORTEX_PORT:String(port),CORTEX_BIND:'127.0.0.1'},stdio:'ignore'});
  async function call(path,body,method){const response=await fetch(base+path,{method:method??(body===undefined?'GET':'POST'),headers:{'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return {status:response.status,body:await response.json()};}
  try {
  let ready=false;for(let i=0;i<100;i++){try{ready=(await call('/api/runtime')).status===200;if(ready)break;}catch{}await pause(100);}assert.ok(ready);

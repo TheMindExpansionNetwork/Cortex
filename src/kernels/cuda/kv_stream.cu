@@ -1,7 +1,7 @@
-// src/kernels/cuda/kv_stream.cu - see include/strata/kernels/kv_stream.hpp.
-#include "strata/kernels/kv_stream.hpp"
-#include "strata/kernels/kv_q4.hpp"
-#include "strata/kernels/kv_q8.hpp"
+// src/kernels/cuda/kv_stream.cu - see include/cortex/kernels/kv_stream.hpp.
+#include "cortex/kernels/kv_stream.hpp"
+#include "cortex/kernels/kv_q4.hpp"
+#include "cortex/kernels/kv_q8.hpp"
 
 #include <cuda_runtime.h>
 
@@ -9,7 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
 void check(const char* what) {
@@ -283,4 +283,4 @@ KvStreamCounters kv_stream_counters(const KvStreamMap& m) {
     return r;
 }
 
-}  // namespace strata::kernels
+}  // namespace cortex::kernels

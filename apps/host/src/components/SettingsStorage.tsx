@@ -82,7 +82,7 @@ export function SettingsStorage() {
       <div className="storage-directory__heading"><span><Icon name="folder" size={18}/><strong id="storage-directory-title">{tr("Model directory")}</strong></span><Btn size="sm" disabled={!currentDirectory || directoryPending || pending} onClick={() => { setDirectory(currentDirectory); setEditing(!editing); setDirectoryError(''); setNotice(''); }}>{tr(editing ? 'Cancel' : 'Change directory')}</Btn></div>
       <p className="small muted">{tr("Your models are saved here. Use an existing folder to reuse supported downloads.")}</p>
       <code className="storage-directory__path">{currentDirectory || 'Reading model directory…'}</code>
-      {tr(native?.available && native.downloadDirectory ? <div className="storage-native-directory"><span className="small muted">{tr("Optimized Strata model files")}</span><code className="storage-directory__path">{native.downloadDirectory}</code><p className="xs muted">{tr("Chosen during setup. Prepared models keep using their existing files.")}</p></div> : null)}
+      {tr(native?.available && native.downloadDirectory ? <div className="storage-native-directory"><span className="small muted">{tr("Optimized Cortex model files")}</span><code className="storage-directory__path">{native.downloadDirectory}</code><p className="xs muted">{tr("Chosen during setup. Prepared models keep using their existing files.")}</p></div> : null)}
       {tr(editing ? <form className="storage-directory__edit" onSubmit={e => {
                 e.preventDefault();
                 if (!directoryBlocked && directory.trim())
@@ -90,7 +90,7 @@ export function SettingsStorage() {
             }}>
         <label htmlFor="model-directory-path" className="small">{tr("Directory path")}</label>
         <input id="model-directory-path" className="st-input" value={directory} onChange={e => { setDirectory(e.target.value); setDirectoryError(''); }} autoFocus disabled={directoryPending} placeholder={tr("Full path to an existing folder")} spellCheck={false}/>
-        <p className="small muted">{tr("Existing files stay where they are. Strata checks this folder for supported GGUF files.")}</p>
+        <p className="small muted">{tr("Existing files stay where they are. Cortex checks this folder for supported GGUF files.")}</p>
         {tr(changing && loadedCount > 0 ? <p className="small">{tr(loadedCount === 1 ? 'The loaded model will be unloaded.' : `All ${loadedCount} loaded models will be unloaded.`)}{tr(" Load a model again after switching.")}</p> : null)}
         <div className="row"><Btn variant="primary" type="submit" disabled={directoryPending || directoryBlocked || !directory.trim()}>{tr(directoryPending ? 'Checking files…' : changing && loadedCount > 0 ? 'Unload and change directory' : changing ? 'Use this directory' : 'Check folder')}</Btn></div>
       </form> : <Btn size="sm" icon="refresh" disabled={directoryPending || directoryBlocked || !currentDirectory} onClick={() => void saveDirectory(currentDirectory)}>{tr(directoryPending ? 'Checking files…' : 'Check folder')}</Btn>)}
@@ -106,9 +106,9 @@ export function SettingsStorage() {
       </ul> : <p className="small muted">{tr("No downloaded models")}</p>)}
     </Field>
     <NativeDeleteDialog id={nativeDeleting} onClose={() => setNativeDeleting(null)}/>
-    <Dialog open={!!selected} compact title={tr(version?.local ? 'Remove from Strata?' : `Delete ${version?.quant ?? 'model version'}?`)} onClose={close} actions={<><Btn disabled={pending} onClick={close}>{tr("Keep version")}</Btn><Btn variant="danger" disabled={pending || unavailable} onClick={() => void remove()}>{tr(pending ? 'Working…' : version?.local ? 'Remove model' : 'Delete version')}</Btn></>}>
+    <Dialog open={!!selected} compact title={tr(version?.local ? 'Remove from Cortex?' : `Delete ${version?.quant ?? 'model version'}?`)} onClose={close} actions={<><Btn disabled={pending} onClick={close}>{tr("Keep version")}</Btn><Btn variant="danger" disabled={pending || unavailable} onClick={() => void remove()}>{tr(pending ? 'Working…' : version?.local ? 'Remove model' : 'Delete version')}</Btn></>}>
       <p>{tr(version ? `${version.local ? version.name : version.family} · ${version.quant} · ${sizeGb(version.diskGb)}` : 'This version is no longer downloaded.')}</p>
-      {tr(version ? <p className="small muted storage-delete-note">{tr(version.local ? `${running ? 'The model will be unloaded and removed from Strata.' : 'The model will be removed from Strata.'} Your original GGUF files stay in their folder.` : `${running ? 'The running model will be unloaded and its files deleted.' : 'Its files will be deleted from this computer.'} You can download it again in Models.`)}</p> : null)}
+      {tr(version ? <p className="small muted storage-delete-note">{tr(version.local ? `${running ? 'The model will be unloaded and removed from Cortex.' : 'The model will be removed from Cortex.'} Your original GGUF files stay in their folder.` : `${running ? 'The running model will be unloaded and its files deleted.' : 'Its files will be deleted from this computer.'} You can download it again in Models.`)}</p> : null)}
       {tr(running && !lifecycle.allowed ? <p className="small storage-delete-note">{tr(lifecycle.reason)}</p> : null)}
       {tr(error ? <ErrorNotice message={error}/> : null)}
     </Dialog>

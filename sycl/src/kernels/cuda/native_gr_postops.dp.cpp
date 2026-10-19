@@ -25,8 +25,8 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/sycl_queue.hpp"
-#include "strata/kernels/native_gr_postops.hpp"
+#include "cortex/sycl_queue.hpp"
+#include "cortex/kernels/native_gr_postops.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -34,7 +34,7 @@
 #include <string>
 #include <cmath>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 constexpr int THREADS = 256;
 __dpct_inline__ float sigmoid(float x) {
@@ -169,7 +169,7 @@ void native_gr_down_silu(float* lo, int hc_lr, int hc, void* stream) {
         auto exp_props = sycl::ext::oneapi::experimental::properties{
             sycl::ext::oneapi::experimental::use_root_sync};
 
-        ((sycl::queue *)(strata::q_of(stream)))
+        ((sycl::queue *)(cortex::q_of(stream)))
             ->submit([&](sycl::handler &cgh) {
                 auto float_hc_ct2 = 1.0f / float(hc);
 
@@ -200,7 +200,7 @@ void native_gr_pre_gated_multi(const float* xn, float* gate, float* mixed,
         auto exp_props = sycl::ext::oneapi::experimental::properties{
             sycl::ext::oneapi::experimental::use_root_sync};
 
-        ((sycl::queue *)(strata::q_of(stream)))
+        ((sycl::queue *)(cortex::q_of(stream)))
             ->submit([&](sycl::handler &cgh) {
                 auto float_hc_ct5 = 1.0f / float(hc);
 
@@ -217,7 +217,7 @@ void native_gr_pre_gated_multi(const float* xn, float* gate, float* mixed,
         auto exp_props = sycl::ext::oneapi::experimental::properties{
             sycl::ext::oneapi::experimental::use_root_sync};
 
-        ((sycl::queue *)(strata::q_of(stream)))
+        ((sycl::queue *)(cortex::q_of(stream)))
             ->submit([&](sycl::handler &cgh) {
                 auto float_hc_ct5 = 1.0f / float(hc);
 
@@ -249,7 +249,7 @@ void native_gr_post_multi(const float* residual, const float* block_out, const f
         auto exp_props = sycl::ext::oneapi::experimental::properties{
             sycl::ext::oneapi::experimental::use_root_sync};
 
-        ((sycl::queue *)(strata::q_of(stream)))
+        ((sycl::queue *)(cortex::q_of(stream)))
             ->submit([&](sycl::handler &cgh) {
                 auto float_hc_ct6 = 1.0f / float(hc);
 
@@ -264,4 +264,4 @@ void native_gr_post_multi(const float* residual, const float* block_out, const f
     }
     check_launch();
 }
-} // namespace strata::kernels
+} // namespace cortex::kernels

@@ -1,4 +1,4 @@
-"""The close-path matrix: every way a Strata server or app can end, and what must be true afterwards.
+"""The close-path matrix: every way a Cortex server or app can end, and what must be true afterwards.
 
 After each case: no process of the tree that was running is left, the port is free, and the runtime's lease can be
 taken again (nothing holds it). With a real engine, `--vram` also checks that the GPU's memory came back.
@@ -31,7 +31,7 @@ sys.path.insert(0, str(ROOT))
 
 import psutil  # noqa: E402
 
-from strata_control import components, engine_component as ec, procs, profiles, runtime  # noqa: E402
+from cortex_control import components, engine_component as ec, procs, profiles, runtime  # noqa: E402
 
 WINDOWS = os.name == "nt"
 LINUX = sys.platform.startswith("linux")
@@ -113,7 +113,7 @@ def install_fake_engine(components_dir: Path) -> Path:
     files = [{"path": name, "sha256": hashlib.sha256((folder / name).read_bytes()).hexdigest(),
               "bytes": (folder / name).stat().st_size} for name in (entry, "engine_main.py")]
     (folder / ec.MANIFEST).write_text(json.dumps({
-        "schema_version": 1, "id": "strata-engine", "version": "0.1.45", "platform": components.host_platform(),
+        "schema_version": 1, "id": "cortex-engine", "version": "0.1.45", "platform": components.host_platform(),
         "backend": BACKEND, "entrypoint": entry, "files": files}), encoding="utf-8")
     return folder
 
@@ -128,7 +128,7 @@ def vram_used_mib() -> int | None:
 
 
 class Rig:
-    """A throwaway Strata home: state, runtime, profile and (fake or real) engine config."""
+    """A throwaway Cortex home: state, runtime, profile and (fake or real) engine config."""
 
     def __init__(self, root: Path, *, real_config: Path | None = None, real_components: Path | None = None,
                  slow_steps: int = 0):
@@ -141,17 +141,17 @@ class Rig:
         self.mark.mkdir()
         self.state = root / "state"
         self.state.mkdir()
-        self.env = {**os.environ, "STRATA_PROFILE_DIR": str(root / "profiles"), "STRATA_RUNTIME_DIR": str(root / "runtime"),
-                    "STRATA_COMPONENTS_DIR": str(self.components), "STRATA_ENGINE_BACKEND": BACKEND,
-                    "STRATA_NO_ACQUIRE": "1", "FAKE_ENGINE_MARK": str(self.mark), "LOCALAPPDATA": str(self.state),
+        self.env = {**os.environ, "CORTEX_PROFILE_DIR": str(root / "profiles"), "CORTEX_RUNTIME_DIR": str(root / "runtime"),
+                    "CORTEX_COMPONENTS_DIR": str(self.components), "CORTEX_ENGINE_BACKEND": BACKEND,
+                    "CORTEX_NO_ACQUIRE": "1", "FAKE_ENGINE_MARK": str(self.mark), "LOCALAPPDATA": str(self.state),
                     "XDG_STATE_HOME": str(self.state), "PYTHONPATH": str(ROOT), "PYTHONUNBUFFERED": "1",
                     "FAKE_ENGINE_SLOW_STEPS": str(slow_steps)}
-        self.env.pop("STRATA_API_KEY", None)
-        for key in ("STRATA_PROFILE_DIR", "STRATA_RUNTIME_DIR", "LOCALAPPDATA", "XDG_STATE_HOME", "STRATA_COMPONENTS_DIR",
-                    "STRATA_NO_ACQUIRE", "STRATA_ENGINE_BACKEND", "FAKE_ENGINE_MARK", "FAKE_ENGINE_SLOW_STEPS"):
+        self.env.pop("CORTEX_API_KEY", None)
+        for key in ("CORTEX_PROFILE_DIR", "CORTEX_RUNTIME_DIR", "LOCALAPPDATA", "XDG_STATE_HOME", "CORTEX_COMPONENTS_DIR",
+                    "CORTEX_NO_ACQUIRE", "CORTEX_ENGINE_BACKEND", "FAKE_ENGINE_MARK", "FAKE_ENGINE_SLOW_STEPS"):
             os.environ[key] = self.env[key]               # this process reads the same folders (profiles, runtime)
         if real_components is not None:
-            self.env["STRATA_COMPONENTS_DIR"] = os.environ["STRATA_COMPONENTS_DIR"] = str(real_components)
+            self.env["CORTEX_COMPONENTS_DIR"] = os.environ["CORTEX_COMPONENTS_DIR"] = str(real_components)
         if real_config is not None:
             cfg = json.loads(real_config.read_text(encoding="utf-8"))
             cfg.update({"host": "127.0.0.1", "port": self.port})
@@ -161,7 +161,7 @@ class Rig:
             self.config.write_text(json.dumps(cfg), encoding="utf-8")
         else:
             install_fake_engine(self.components)
-            from tools.strata_tokenizer import BYTE_TO_UNICODE
+            from tools.cortex_tokenizer import BYTE_TO_UNICODE
             tokenizer = root / "tokenizer"
             tokenizer.mkdir()
             tokens = [BYTE_TO_UNICODE[i] for i in range(256)] + ["ab", "<|im_start|>", "<|im_end|>", "<|endoftext|>"]
@@ -169,7 +169,7 @@ class Rig:
             (tokenizer / "merges.txt").write_text("a b")
             (tokenizer / "token_type.json").write_text(json.dumps([0] * 257 + [3, 3, 3]))
             self.config = root / "run.json"
-            self.config.write_text(json.dumps({"exe": "component:strata-engine", "backend": BACKEND,
+            self.config.write_text(json.dumps({"exe": "component:cortex-engine", "backend": BACKEND,
                                                "tokenizer": str(tokenizer), "args": [], "cwd": str(root),
                                                "model_name": "fake", "host": "127.0.0.1", "port": self.port}),
                                    encoding="utf-8")
@@ -177,7 +177,7 @@ class Rig:
 
     # ------------------------------------------------------------------------------------- starting
     def serve_argv(self) -> list[str]:
-        return [sys.executable, str(ROOT / "strata.py"), "serve", "--profile", "app", "--port", str(self.port),
+        return [sys.executable, str(ROOT / "cortex.py"), "serve", "--profile", "app", "--port", str(self.port),
                 "--host", "127.0.0.1", "--shutdown-timeout", "5"]
 
     def wait_ready(self, proc=None, seconds=None) -> None:
@@ -364,7 +364,7 @@ def serve_case(rig: Rig, name: str, action, *, graceful: bool | None, vram: bool
                      vram_during=during)
         out["seconds"] = round(time.monotonic() - t0, 1)
         text = (rig.root / "serve.log").read_text(errors="replace") if (rig.root / "serve.log").exists() else ""
-        out["stopped"] = "[strata] stopped" in text
+        out["stopped"] = "[cortex] stopped" in text
         if graceful is True and not out["stopped"]:
             out["problems"].append("the server did not print its clean-stop line"); out["ok"] = False
         return out
@@ -381,7 +381,7 @@ def serve_case(rig: Rig, name: str, action, *, graceful: bool | None, vram: bool
                     psutil.Process(i.pid).kill()
                 except psutil.Error:
                     pass
-        keep = os.environ.get("STRATA_MATRIX_LOGS")                 # keep the server's and engine's logs as evidence
+        keep = os.environ.get("CORTEX_MATRIX_LOGS")                 # keep the server's and engine's logs as evidence
         if keep:
             Path(keep).mkdir(parents=True, exist_ok=True)
             for log in ("serve.log", "engine.log"):
@@ -444,7 +444,7 @@ def busy_sigterm(rig, proc):
 
 
 def nohup_case(rig: Rig, name: str = "serve-nohup-keeps-serving", *, vram: bool = False) -> Result:
-    """`nohup strata serve &` asks to outlive its terminal: a hangup that was ignored at start is still ignored, and the
+    """`nohup cortex serve &` asks to outlive its terminal: a hangup that was ignored at start is still ignored, and the
     server stops on SIGTERM as usual. (An ordinary server stops on SIGHUP: serve-sighup.)"""
     rig.clear_marks()
     before = vram_used_mib() if vram else None
@@ -516,10 +516,10 @@ def pty_close_case(rig: Rig, name: str = "serve-terminal-closed", *, vram: bool 
             pass
 
 
-# --- the detached service (`strata runtime start`) ------------------------------------------------
+# --- the detached service (`cortex runtime start`) ------------------------------------------------
 
 def runtime_start(rig: Rig, die_with: int | None = None) -> dict:
-    argv = [sys.executable, str(ROOT / "strata.py"), "runtime", "start", "--profile", "app", "--wait", "400" if rig.real else "240",
+    argv = [sys.executable, str(ROOT / "cortex.py"), "runtime", "start", "--profile", "app", "--wait", "400" if rig.real else "240",
             "--shutdown-timeout", "5", "--output", "json"]
     if die_with:
         argv += ["--die-with-pid", str(die_with)]
@@ -531,7 +531,7 @@ def runtime_start(rig: Rig, die_with: int | None = None) -> dict:
 
 
 def runtime_stop(rig: Rig) -> dict:
-    out = subprocess.run([sys.executable, str(ROOT / "strata.py"), "runtime", "stop", "--profile", "app", "--wait", "60",
+    out = subprocess.run([sys.executable, str(ROOT / "cortex.py"), "runtime", "stop", "--profile", "app", "--wait", "60",
                           "--output", "json"], cwd=ROOT, env=rig.env, capture_output=True, text=True, timeout=120)
     try:
         return json.loads(out.stdout)
@@ -580,7 +580,7 @@ def runtime_case(rig: Rig, name: str, what: str, *, vram: bool = False) -> Resul
             kill_hard(server.pid)
             graceful = None
             note = "server killed, owner left alive"
-            idents = [i for i in idents if "strata_control.runtime" not in " ".join(i.cmd) and "conhost" not in " ".join(i.cmd)]
+            idents = [i for i in idents if "cortex_control.runtime" not in " ".join(i.cmd) and "conhost" not in " ".join(i.cmd)]
         elif what == "die-with":
             holder.kill(); holder.wait(timeout=10)
         if what == "server-killed":
@@ -654,7 +654,7 @@ def monitor_case(rig: Rig, how: str) -> Result:
         raise RuntimeError(f"not ready: {started}")
     owner = owner_pid(rig)
     service = rig.tree(owner)
-    argv = [sys.executable, str(ROOT / "strata.py"), "monitor", "--url", f"http://127.0.0.1:{rig.port}"]
+    argv = [sys.executable, str(ROOT / "cortex.py"), "monitor", "--url", f"http://127.0.0.1:{rig.port}"]
     env = {**rig.env, "TERM": "xterm-256color", "COLUMNS": "120", "LINES": "40"}
     master = child = None
     if WINDOWS:
@@ -727,7 +727,7 @@ def monitor_case(rig: Rig, how: str) -> Result:
 
 
 SCENARIOS = {
-    # foreground `strata serve`
+    # foreground `cortex serve`
     "serve-ctrl-c": lambda rig, v: serve_case(rig, "serve-ctrl-c", win_ctrl_c if WINDOWS else sigint_group,
                                               graceful=True, vram=v, new_console=WINDOWS),
     "serve-sigterm": lambda rig, v: serve_case(rig, "serve-sigterm", sigterm, graceful=True, vram=v),
@@ -739,7 +739,7 @@ SCENARIOS = {
     "serve-busy-stop": lambda rig, v: serve_case(rig, "serve-busy-stop", busy_sigterm, graceful=True, vram=v),
     "serve-terminal-closed": lambda rig, v: pty_close_case(rig, vram=v),
     "serve-nohup-keeps-serving": lambda rig, v: nohup_case(rig, vram=v),
-    # `strata runtime start` (a background service by design)
+    # `cortex runtime start` (a background service by design)
     "runtime-stop": lambda rig, v: runtime_case(rig, "runtime-stop", "stop", vram=v),
     "runtime-survives-terminal": lambda rig, v: runtime_case(rig, "runtime-survives-terminal", "terminal-gone", vram=v),
     "runtime-owner-killed": lambda rig, v: runtime_case(rig, "runtime-owner-killed", "owner-killed", vram=v),
@@ -764,7 +764,7 @@ def run(names: list[str], *, real_config: Path | None = None, real_components: P
     results = []
     for name in names:
         saved = dict(os.environ)                      # a Rig points this process at its own folders; give them back
-        with tempfile.TemporaryDirectory(prefix="strata-matrix-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="cortex-matrix-") as tmp:
             rig = Rig(Path(tmp), real_config=real_config, real_components=real_components, slow_steps=slow_steps if name == "serve-busy-stop" else 0)
             try:
                 result = SCENARIOS[name](rig, vram)
@@ -791,7 +791,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--scenarios", default="all")
     ap.add_argument("--config", help="a real engine's run config (then no fake engine is used)")
-    ap.add_argument("--components", help="the engine component folder for --config (STRATA_COMPONENTS_DIR)")
+    ap.add_argument("--components", help="the engine component folder for --config (CORTEX_COMPONENTS_DIR)")
     ap.add_argument("--vram", action="store_true", help="check nvidia-smi memory returns")
     ap.add_argument("--report")
     a = ap.parse_args(argv)

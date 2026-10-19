@@ -9,9 +9,9 @@ import { appVersionFrom } from '../server/app-version.mjs';
 const here = fileURLToPath(new URL('../server', import.meta.url));
 
 test('the shell passes the version; a bad value is ignored', () => {
-  assert.equal(appVersionFrom({ env: { STRATA_APP_VERSION: '0.2.0-beta' }, here: '/nowhere/a/b' }), '0.2.0-beta');
-  assert.equal(appVersionFrom({ env: { STRATA_APP_VERSION: ' 1.2.3 ' }, here: '/nowhere/a/b' }), '1.2.3');
-  assert.equal(appVersionFrom({ env: { STRATA_APP_VERSION: 'latest' }, here: '/nowhere/a/b' }), 'dev');
+  assert.equal(appVersionFrom({ env: { CORTEX_APP_VERSION: '0.2.0-beta' }, here: '/nowhere/a/b' }), '0.2.0-beta');
+  assert.equal(appVersionFrom({ env: { CORTEX_APP_VERSION: ' 1.2.3 ' }, here: '/nowhere/a/b' }), '1.2.3');
+  assert.equal(appVersionFrom({ env: { CORTEX_APP_VERSION: 'latest' }, here: '/nowhere/a/b' }), 'dev');
   assert.equal(appVersionFrom({ env: {}, here: '/nowhere/a/b' }), 'dev');
 });
 
@@ -20,7 +20,7 @@ test('in a checkout the same file the shell is built from is read, so there is o
   const declared = /^version\s*=\s*"([^"]+)"/m.exec(toml)[1];
   assert.equal(appVersionFrom({ env: {}, here }), declared);
   assert.notEqual(declared, '0.1.0', 'the app version is the product version, not the 0.1.0 placeholder');
-  const dir = await mkdtemp(join(tmpdir(), 'strata-appver-'));
+  const dir = await mkdtemp(join(tmpdir(), 'cortex-appver-'));
   try {
     await mkdir(join(dir, 'host', 'server'), { recursive: true });
     await mkdir(join(dir, 'desktop', 'src-tauri'), { recursive: true });

@@ -1,7 +1,7 @@
 """Starting and serving never acquire anything.
 
 The owner's rule: a user must never download random packages from the internet while starting or serving. Everything
-that installs, downloads or compiles lives behind an explicit command (SETUP, UPDATE, `strata install`). Three layers
+that installs, downloads or compiles lives behind an explicit command (SETUP, UPDATE, `cortex install`). Three layers
 are checked here:
 
 * the import graph of the start/serve entry points does not reach installer code;
@@ -25,8 +25,8 @@ from pathlib import Path
 from unittest import mock
 
 import setup
-from strata_cli import cli
-from strata_control import acquisition
+from cortex_cli import cli
+from cortex_control import acquisition
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -34,7 +34,7 @@ ROOT = Path(__file__).resolve().parents[2]
 INSTALLER_MODULES = {"setup", "pip", "ensurepip", "venv", "huggingface_hub", "modelscope", "metal.setup_mac",
                      "sycl.setup_intel"}
 #: Files that may be loaded on the start/serve side besides the control, cli and serve packages.
-ALLOWED_TOOLS = {"tools.strata_tokenizer", "tools.gguf_reader"}   # read-only: a tokenizer and a GGUF header reader
+ALLOWED_TOOLS = {"tools.cortex_tokenizer", "tools.gguf_reader"}   # read-only: a tokenizer and a GGUF header reader
 
 #: argv words that mean "acquire": a subprocess whose literal argv contains one of these is an installer.
 INSTALL_WORDS = {"pip", "pip3", "git", "cmake", "ninja", "npm", "npx", "pnpm", "yarn", "winget", "apt-get", "apt",
@@ -44,16 +44,16 @@ INSTALL_WORDS = {"pip", "pip3", "git", "cmake", "ninja", "npm", "npx", "pnpm", "
 NETWORK_ALLOWED = {
     ("serve/server.py", "urlopen"): "an image_url a client sends in a chat request is fetched at request time",
     ("serve/mcp.py", "urlopen"): "the MCP servers the user configured, at request time",
-    ("strata_control/tune_api.py", "urlopen"): "the loopback engine/server of a tuning job the user started",
-    ("strata_control/tune_session.py", "urlopen"): "the loopback engine (127.0.0.1) the auto-tuner a user started measures",
-    ("strata_control/components.py", "urlopen"): "the component fetcher: only `strata install`/UPDATE call it",
+    ("cortex_control/tune_api.py", "urlopen"): "the loopback engine/server of a tuning job the user started",
+    ("cortex_control/tune_session.py", "urlopen"): "the loopback engine (127.0.0.1) the auto-tuner a user started measures",
+    ("cortex_control/components.py", "urlopen"): "the component fetcher: only `cortex install`/UPDATE call it",
 }
 #: Modules that import the installer on purpose, with the explicit command that reaches them.
 INSTALLER_IMPORT_ALLOWED = {
-    "strata_control/calibration.py": "`strata engine calibrate`: an explicit tuning command, imports setup lazily",
+    "cortex_control/calibration.py": "`cortex engine calibrate`: an explicit tuning command, imports setup lazily",
 }
 
-SERVING_DIRS = ("serve", "strata_cli", "strata_control")
+SERVING_DIRS = ("serve", "cortex_cli", "cortex_control")
 
 
 def _sources():
@@ -62,7 +62,7 @@ def _sources():
             if p.name.startswith("test_") or p.name == "__init__.py":
                 continue
             yield p
-    yield ROOT / "strata.py"
+    yield ROOT / "cortex.py"
 
 
 class ImportGraphTests(unittest.TestCase):
@@ -70,9 +70,9 @@ class ImportGraphTests(unittest.TestCase):
         script = (
             "import sys, os, json\n"
             "sys.path.insert(0, os.getcwd())\n"
-            "import strata_cli.cli as c\n"
+            "import cortex_cli.cli as c\n"
             "import serve.server\n"
-            "from strata_control import runtime\n"
+            "from cortex_control import runtime\n"
             "c.parser()\n"
             "root = os.getcwd()\n"
             "mods = {n: os.path.relpath(m.__file__, root).replace(os.sep, '/') for n, m in list(sys.modules.items())\n"
@@ -85,10 +85,10 @@ class ImportGraphTests(unittest.TestCase):
         self.assertEqual(sorted(loaded & INSTALLER_MODULES), [])
         for name, rel in got["mods"].items():
             top = rel.split("/")[0]
-            self.assertIn(top, ("serve", "strata_cli", "strata_control"),
+            self.assertIn(top, ("serve", "cortex_cli", "cortex_control"),
                           f"{name} ({rel}) is loaded by starting/serving but is not part of it")
-        self.assertNotIn("strata_control.calibration", got["mods"])
-        self.assertNotIn("strata_control.components", got["mods"])
+        self.assertNotIn("cortex_control.calibration", got["mods"])
+        self.assertNotIn("cortex_control.components", got["mods"])
 
     def test_static_imports_of_the_installer_are_explicit_commands_only(self):
         found = {}
@@ -162,19 +162,19 @@ class StartNeverAcquiresTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name) / "Strata"
+        self.root = Path(self.tmp.name) / "Cortex"
         self.root.mkdir()
-        self.data = Path(self.tmp.name) / "Strata-data"
+        self.data = Path(self.tmp.name) / "Cortex-data"
         (self.data / "models").mkdir(parents=True)
         self.gguf = self.data / "models" / "m.gguf"
         self.gguf.write_bytes(b"GGUF")
         eng = self.root / "engine"
         eng.mkdir()
         (eng / setup.EXE).write_bytes(b"engine")
-        # an engine older than this Strata expects: a start used to download the new one
+        # an engine older than this Cortex expects: a start used to download the new one
         (eng / "BUILD.json").write_text(json.dumps({"version": "0.1.1", "source": "prebuilt", "backend": "cuda",
                                                     "archs": [86]}))
-        self.cfg = self.root / "strata-q2_0.json"
+        self.cfg = self.root / "cortex-q2_0.json"
         self.cfg.write_text(json.dumps({
             "exe": str(eng / setup.EXE), "args": ["--native", str(self.gguf), "--max-context", "8192"],
             "tokenizer": str(self.data / "tok.json"), "model_name": "Q2_0", "port": 8080}))
@@ -223,7 +223,7 @@ class StartNeverAcquiresTests(unittest.TestCase):
         self.assertEqual(len(started), 1, text)                        # the server was started
         self.assertIn("server.py", " ".join(started[0]))
         self.assertEqual(self.env_of_start, "1")                         # the server is told, too
-        self.assertIn("is older than this Strata expects", text)
+        self.assertIn("is older than this Cortex expects", text)
         self.assertTrue("UPDATE" in text or "update.sh" in text, text)     # UPDATE.bat on Windows, ./update.sh elsewhere
 
     def test_a_start_moves_copies_and_creates_nothing(self):
@@ -266,7 +266,7 @@ class StartNeverAcquiresTests(unittest.TestCase):
             lambda: setup._urlopen(urllib.request.Request("https://example.invalid/")),
             lambda: setup.reachable("https://example.invalid/"),
             lambda: setup.get_prebuilt("https://example.invalid/", {"arch": "86"}, "none"),
-            lambda: setup.cmake_build(self.root, self.root / "b", "strata", [], None, ""),
+            lambda: setup.cmake_build(self.root, self.root / "b", "cortex", [], None, ""),
             lambda: setup.pip_cuda_libs(13),
         ]
         with mock.patch.object(urllib.request, "urlopen", rec.urlopen), \
@@ -297,28 +297,28 @@ class CliServeIsOfflineTests(unittest.TestCase):
     def test_serve_plan_reaches_no_network_and_runs_no_program(self):
         rec = _Recorder()
         with tempfile.TemporaryDirectory() as d:
-            cfg = Path(d) / "strata-x.json"
+            cfg = Path(d) / "cortex-x.json"
             gguf = Path(d) / "m.gguf"
             gguf.write_bytes(b"GGUF")
             tok = Path(d) / "t.json"
             tok.write_text("{}")
-            exe = Path(d) / "strata.exe"
+            exe = Path(d) / "cortex.exe"
             exe.write_bytes(b"x")
             cfg.write_text(json.dumps({"exe": str(exe), "args": ["--native", str(gguf)], "tokenizer": str(tok)}))
             out = io.StringIO()
             with mock.patch.object(urllib.request, "urlopen", rec.urlopen), \
                     mock.patch.object(subprocess, "run", rec.program), mock.patch.object(subprocess, "Popen", rec.program), \
-                    mock.patch.dict(os.environ, {"STRATA_PROFILE_DIR": str(Path(d) / "profiles")}), \
+                    mock.patch.dict(os.environ, {"CORTEX_PROFILE_DIR": str(Path(d) / "profiles")}), \
                     contextlib.redirect_stdout(out):
                 code = cli.main(["serve", "--profile", str(cfg), "--plan", "--output", "json"])
         self.assertEqual(code, 0, out.getvalue())
         self.assertEqual((rec.network, rec.programs), ([], []))
-        self.assertNotIn("setup", sys.modules.get("strata_cli.cli").__dict__.get("__name__", ""))
+        self.assertNotIn("setup", sys.modules.get("cortex_cli.cli").__dict__.get("__name__", ""))
 
-    def test_strata_install_without_the_installer_is_a_typed_error(self):
+    def test_cortex_install_without_the_installer_is_a_typed_error(self):
         err = io.StringIO()
         with tempfile.TemporaryDirectory() as d, \
-                mock.patch.dict(os.environ, {"STRATA_INSTALL_DIR": d}), \
+                mock.patch.dict(os.environ, {"CORTEX_INSTALL_DIR": d}), \
                 mock.patch.object(cli, "ROOT", Path(d)), contextlib.redirect_stderr(err):
             code = cli.main(["install"])
         self.assertEqual(code, 5)

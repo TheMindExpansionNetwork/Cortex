@@ -1,18 +1,18 @@
 # AGENTS.md
 
-Strata runs the Qwen3.8-Flash-Next mixture-of-experts model (and its Coder, Swift 1.5, Unsloth, Gyro and NVFP4
+Cortex runs the Qwen3.8-Flash-Next mixture-of-experts model (and its Coder, Swift 1.5, Unsloth, Gyro and NVFP4
 variants, and Qwen3.6-35B-A3B) on a normal PC: one NVIDIA or AMD graphics card plus system RAM on Windows or Linux,
 or an Apple Silicon Mac. Version 0.2.0-beta, engine 0.1.45.3. It has three parts:
 
 - **The app** (`apps/desktop`, the Tauri shell; `apps/host`, the Node host and the web UI). It is for people who do
   not want a terminal. The installer has the engine inside.
-- **The Terminal** (`strata.py`, `strata_cli/`, `strata_control/`): the `strata` command. It sets up a model, serves
+- **The Terminal** (`cortex.py`, `cortex_cli/`, `cortex_control/`): the `cortex` command. It sets up a model, serves
   it and watches it. Agents use this part.
 - **The engine and the server** (`src/`, `include/`, `metal/`, `sycl/` for the C++/CUDA/HIP/SYCL/Metal engine;
   `serve/` for the Python server with an OpenAI- and Anthropic-compatible API and a web page). `setup.py`, started by
   `START-HERE.bat` or `setup.sh`, is the older one-click installer from source.
 
-## Installing Strata for a user
+## Installing Cortex for a user
 
 Follow **[docs/AI_SETUP.md](docs/AI_SETUP.md)**. For an agent that has a shell, the short version is:
 
@@ -23,31 +23,31 @@ Follow **[docs/AI_SETUP.md](docs/AI_SETUP.md)**. For an agent that has a shell, 
    irm https://github.com/Niko1221/Strata/releases/latest/download/install.ps1 | iex                         # Windows PowerShell
    ```
 
-   On Windows, open a new terminal afterwards so that `strata` is on the PATH.
+   On Windows, open a new terminal afterwards so that `cortex` is on the PATH.
 2. Check what would happen. Nothing is changed:
 
    ```sh
-   strata launch --plan --model q2_0
+   cortex launch --plan --model q2_0
    ```
 
 3. Set up and serve without questions. It downloads the engine for the card and the model (tens of GB), starts the
    server, prints the addresses and returns. The server keeps running.
 
    ```sh
-   strata launch --model q2_0 --yes --no-tui
+   cortex launch --model q2_0 --yes --no-tui
    ```
 
-   Useful flags (all of them: `strata launch --help`): `--family`, `--model-path` (files the user already has),
+   Useful flags (all of them: `cortex launch --help`): `--family`, `--model-path` (files the user already has),
    `--data-dir`, `--context 32k|64k|128k`, `--vision off|on|gpu|cpu`, `--parallel N`, `--gpu 0,1`,
    `--access local|lan|cloudflare|tailscale`, `--port`, `--api-key-env NAME`, `--new-key`, `--save-preset NAME`,
-   `--output json`. `strata launch --status` shows what is serving, `strata launch --stop` stops it, and
-   `strata launch --show-key` prints the API key.
-4. Connect the user's apps: `strata connect` lists them, `strata connect <app> --check` sends one prompt and one tool
+   `--output json`. `cortex launch --status` shows what is serving, `cortex launch --stop` stops it, and
+   `cortex launch --show-key` prints the API key.
+4. Connect the user's apps: `cortex connect` lists them, `cortex connect <app> --check` sends one prompt and one tool
    call the way that app does.
 
 Never expose the server beyond `127.0.0.1` without an API key. `--access lan` makes a key for you. The old route (clone
 the repository and run `START-HERE.bat --yes` or `./setup.sh --yes`) still works and is the fallback when the
-Terminal cannot run. Strata's MCP server ([docs/MCP_SERVER.md](docs/MCP_SERVER.md)) offers the same steps as tools.
+Terminal cannot run. Cortex's MCP server ([docs/MCP_SERVER.md](docs/MCP_SERVER.md)) offers the same steps as tools.
 
 ## Working on the code
 

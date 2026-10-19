@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 import setup  # noqa: E402
-from strata_control import vision_reader as VR  # noqa: E402
+from cortex_control import vision_reader as VR  # noqa: E402
 
 
 class PictureDefaults(unittest.TestCase):

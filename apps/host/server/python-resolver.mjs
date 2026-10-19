@@ -3,7 +3,7 @@
  * (tuning, Time-skip, the revise command, the native MCP client, setup/calibration jobs, the native server).
  *
  * Order:
- *   1. STRATA_PYTHON, then STRATA_NATIVE_PYTHON      (an explicit choice is never second-guessed)
+ *   1. CORTEX_PYTHON, then CORTEX_NATIVE_PYTHON      (an explicit choice is never second-guessed)
  *   1b. the Control component's own interpreter, when the app ships one (control-runtime.mjs findControl):
  *      the installed app never looks at the user's Python
  *   2. the repository's own venv: .venv\Scripts\python.exe on Windows, .venv/bin/python elsewhere
@@ -31,10 +31,10 @@ export function pythonStarts(command, args = []) {
 const cache = new Map();
 
 export function resolvePython({ repo = null, control = null, env = process.env, platform = process.platform, exists = existsSync, starts = pythonStarts, useCache = true } = {}) {
-  const key = JSON.stringify([repo, control?.python ?? null, env.STRATA_PYTHON, env.STRATA_NATIVE_PYTHON, platform]);
+  const key = JSON.stringify([repo, control?.python ?? null, env.CORTEX_PYTHON, env.CORTEX_NATIVE_PYTHON, platform]);
   if (useCache && cache.has(key)) return cache.get(key);
   const found = (() => {
-    const explicit = env.STRATA_PYTHON || env.STRATA_NATIVE_PYTHON;
+    const explicit = env.CORTEX_PYTHON || env.CORTEX_NATIVE_PYTHON;
     if (explicit) return { command: explicit, args: [], source: 'environment' };
     if (control?.python) return { command: control.python, args: [], source: 'bundled' };
     if (repo) {

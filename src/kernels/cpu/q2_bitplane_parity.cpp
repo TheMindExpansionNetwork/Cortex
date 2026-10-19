@@ -1,4 +1,4 @@
-// src/kernels/cpu/q2_bitplane_parity.cpp - the opt-in Q2_0 bit-plane kernel (STRATA_Q2_BITPLANE=1, PR #706),
+// src/kernels/cpu/q2_bitplane_parity.cpp - the opt-in Q2_0 bit-plane kernel (CORTEX_Q2_BITPLANE=1, PR #706),
 // on the AVX-2 pair where the CPU has AVX2 and on the AVX1 pair below it (issue #1699) - the bit-plane is an
 // AVX2/AVX1 feature, the AVX-512 kernel does not read the image.
 //
@@ -8,8 +8,8 @@
 //      (the engine's pool splits rows between workers, a verify window changes the width);
 //   3. the legacy path is untouched when the switch is off (this test only runs with the switch on: ctest sets it).
 // Synthetic data, CPU only; skipped (pass) on a CPU without AVX.
-#include "strata/kernels/cpu/expert.hpp"
-#include "strata/kernels/cpu/expert_layout.hpp"
+#include "cortex/kernels/cpu/expert.hpp"
+#include "cortex/kernels/cpu/expert_layout.hpp"
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -18,11 +18,11 @@
 #include <random>
 #include <vector>
 
-namespace c = strata::kernels::cpu;
+namespace c = cortex::kernels::cpu;
 
 int main() {
     if (!c::q2_bitplane_enabled()) {
-        std::printf("q2_bitplane_parity: STRATA_Q2_BITPLANE=1 is not set\n");
+        std::printf("q2_bitplane_parity: CORTEX_Q2_BITPLANE=1 is not set\n");
         return 1;
     }
     if (!c::cpu_avx1_ok()) { std::printf("q2_bitplane_parity: no AVX on this CPU, skipped\n"); return 0; }

@@ -1,4 +1,4 @@
-"""`strata launch` without screens: the settings rules, the catalog, presets, parameters, access, connect, and every flag."""
+"""`cortex launch` without screens: the settings rules, the catalog, presets, parameters, access, connect, and every flag."""
 
 from __future__ import annotations
 
@@ -10,9 +10,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from strata_cli.launch import access, harness, params, settings as S, store
-from strata_cli.launch.catalog import Catalog, CatalogUnavailable, fit_on, verdict
-from strata_cli.launch.runner import Result, Runner, derive_config, desc_matches, tune_words
+from cortex_cli.launch import access, harness, params, settings as S, store
+from cortex_cli.launch.catalog import Catalog, CatalogUnavailable, fit_on, verdict
+from cortex_cli.launch.runner import Result, Runner, derive_config, desc_matches, tune_words
 from tests.terminal.launch_support import HW_12, HW_24, HW_2X16, Home, catalog, run_cli
 
 
@@ -58,7 +58,7 @@ class SettingsRules(unittest.TestCase):
     def test_split_setting(self):
         self.assertEqual(S.split_setting("prefill=65536"), ("--prefill", "65536"))
         self.assertEqual(S.split_setting("--kv-grow"), ("--kv-grow", ""))
-        self.assertEqual(S.split_setting("STRATA_PIN_BY_NEED=1"), ("STRATA_PIN_BY_NEED", "1"))
+        self.assertEqual(S.split_setting("CORTEX_PIN_BY_NEED=1"), ("CORTEX_PIN_BY_NEED", "1"))
         self.assertEqual(S.split_setting("expert_cache=auto"), ("--expert-cache", "auto"))
         self.assertEqual(S.split_setting("IGC_EnableDPEmulation=1"), ("IGC_EnableDPEmulation", "1"))        # environment names keep their case
         self.assertEqual(S.split_setting("ONEAPI_DEVICE_SELECTOR=level_zero:gpu"), ("ONEAPI_DEVICE_SELECTOR", "level_zero:gpu"))
@@ -68,10 +68,10 @@ class SettingsRules(unittest.TestCase):
 
     def test_flags_text_round_trips_to_the_same_choices(self):
         s = S.LaunchSettings(family="qwen", model="IQ3_XXS", context=131072, parallel=2, tune="quick", access="lan", port=9000,
-                             extra={"--prefill": "65536", "STRATA_PIN_BY_NEED": "1"})
+                             extra={"--prefill": "65536", "CORTEX_PIN_BY_NEED": "1"})
         text = S.flags_text(s)
         for part in ("--model iq3_xxs", "--context 128k", "--parallel 2", "--tune quick", "--access lan", "--port 9000",
-                     "--set prefill=65536", "--set STRATA_PIN_BY_NEED=1"):
+                     "--set prefill=65536", "--set CORTEX_PIN_BY_NEED=1"):
             self.assertIn(part, text)
         self.assertIn('--preset "Fast"', S.flags_text(s, preset="Fast"))
 
@@ -214,7 +214,7 @@ class PresetStore(unittest.TestCase):
 
 
 class Advanced(unittest.TestCase):
-    HELP = """strata generate --pack DIR [options]
+    HELP = """cortex generate --pack DIR [options]
 
   --pack DIR           the pack directory (default pack/full)
   --kv fp16|int8       KV storage (plan v0.3 P7): int8 codes, half the
@@ -256,23 +256,23 @@ class Advanced(unittest.TestCase):
         self.assertIsNone(params.check_name("--prefil", None))        # no list to check against: no warning
 
     def test_extra_becomes_argv_and_env(self):
-        a, e = S.as_argv_changes({"--prefill": "65536", "--kv-grow": "", "--spec": "off", "STRATA_PIN_BY_NEED": "1"}, frozenset({"--kv-grow"}))
+        a, e = S.as_argv_changes({"--prefill": "65536", "--kv-grow": "", "--spec": "off", "CORTEX_PIN_BY_NEED": "1"}, frozenset({"--kv-grow"}))
         self.assertEqual(a, {"--prefill": "65536", "--kv-grow": True, "--spec": None})
-        self.assertEqual(e, {"STRATA_PIN_BY_NEED": "1"})
+        self.assertEqual(e, {"CORTEX_PIN_BY_NEED": "1"})
 
 
 class RunConfig(unittest.TestCase):
-    BASE = {"exe": "component:strata-engine", "args": ["--native", "x.gguf", "--max-context", "32768", "--kv", "int8", "--prefill", "auto"],
+    BASE = {"exe": "component:cortex-engine", "args": ["--native", "x.gguf", "--max-context", "32768", "--kv", "int8", "--prefill", "auto"],
             "port": 8095, "model_name": "m", "env": {}}
 
     def test_derive_applies_access_key_and_advanced(self):
-        s = S.LaunchSettings(access="lan", port=9001, api_key="sk-k", extra={"--prefill": "65536", "--kv-grow": "", "STRATA_PIN_BY_NEED": "1"})
+        s = S.LaunchSettings(access="lan", port=9001, api_key="sk-k", extra={"--prefill": "65536", "--kv-grow": "", "CORTEX_PIN_BY_NEED": "1"})
         cfg = derive_config(self.BASE, s, bool_flags=frozenset({"--kv-grow"}))
         self.assertEqual((cfg["host"], cfg["port"], cfg["api_key"]), ("0.0.0.0", 9001, "sk-k"))
         args = cfg["args"]
         self.assertEqual(args[args.index("--prefill") + 1], "65536")
         self.assertIn("--kv-grow", args)
-        self.assertEqual(cfg["env"], {"STRATA_PIN_BY_NEED": "1"})
+        self.assertEqual(cfg["env"], {"CORTEX_PIN_BY_NEED": "1"})
         self.assertEqual(self.BASE["args"][-1], "auto")               # the installed config is never edited
 
     def test_local_and_cloudflare_stay_on_loopback_without_a_key(self):
@@ -338,7 +338,7 @@ class SetupArgs(unittest.TestCase):
                 self.assertEqual(cat.picture_default(True), "off")
 
     def test_the_command_defaults_pictures_on_and_off_still_turns_them_off(self):
-        from strata_cli.launch.cmd import apply_defaults
+        from cortex_cli.launch.cmd import apply_defaults
         with Home():
             cat = catalog(HW_12)
             s, _ = apply_defaults(S.LaunchSettings(family="qwen", model="IQ3_XXS"), cat)
@@ -367,7 +367,7 @@ class SetupArgs(unittest.TestCase):
 
 class AdoptRules(unittest.TestCase):
     def files(self, root: Path, shards=2, pack=True, tokenizer=True, mtp=True):
-        d = root / "Strata-data"
+        d = root / "Cortex-data"
         m = d / "models" / "IQ3_XXS"
         m.mkdir(parents=True)
         for i in range(1, shards + 1):
@@ -383,13 +383,13 @@ class AdoptRules(unittest.TestCase):
         return d, m
 
     def test_setup_detection(self):
-        from strata_cli.launch import adopt
+        from cortex_cli.launch import adopt
         self.assertTrue(adopt.setup_cannot_handle_this_card("no NVIDIA GPU found (nvidia-smi did not answer)"))
-        self.assertTrue(adopt.setup_cannot_handle_this_card("no AMD GPU Strata can use"))
+        self.assertTrue(adopt.setup_cannot_handle_this_card("no AMD GPU Cortex can use"))
         self.assertFalse(adopt.setup_cannot_handle_this_card("not enough free disk space in /x"))
 
     def test_find_shards_needs_the_whole_set(self):
-        from strata_cli.launch import adopt
+        from cortex_cli.launch import adopt
         with Home() as h:
             d, m = self.files(h.base)
             self.assertEqual(len(adopt.find_shards(m)), 2)
@@ -397,7 +397,7 @@ class AdoptRules(unittest.TestCase):
             self.assertEqual(adopt.find_shards(m), [])
 
     def test_plan_writes_the_settings_setup_would(self):
-        from strata_cli.launch import adopt
+        from cortex_cli.launch import adopt
         with Home() as h:
             d, m = self.files(h.base)
             src = Path(__file__).resolve().parents[2]
@@ -409,12 +409,12 @@ class AdoptRules(unittest.TestCase):
             self.assertEqual(a[a.index("--kv") + 1], "int8")
             self.assertIn("--ple-gguf", a)
             self.assertIn("--mtp", a)
-            self.assertEqual((cfg["exe"], cfg["backend"]), ("component:strata-engine", "sycl"))
+            self.assertEqual((cfg["exe"], cfg["backend"]), ("component:cortex-engine", "sycl"))
             self.assertTrue(cfg["tokenizer"].endswith("tokenizer"))
 
     def test_plan_intel_flags_follow_the_driver(self):
         from unittest import mock
-        from strata_cli.launch import adopt
+        from cortex_cli.launch import adopt
         for driver, want, other in (("i915", ["--ple-io", "ram"], "--stream-experts"), ("xe", ["--stream-experts"], "--ple-io")):
             with Home() as h, mock.patch.object(adopt, "intel_driver", return_value=driver):
                 d, m = self.files(h.base)
@@ -429,7 +429,7 @@ class AdoptRules(unittest.TestCase):
                     self.assertEqual(a[a.index("--vram-reserve-mib") + 1], reserve)
 
     def test_intel_arc_is_read_from_the_kernel_and_gets_a_small_context(self):
-        from strata_cli.launch import catalog as C
+        from cortex_cli.launch import catalog as C
         with Home() as h:
             card = h.base / "drm" / "card0" / "device"
             card.mkdir(parents=True)
@@ -447,7 +447,7 @@ class AdoptRules(unittest.TestCase):
             self.assertEqual(cat.max_context("qwen", "IQ3_XXS", hw), 32768)
 
     def test_plan_names_what_is_missing(self):
-        from strata_cli.launch import adopt
+        from cortex_cli.launch import adopt
         with Home() as h:
             d, m = self.files(h.base, pack=False, tokenizer=False)
             cfg, problems = adopt.plan(family="qwen", model="IQ3_XXS", model_dir=m, data_dir=d, src=Path(__file__).resolve().parents[2], context=8192,
@@ -471,14 +471,14 @@ class AdoptRules(unittest.TestCase):
     def test_setup_control_mode_keeps_pictures_when_the_engine_carries_the_reader(self):
         from types import SimpleNamespace
         with Home() as h:
-            mod = catalog(HW_12).strata.setup_module()
+            mod = catalog(HW_12).cortex.setup_module()
             if mod is None or not hasattr(mod, "control_engine_step"):
                 self.skipTest("no setup.py in this checkout")
             engine = h.base / "engine"
             engine.mkdir()
             found = SimpleNamespace(root=engine, version="0.1.45", backend="cuda", platform="linux-x86_64")
-            with mock.patch.object(mod, "get_llama_cpp", return_value=engine), mock.patch("strata_control.engine_component.resolve", return_value=found):
-                self.assertEqual(mod.control_engine_step({}, "cpu")[5], "none")           # no strata-vision beside the engine: off, with a note
+            with mock.patch.object(mod, "get_llama_cpp", return_value=engine), mock.patch("cortex_control.engine_component.resolve", return_value=found):
+                self.assertEqual(mod.control_engine_step({}, "cpu")[5], "none")           # no cortex-vision beside the engine: off, with a note
                 (engine / mod.VEXE).write_text("x")
                 self.assertEqual(mod.control_engine_step({}, "cpu")[5], "cpu")            # the component carries it: the choice is kept
                 self.assertEqual(mod.control_engine_step({}, "none")[5], "none")
@@ -486,7 +486,7 @@ class AdoptRules(unittest.TestCase):
     def test_turning_pictures_on_for_an_installed_model_downloads_only_the_reader(self):
         with Home() as h:
             cat = catalog(HW_12)
-            cfgfile = h.base / "strata-x.json"
+            cfgfile = h.base / "cortex-x.json"
             cfgfile.write_text("{}")
             for vision, images, ctx, want in (("on", "off", 32768, 0.9), ("on", "cpu", 32768, 0.0), ("off", "off", 32768, 0.0), ("off", "off", 65536, 0.0)):
                 r = Runner(S.LaunchSettings(family="qwen", model="IQ3_XXS", vision=vision, context=ctx), catalog=cat)
@@ -495,7 +495,7 @@ class AdoptRules(unittest.TestCase):
                     self.assertAlmostEqual(r.download_gb(), want, msg=(vision, images, ctx))
 
     def test_a_missing_picture_reader_file_is_fetched_again(self):
-        from strata_cli.launch.runner import files_present
+        from cortex_cli.launch.runner import files_present
         with Home() as h:
             mm = h.base / "mmproj-x.gguf"
             cfg = {"args": [], "vision": {"mmproj": str(mm)}}
@@ -504,7 +504,7 @@ class AdoptRules(unittest.TestCase):
             self.assertEqual(files_present(cfg), [])
             mm.unlink()
             cat = catalog(HW_12)
-            cfgfile = h.base / "strata-x.json"
+            cfgfile = h.base / "cortex-x.json"
             cfgfile.write_text(json.dumps(cfg))
             r = Runner(S.LaunchSettings(family="qwen", model="IQ3_XXS", vision="on", context=32768), catalog=cat)
             with mock.patch.object(r, "installed_state", return_value=(cfgfile, {"context": 32768, "kv": "int8", "images": "cpu"})):
@@ -512,9 +512,9 @@ class AdoptRules(unittest.TestCase):
 
     def test_the_cards_of_this_launch_go_into_its_config_without_reinstalling(self):
         from tests.terminal.launch_support import HW_2X16
-        from strata_cli.launch.runner import apply_cards, cards_for_launch
-        from strata_control import tune_knobs
-        base = {"exe": "component:strata-engine", "args": ["--max-context", "32768"], "gpu": 0, "port": 8080}
+        from cortex_cli.launch.runner import apply_cards, cards_for_launch
+        from cortex_control import tune_knobs
+        base = {"exe": "component:cortex-engine", "args": ["--max-context", "32768"], "gpu": 0, "port": 8080}
         with Home() as h:
             # an installed single-card config, then the split chosen now
             cfg = derive_config(base, S.LaunchSettings(), bool_flags=tune_knobs.BOOL_FLAGS, gpus=[0, 1])
@@ -538,7 +538,7 @@ class AdoptRules(unittest.TestCase):
             self.assertIsNone(cards_for_launch(S.LaunchSettings(family="qwen", model="IQ3_XXS"), one))
             # the launch's own config is written with them (Runner.build_config), the installed file is untouched
             import json
-            installed = h.base / "strata-iq3_xxs.json"
+            installed = h.base / "cortex-iq3_xxs.json"
             installed.write_text(json.dumps(base))
             r = Runner(S.LaunchSettings(family="qwen", model="IQ3_XXS", name="cards", gpus=[1]), catalog=two)
             out = r.build_config(installed)
@@ -552,11 +552,11 @@ class AdoptRules(unittest.TestCase):
             r = Runner(S.LaunchSettings(family="qwen", model="IQ3_XXS", vision="on"), catalog=cat, emit=seen.append)
             path = h.base / "cfg.json"
             path.write_text("{}")
-            with mock.patch.object(cat.strata, "describe_config", return_value={"images": "off"}):
+            with mock.patch.object(cat.cortex, "describe_config", return_value={"images": "off"}):
                 r.check_pictures(path)
             self.assertTrue(any("Pictures could not be switched on" in e.text and e.level == "warn" for e in seen))
             seen.clear()
-            with mock.patch.object(cat.strata, "describe_config", return_value={"images": "cpu"}):
+            with mock.patch.object(cat.cortex, "describe_config", return_value={"images": "cpu"}):
                 r.check_pictures(path)
             self.assertEqual(seen, [])
 
@@ -570,7 +570,7 @@ class AdoptRules(unittest.TestCase):
             self.assertTrue(path.is_file())
             self.assertTrue(r.notices and "wrote the run settings itself" in r.notices[0])
             self.assertIsNone(r.adopt_prepared_files("not enough free disk space"))
-            from strata_cli.launch.runner import LaunchError
+            from cortex_cli.launch.runner import LaunchError
             r2 = Runner(S.LaunchSettings(family="qwen", model="IQ3_S", context=32768, data_dir=str(d)), catalog=cat)
             with self.assertRaises(LaunchError) as e:
                 r2.adopt_prepared_files("no NVIDIA GPU found")
@@ -582,7 +582,7 @@ class AccessRules(unittest.TestCase):
         self.assertEqual(access.host_for("local"), "127.0.0.1")
         self.assertEqual(access.host_for("cloudflare"), "127.0.0.1")
         self.assertEqual(access.host_for("lan"), "0.0.0.0")
-        self.assertTrue(access.new_key().startswith("sk-strata-"))
+        self.assertTrue(access.new_key().startswith("sk-cortex-"))
         self.assertNotIn(access.new_key(), access.mask_key(access.new_key()))
         self.assertEqual(access.mask_key(None), "off")
 
@@ -634,7 +634,7 @@ class AccessRules(unittest.TestCase):
 
 
 class FlagsCommand(unittest.TestCase):
-    """Every `strata launch` flag, run through the real parser with the computer faked and nothing installed."""
+    """Every `cortex launch` flag, run through the real parser with the computer faked and nothing installed."""
 
     def setUp(self):
         self.home = Home().__enter__()
@@ -684,10 +684,10 @@ class FlagsCommand(unittest.TestCase):
 
     def test_family_and_kv_and_gpu_and_data_dir_and_set(self):
         p = self.plan("--model", "iq3_xxs", "--family", "swift", "--kv", "q4_0", "--gpu", "0,1", "--data-dir", "/data/x",
-                      "--set", "prefill=65536", "--set", "STRATA_PIN_BY_NEED=1", "--tune-allow-small")
+                      "--set", "prefill=65536", "--set", "CORTEX_PIN_BY_NEED=1", "--tune-allow-small")
         s = p["settings"]
         self.assertEqual((s["family"], s["kv"], s["gpus"], s["data_dir"], s["tune_allow_small"]), ("swift", "q4_0", [0, 1], "/data/x", True))
-        self.assertEqual(s["extra"], {"--prefill": "65536", "STRATA_PIN_BY_NEED": "1"})
+        self.assertEqual(s["extra"], {"--prefill": "65536", "CORTEX_PIN_BY_NEED": "1"})
         self.assertIn("--set prefill=65536", p["flags"])
 
     def test_api_key_flags(self):
@@ -767,25 +767,25 @@ class FlagsCommand(unittest.TestCase):
         self.assertEqual(store.list_presets(), [])
 
     def test_run_without_screens_prints_the_address_and_saves_the_preset(self):
-        fake = Result(profile="launch-office", urls=["http://127.0.0.1:8080", "http://192.168.1.5:8080"], key="sk-strata-abcdefghijkl",
+        fake = Result(profile="launch-office", urls=["http://127.0.0.1:8080", "http://192.168.1.5:8080"], key="sk-cortex-abcdefghijkl",
                       tune_word=None, notices=[], config="/x")
         with mock.patch.object(Runner, "run", return_value=fake):
             code, out, err = run_cli(["launch", "--no-tui", "--model", "q2_0", "--access", "lan", "--save-preset", "Office"])
         self.assertEqual(code, 0, err)
-        self.assertIn("Strata is serving.", out)
+        self.assertIn("Cortex is serving.", out)
         self.assertIn("http://127.0.0.1:8080/v1", out)
         self.assertIn("http://192.168.1.5:8080/v1", out)
-        self.assertNotIn("sk-strata-abcdefghijkl", out)                      # the key is masked
-        self.assertIn("strata connect", out)
+        self.assertNotIn("sk-cortex-abcdefghijkl", out)                      # the key is masked
+        self.assertIn("cortex connect", out)
         self.assertEqual([p.name for p in store.list_presets()], ["Office"])
         code, out, err = run_cli(["launch", "--list-presets"])
         self.assertIn("Office", out)
         code, out, _ = run_cli(["launch", "--show-key", "--preset", "Office"])
         self.assertEqual(code, 0)                                              # the preset's own key
-        self.assertTrue(out.strip().startswith("sk-strata-"))
+        self.assertTrue(out.strip().startswith("sk-cortex-"))
 
     def test_launch_error_is_one_plain_sentence(self):
-        from strata_cli.launch.runner import LaunchError
+        from cortex_cli.launch.runner import LaunchError
         with mock.patch.object(Runner, "run", side_effect=LaunchError("The engine could not be installed.", "Check your internet.", 6)):
             code, out, err = run_cli(["launch", "--no-tui", "--model", "q2_0"])
         self.assertEqual(code, 6)
@@ -803,7 +803,7 @@ class FlagsCommand(unittest.TestCase):
         self.assertIn("No saved presets", out)
         code, out, _ = run_cli(["launch", "--status"])
         self.assertEqual(code, 0)
-        self.assertIn("Nothing from `strata launch` is running.", out)
+        self.assertIn("Nothing from `cortex launch` is running.", out)
         code, out, _ = run_cli(["launch", "--stop"])
         self.assertEqual(code, 0)
         self.assertIn("Nothing", out)
@@ -851,14 +851,14 @@ class ConnectCommand(unittest.TestCase):
         self.assertEqual(len(json.loads(out)["harnesses"]), 8)
 
     def test_prints_the_config_with_a_masked_key(self):
-        code, out, err = run_cli(["connect", "opencode", "--url", "http://127.0.0.1:8123", "--key", "sk-strata-abcdefghij1234", "--model", "m1"])
+        code, out, err = run_cli(["connect", "opencode", "--url", "http://127.0.0.1:8123", "--key", "sk-cortex-abcdefghij1234", "--model", "m1"])
         self.assertEqual(code, 0, err)
         self.assertIn("http://127.0.0.1:8123/v1", out)
         self.assertIn("opencode.json", out)
         self.assertIn("limit", out)
         self.assertNotIn("abcdefghij1234", out)
-        code, out, _ = run_cli(["connect", "opencode", "--url", "http://127.0.0.1:8123", "--key", "sk-strata-abcdefghij1234", "--show-key"])
-        self.assertIn("sk-strata-abcdefghij1234", out)
+        code, out, _ = run_cli(["connect", "opencode", "--url", "http://127.0.0.1:8123", "--key", "sk-cortex-abcdefghij1234", "--show-key"])
+        self.assertIn("sk-cortex-abcdefghij1234", out)
 
     def test_claude_code_uses_the_anthropic_variables_without_a_login(self):
         code, out, _ = run_cli(["connect", "claude-code", "--url", "http://127.0.0.1:8080", "--key", "sk-x1234567890abc", "--show-key"])
@@ -889,8 +889,8 @@ class ConnectCommand(unittest.TestCase):
         data = json.loads(target.read_text())
         self.assertEqual(data["theme"], "dark")
         self.assertIn("other", data["provider"])
-        self.assertIn("strata", data["provider"])
-        backups = list(target.parent.glob("opencode.json.strata-bak-*"))
+        self.assertIn("cortex", data["provider"])
+        backups = list(target.parent.glob("opencode.json.cortex-bak-*"))
         self.assertEqual(len(backups), 1)
         self.assertEqual(json.loads(backups[0].read_text())["theme"], "dark")
         self.assertIn("backup", out)
@@ -919,11 +919,11 @@ class ConnectCommand(unittest.TestCase):
 
     def test_opencode_has_limit_input_and_the_15k_compaction_buffer(self):
         cfg = json.loads(self.render("opencode")["files"][0]["text"])
-        m = cfg["provider"]["strata"]["models"]["qwen3.8-flash-next-q2_0"]
+        m = cfg["provider"]["cortex"]["models"]["qwen3.8-flash-next-q2_0"]
         self.assertEqual(m["limit"], {"context": 32768, "input": 28672, "output": 4096})
         self.assertEqual(cfg["compaction"]["buffer"], 13672)                  # 28672 - 15000
-        self.assertEqual(cfg["provider"]["strata"]["options"]["baseURL"], "http://127.0.0.1:18900/v1")
-        self.assertEqual(cfg["provider"]["strata"]["options"]["apiKey"], "strata-local")
+        self.assertEqual(cfg["provider"]["cortex"]["options"]["baseURL"], "http://127.0.0.1:18900/v1")
+        self.assertEqual(cfg["provider"]["cortex"]["options"]["apiKey"], "cortex-local")
 
     def test_codex_uses_responses_and_the_key_variable(self):
         out = self.render("codex", key="sk-real")
@@ -931,7 +931,7 @@ class ConnectCommand(unittest.TestCase):
         self.assertIn('wire_api = "responses"', text)
         self.assertIn("model_auto_compact_token_limit = 15000", text)
         self.assertIn('base_url = "http://127.0.0.1:18900/v1"', text)
-        self.assertEqual(out["env"], {"STRATA_API_KEY": "sk-real"})
+        self.assertEqual(out["env"], {"CORTEX_API_KEY": "sk-real"})
 
     def test_claude_code_sets_window_and_output_cap_and_has_no_login(self):
         out = self.render("claude-code")
@@ -949,7 +949,7 @@ class ConnectCommand(unittest.TestCase):
     def test_pi_omp_hermes_openclaw_numbers(self):
         pi = self.render("pi")["files"]
         self.assertEqual(json.loads(pi[1]["text"])["compaction"]["reserveTokens"], 17768)       # 32768 - 15000
-        self.assertEqual(json.loads(pi[0]["text"])["providers"]["strata"]["models"][0]["contextWindow"], 32768)
+        self.assertEqual(json.loads(pi[0]["text"])["providers"]["cortex"]["models"][0]["contextWindow"], 32768)
         omp = self.render("omp")["files"]
         self.assertIn("thresholdTokens: 15000", omp[1]["text"])
         self.assertIn("contextWindow: 32768", omp[0]["text"])
@@ -959,7 +959,7 @@ class ConnectCommand(unittest.TestCase):
         self.assertTrue(any("WARNING" in n and "64K" in n for n in hermes["limits"]))
         self.assertFalse(any("WARNING" in n for n in self.render("hermes", context=131072)["limits"]))
         oc = json.loads(self.render("openclaw")["files"][0]["text"])
-        self.assertEqual(oc["models"]["providers"]["strata"]["models"][0]["contextTokens"], 23192)
+        self.assertEqual(oc["models"]["providers"]["cortex"]["models"][0]["contextTokens"], 23192)
         self.assertTrue(any("Node 24.16" in n for n in self.render("openclaw")["limits"]))
 
     def test_limits_are_in_plain_words_for_every_app(self):
@@ -969,10 +969,10 @@ class ConnectCommand(unittest.TestCase):
     def test_deepseek_harness_is_the_app(self):
         out = self.render("deepseek-harness")
         self.assertEqual(out["files"], [])
-        self.assertIn("Strata app", " ".join(out["limits"]))
+        self.assertIn("Cortex app", " ".join(out["limits"]))
 
     def test_check_sends_the_apps_own_wire_format_and_reports_pass_or_fail(self):
-        from strata_cli.launch import check
+        from cortex_cli.launch import check
         seen = []
 
         def good(url, key, body, headers=None, timeout=0):
@@ -1013,7 +1013,7 @@ class ConnectCommand(unittest.TestCase):
         self.assertIn("refused the key", res[0].detail)
 
     def test_connect_check_flag_prints_pass_lines(self):
-        from strata_cli.launch import check
+        from cortex_cli.launch import check
         ok = [check.Check("prompt", True, "It answered: 'pong'.", 1.0), check.Check("tool call", True, "It called get_weather with {}.", 2.0)]
         with mock.patch.object(check, "run_checks", return_value=ok):
             code, out, err = run_cli(["connect", "opencode", "--url", "http://127.0.0.1:1", "--check"])

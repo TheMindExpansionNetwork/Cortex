@@ -1,7 +1,7 @@
-# strata launch preview: step8-access
+# cortex launch preview: step8-access
 # (text of the screen as drawn at the size named in tests/terminal/launch_previews.py)
 
- STRATA  Set up   Step 8 of 9: Access
+ CORTEX  Set up   Step 8 of 9: Access
  ────────────────────────────────────────────────────────────────────────────────────────────────────────────
  Who can use it?
    This computer only    http://127.0.0.1:8080                         for apps on this computer
@@ -10,7 +10,7 @@
    Tailscale             http://<tailnet address>:8080                 Tailscale is not installed
 
     Port      [ 8080 ]   press p to change
-    API key   [ on ]   sk-strata-••••••••  (recommended for anything beyond this computer)
+    API key   [ on ]   sk-cortex-••••••••  (recommended for anything beyond this computer)
 
 
 
@@ -30,7 +30,7 @@
 
 
  ────────────────────────────────────────────────────────────────────────────────────────────────────────────
- Windows may ask whether to allow Strata (python.exe) on your network: choose Allow for private networks. If
+ Windows may ask whether to allow Cortex (python.exe) on your network: choose Allow for private networks. If
  you choose Cancel, the model still works on this computer.
  Other computers on your network can use it at the address shown. Keep the API key on.
  ↑↓ choose   Enter next   p port   k new key   t key on/off   Esc back   ? help

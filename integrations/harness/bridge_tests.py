@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Agent bridge tests: Strata API worker -> DeepSeek Harness -> durable session.
+"""Agent bridge tests: Cortex API worker -> DeepSeek Harness -> durable session.
 
 These cover the three behaviours the handoff singles out as the difficult part of the integration,
 and they run without model weights:
 
-    default      one turn reaches the local Strata worker and completes with recorded provenance
+    default      one turn reaches the local Cortex worker and completes with recorded provenance
     --cancel     a turn is cancelled mid-flight and reaches an aborted terminal state
     --approval   a tool call raises an approval request over the gateway and the answer is applied
     --all        all three
 
 What they do NOT prove: inference quality, tokens-per-second, or tool correctness against a real
-model. The worker runs its built-in `MockEngine` because no Strata pack fits this development Mac
+model. The worker runs its built-in `MockEngine` because no Cortex pack fits this development Mac
 (docs/work/IMPLEMENTATION_STATUS.md section 3.2). Every assertion here is about the *path*.
 
 The reusable helpers live in `_bridge.py`; `bridge_e2e.py` is the single-behaviour convenience
@@ -57,7 +57,7 @@ class Fixture:
 
     def __init__(self, dsh: Path, python: Path, worker_port: int, keep: bool):
         self.dsh, self.python, self.worker_port, self.keep = dsh, python, worker_port, keep
-        self.tmp = Path(tempfile.mkdtemp(prefix="strata-bridge-"))
+        self.tmp = Path(tempfile.mkdtemp(prefix="cortex-bridge-"))
         (self.tmp / "ws").mkdir()
         self.worker = self.agent = None
         self.agent_port = 0
@@ -151,8 +151,8 @@ def case_completion(fx: Fixture) -> None:
     if assistant is None:
         raise BridgeError("the turn completed but committed no assistant message")
     source = ((assistant.get("data") or {}).get("message") or {}).get("source") or {}
-    if source.get("provider") != "strata-local":
-        raise BridgeError(f"assistant source names {source.get('provider')!r}, not 'strata-local'")
+    if source.get("provider") != "cortex-local":
+        raise BridgeError(f"assistant source names {source.get('provider')!r}, not 'cortex-local'")
     n = fx.worker_requests()
     if n < 1:
         raise BridgeError("the session completed but the worker recorded no requests")
@@ -262,7 +262,7 @@ def main() -> int:
             print(f"prerequisite missing: {what} not at {path}", file=sys.stderr)
             return 2
 
-    print("strata <-> harness bridge tests")
+    print("cortex <-> harness bridge tests")
     print(f"  cases : {', '.join(selected)}")
     print()
     failures = []

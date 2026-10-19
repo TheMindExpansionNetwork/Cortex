@@ -16,7 +16,7 @@
 
 namespace fs = std::filesystem;
 
-using strata::prefill::hipblaslt::TuningTable;
+using cortex::prefill::hipblaslt::TuningTable;
 
 namespace {
 
@@ -27,7 +27,7 @@ struct TempDir {
     fs::path path;
     TempDir() {
         path = fs::temp_directory_path() /
-               ("strata-tuning-header-" +
+               ("cortex-tuning-header-" +
                 std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
         fs::create_directories(path);
     }
@@ -44,7 +44,7 @@ bool load(const fs::path& dir, const std::string& file_arch, int file_version, c
     {
         std::ofstream out(path);
         out << "# solution IDs are scoped to this hipBLASLt version and device architecture\n"
-            << "STRATA_HIPBLASLT_TUNING_V1 " << file_arch << " " << file_version << "\n"
+            << "CORTEX_HIPBLASLT_TUNING_V1 " << file_arch << " " << file_version << "\n"
             << "bf16 1 2560 1 4096 110508\n"
             << "bf16 2560 320 2560 8192 135699\n";
         if (!out) {   // otherwise a write failure reads as a gate rejection and the case "passes" for the wrong reason

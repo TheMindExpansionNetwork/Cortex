@@ -18,19 +18,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "strata/kernels/native_qsa_score.hpp"
-#include "strata/core/geometry.hpp"
+#include "cortex/kernels/native_qsa_score.hpp"
+#include "cortex/core/geometry.hpp"
 #include <cuda_runtime.h>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 std::atomic<bool> enabled{false};
 constexpr int D=128, HEADS=4, R=4, ROWS=32, WARPS=2, STRIDE=36, COMBINE=68;
-static_assert(D == strata::core::kCompiledGeometry.idx_key_dim && HEADS == strata::core::kCompiledGeometry.idx_q_heads && R == strata::core::kCompiledGeometry.idx_block,
+static_assert(D == cortex::core::kCompiledGeometry.idx_key_dim && HEADS == cortex::core::kCompiledGeometry.idx_q_heads && R == cortex::core::kCompiledGeometry.idx_block,
               "native_qsa_score is compiled for core/geometry.hpp");
 struct TileA { uint32_t x[4]; };
 struct TileB { uint32_t x[2]; };
@@ -65,7 +65,7 @@ __global__ __launch_bounds__(64,1) void score_kernel(
     if(row0>full)return;
     const int lane=threadIdx.x,warp=threadIdx.y;
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
-    // Turing (STRATA_EXPERIMENTAL_SM75, a layer-split stage): no tf32 mma.  The same scores with FP32 FMAs, one row
+    // Turing (CORTEX_EXPERIMENTAL_SM75, a layer-split stage): no tf32 mma.  The same scores with FP32 FMAs, one row
     // per thread of the first warp - rounded differently from the tensor-core path (FP32 instead of TF32 inputs).
     if(warp!=0)return;
     const int row=row0+lane;
@@ -213,4 +213,4 @@ void native_qsa_score(const float* pooled,const float* query,const float* bias,
     const auto error=cudaGetLastError();
     if(error!=cudaSuccess)throw std::runtime_error(cudaGetErrorString(error));
 }
-} // namespace strata::kernels
+} // namespace cortex::kernels

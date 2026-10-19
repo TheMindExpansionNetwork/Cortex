@@ -5,8 +5,8 @@
 // Usage: qsa_select_bench [context=131072] [queries=256] [reps=10] [capacity_cells]
 // capacity_cells (the engine's --max-context): the score buffers and the top-k dispatch follow the CAPACITY
 // (max_blocks = capacity / 4 + 2), the work follows the context. Default: capacity = context (max_blocks = ctx / 4 + 1).
-#include "strata/kernels/qsa.hpp"
-#include "strata/kernels/qsa_select.hpp"
+#include "cortex/kernels/qsa.hpp"
+#include "cortex/kernels/qsa_select.hpp"
 
 #include <cuda_runtime.h>
 
@@ -18,7 +18,7 @@
 #include <random>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 void ck(cudaError_t e, const char* w) {
@@ -116,7 +116,7 @@ int main(int argc, char** argv) {
     std::vector<int32_t> ia((size_t) (nq * cap)), ib(ia.size());
     ck(cudaMemcpy(a.data(), sc_old, a.size() * 4, cudaMemcpyDeviceToHost), "down");
     ck(cudaMemcpy(b.data(), sc_new, b.size() * 4, cudaMemcpyDeviceToHost), "down");
-    if (std::getenv("QSA_BENCH_HASH")) {   // the fast scorer's bytes (compare STRATA_SELECT_SIMT=1 and =2)
+    if (std::getenv("QSA_BENCH_HASH")) {   // the fast scorer's bytes (compare CORTEX_SELECT_SIMT=1 and =2)
         unsigned long long h = 1469598103934665603ull;
         for (int64_t i = 0; i < nq; ++i) {
             const int64_t nbid = steps[(size_t) (i * k::kStepCount + k::kStepNBid)];

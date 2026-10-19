@@ -1,8 +1,8 @@
-#include "strata/core/native_head.hpp"
-#include "strata/artifact/gguf_reader.hpp"
-#include "strata/kernels/iq_kernels.hpp"
-#include "strata/kernels/native_mmvq.hpp"
-#include "strata/platform/memory.hpp"
+#include "cortex/core/native_head.hpp"
+#include "cortex/artifact/gguf_reader.hpp"
+#include "cortex/kernels/iq_kernels.hpp"
+#include "cortex/kernels/native_mmvq.hpp"
+#include "cortex/platform/memory.hpp"
 
 #include <cuda_runtime.h>
 #include <climits>
@@ -10,15 +10,15 @@
 #include <cstring>
 #include <exception>
 
-namespace strata::core {
+namespace cortex::core {
 
 NativeHead::~NativeHead() {
     unload();
 }
 
 void NativeHead::unload() {
-    if (weights_) strata::kernels::native_q6_k_unpack(weights_);
-    if (weights_) strata::kernels::native_q8_0_sm60_release(weights_);
+    if (weights_) cortex::kernels::native_q6_k_unpack(weights_);
+    if (weights_) cortex::kernels::native_q8_0_sm60_release(weights_);
     if (scratch_) cudaFree(scratch_);
     if (weights_) cudaFree(weights_);
     scratch_ = nullptr;
@@ -34,18 +34,18 @@ bool NativeHead::load(const std::vector<std::string>& shards, int64_t n_in, int6
     try {
         // The architecture is the metadata shard's; output.weight comes from whichever shard holds it (shard 2
         // of Unsloth's UD-Q4_K_XL, whose shard 1 holds no tensor).  GgufModel refuses a duplicate across shards.
-        const strata::GgufModel model(shards);
-        err = strata::check_engine_architecture(model.meta());
+        const cortex::GgufModel model(shards);
+        err = cortex::check_engine_architecture(model.meta());
         if (!err.empty()) return false;
         size_t at = 0;
-        const strata::TensorInfo* tensor = model.find("output.weight", &at);
-        const strata::GgufFile& gguf = model.shard(at);
-        if (!tensor || !strata::kernels::native_mmvq_supported((int) tensor->type) || tensor->shape.size() != 2 ||
+        const cortex::TensorInfo* tensor = model.find("output.weight", &at);
+        const cortex::GgufFile& gguf = model.shard(at);
+        if (!tensor || !cortex::kernels::native_mmvq_supported((int) tensor->type) || tensor->shape.size() != 2 ||
             tensor->shape[0] != (uint64_t) n_in || tensor->shape[1] != (uint64_t) n_out) {
             err = "native head: expected a natively supported output.weight with the canonical head dimensions";
             return false;
         }
-        const uint64_t bytes = strata::kernels::native_mmvq_weight_bytes((int) tensor->type, (int) n_in, (int) n_out);
+        const uint64_t bytes = cortex::kernels::native_mmvq_weight_bytes((int) tensor->type, (int) n_in, (int) n_out);
         const uint64_t payload = gguf.file_size() - gguf.data_start();
         if (tensor->offset > payload || bytes > payload - tensor->offset) {
             err = "native head: truncated output.weight payload";
@@ -55,8 +55,8 @@ bool NativeHead::load(const std::vector<std::string>& shards, int64_t n_in, int6
         void* scratch = nullptr;
         cudaError_t status = cudaMalloc(&weights, bytes);
         if (status == cudaSuccess)
-            status = cudaMalloc(&scratch, strata::kernels::native_q8_1_bytes((int) n_in, 1));
-        strata::platform::advise_willneed(gguf.tensor_data(*tensor), bytes);
+            status = cudaMalloc(&scratch, cortex::kernels::native_q8_1_bytes((int) n_in, 1));
+        cortex::platform::advise_willneed(gguf.tensor_data(*tensor), bytes);
         if (status == cudaSuccess)
             status = cudaMemcpy(weights, gguf.tensor_data(*tensor), bytes, cudaMemcpyHostToDevice);
         if (status != cudaSuccess) {
@@ -72,10 +72,10 @@ bool NativeHead::load(const std::vector<std::string>& shards, int64_t n_in, int6
         n_in_ = (int) n_in;
         n_out_ = (int) n_out;
         type_ = (int) tensor->type;
-        if (type_ == 14 && strata::kernels::native_q6_k_packed_enabled())   // STRATA_Q6_PACKED=1
-            strata::kernels::native_q6_k_pack(weights_, n_in_, n_out_, "output head");
-        if (type_ == 8)   // STRATA_Q8_SM60=1 (a no-op otherwise); the MTP draft head reads the same matrix
-            strata::kernels::native_q8_0_sm60_pack(weights_, n_in_, n_out_, "output head");
+        if (type_ == 14 && cortex::kernels::native_q6_k_packed_enabled())   // CORTEX_Q6_PACKED=1
+            cortex::kernels::native_q6_k_pack(weights_, n_in_, n_out_, "output head");
+        if (type_ == 8)   // CORTEX_Q8_SM60=1 (a no-op otherwise); the MTP draft head reads the same matrix
+            cortex::kernels::native_q8_0_sm60_pack(weights_, n_in_, n_out_, "output head");
         return true;
     } catch (const std::exception& error) {
         err = std::string("native head: ") + error.what();
@@ -90,10 +90,10 @@ bool NativeHead::run(const float* mixed, float* logits, void* stream, std::strin
     }
     try {
         if (type_ == 13) {
-            strata::kernels::native_q5_k_f32(weights_, mixed, scratch_, logits, n_in_, n_out_, 1, stream);
+            cortex::kernels::native_q5_k_f32(weights_, mixed, scratch_, logits, n_in_, n_out_, 1, stream);
         } else {
-            strata::kernels::native_quantize_q8_1(mixed, scratch_, n_in_, 1, stream);
-            strata::kernels::native_mmvq(type_, weights_, scratch_, logits, n_in_, n_out_, 1, stream);
+            cortex::kernels::native_quantize_q8_1(mixed, scratch_, n_in_, 1, stream);
+            cortex::kernels::native_mmvq(type_, weights_, scratch_, logits, n_in_, n_out_, 1, stream);
         }
     } catch (const std::exception& error) {
         err = std::string("native head launch: ") + error.what();
@@ -122,30 +122,30 @@ NativeEmbed::~NativeEmbed() {
 
 bool NativeEmbed::load(const std::vector<std::string>& shards, int64_t n_embd, int64_t n_vocab, std::string& err) {
     try {
-        const strata::GgufModel model(shards);
-        // --embd-gguf's one-tensor file (tools/embd_bf16_pack.py) says "strata-embd": only its tensor is checked
-        const strata::MetaValue* arch = model.meta().get("general.architecture");
-        err = arch != nullptr && arch->s == "strata-embd" ? std::string() : strata::check_engine_architecture(model.meta());
+        const cortex::GgufModel model(shards);
+        // --embd-gguf's one-tensor file (tools/embd_bf16_pack.py) says "cortex-embd": only its tensor is checked
+        const cortex::MetaValue* arch = model.meta().get("general.architecture");
+        err = arch != nullptr && arch->s == "cortex-embd" ? std::string() : cortex::check_engine_architecture(model.meta());
         if (!err.empty()) { err = "native embedding: " + err; return false; }
         size_t at = 0;
-        const strata::TensorInfo* t = model.find("token_embd.weight", &at);
-        const strata::GgufFile& gguf = model.shard(at);
+        const cortex::TensorInfo* t = model.find("token_embd.weight", &at);
+        const cortex::GgufFile& gguf = model.shard(at);
         if (!t || t->shape.size() != 2 || t->shape[0] != (uint64_t) n_embd || t->shape[1] != (uint64_t) n_vocab ||
-            !strata::kernels::embed_type_supported((int) t->type) || n_embd % 256) {
+            !cortex::kernels::embed_type_supported((int) t->type) || n_embd % 256) {
             err = "native embedding: token_embd.weight is absent, of another shape, or of a type without a GPU "
                   "dequantizer";
             return false;
         }
-        row_ = strata::kernels::iq_row_bytes((int) t->type, n_embd);
+        row_ = cortex::kernels::iq_row_bytes((int) t->type, n_embd);
         bytes_ = (uint64_t) row_ * (uint64_t) n_vocab;
         // the table is copied out of the mapping below: a truncated shard must be an error, not a read past EOF
-        if (!model.in_bounds(*t, at) || strata::tensor_payload_bytes(*t) != bytes_) {
+        if (!model.in_bounds(*t, at) || cortex::tensor_payload_bytes(*t) != bytes_) {
             err = "native embedding: token_embd.weight's payload is truncated or not " + std::to_string(bytes_) +
                   " B (" + gguf.path() + ")";
             bytes_ = 0;
             return false;
         }
-        strata::platform::advise_willneed(gguf.tensor_data(*t), bytes_);   // copied out of the mapping below
+        cortex::platform::advise_willneed(gguf.tensor_data(*t), bytes_);   // copied out of the mapping below
         cudaError_t host_err = cudaHostAlloc(&host_, bytes_, cudaHostAllocMapped | cudaHostAllocPortable);
         if (host_err != cudaSuccess) {
             // Under WSL2 the driver's pinned/mapped host budget (~1 GiB) can be spent by the GPU contexts
@@ -162,13 +162,13 @@ bool NativeEmbed::load(const std::vector<std::string>& shards, int64_t n_embd, i
                       cudaGetErrorString(host_err) + ", nor place it in VRAM";
                 return false;
             }
-            std::fprintf(stderr, "strata: native embedding: cannot pin %llu MiB, kept in VRAM instead\n",
+            std::fprintf(stderr, "cortex: native embedding: cannot pin %llu MiB, kept in VRAM instead\n",
                          (unsigned long long) (bytes_ >> 20));
             dev_ = d;
         } else {
             std::memcpy(host_, gguf.tensor_data(*t), bytes_);
             void* d = nullptr;
-#if defined(STRATA_USE_HIP)
+#if defined(CORTEX_USE_HIP)
             // #325: the Windows HIP stack can refuse the device alias of a mapped allocation (and, when it gives
             // one, it is the host address itself - unified addressing; kernels read it correctly there, a
             // device-to-device copy into it does not land: tests/hip/mapped_alias). The table is only gathered from,
@@ -185,7 +185,7 @@ bool NativeEmbed::load(const std::vector<std::string>& shards, int64_t n_embd, i
                 }
                 cudaFreeHost(host_);   // the destructor frees dev_ when host_ is null
                 host_ = nullptr;
-                std::fprintf(stderr, "strata: native embedding: no device alias for the mapped table, kept in VRAM\n");
+                std::fprintf(stderr, "cortex: native embedding: no device alias for the mapped table, kept in VRAM\n");
             }
 #else
             if (cudaHostGetDevicePointer(&d, host_, 0) != cudaSuccess) {
@@ -206,11 +206,11 @@ bool NativeEmbed::load(const std::vector<std::string>& shards, int64_t n_embd, i
 }
 
 void NativeEmbed::gather_dev(const int32_t* tokens, int64_t n_tok, float* out, void* stream) const {
-    strata::kernels::iq_embed_rows(type_, dev_, row_, tokens, n_tok, n_embd_, out, stream);
+    cortex::kernels::iq_embed_rows(type_, dev_, row_, tokens, n_tok, n_embd_, out, stream);
 }
 
 void NativeEmbed::gather_one(int64_t token, float* out, void* stream) const {
-    strata::kernels::iq_dequant_f32(type_, (const uint8_t*) dev_ + (size_t) token * row_, n_embd_, out, stream);
+    cortex::kernels::iq_dequant_f32(type_, (const uint8_t*) dev_ + (size_t) token * row_, n_embd_, out, stream);
 }
 
-}  // namespace strata::core
+}  // namespace cortex::core

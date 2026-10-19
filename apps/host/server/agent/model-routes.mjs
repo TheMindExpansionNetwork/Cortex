@@ -5,18 +5,18 @@
  * model", "ask deepseek/deepseek-v3.2" or a display name in other letters; a route key such as `api-1b2c3d4e-5f` is something no
  * model can guess. This module turns what was asked into one route, or into a plain answer that says what to do next.
  *
- * Pure and dependency free: the profile writes the route table, the `strata-models` Harness plugin and the tests call it.
+ * Pure and dependency free: the profile writes the route table, the `cortex-models` Harness plugin and the tests call it.
  *
  * A route is `{ provider, model, name, connection, local }`:
  *   provider    the route key in the Harness profile (what the Harness needs)
  *   model       the model id the server knows
  *   name        the name the person sees in the model picker
  *   connection  the connection's name ("OpenRouter") or "this computer" for a local model
- *   local       true for a model running in the Strata engine
+ *   local       true for a model running in the Cortex engine
  */
 
-/** The words people use for the model that runs in Strata on this computer. */
-const LOCAL_WORDS = new Set(['local', 'localmodel', 'localstrata', 'thelocalmodel', 'mylocalmodel', 'strata', 'stratalocal', 'stratamodel', 'localstratamodel', 'strataslocalmodel', 'default', 'thismodel', 'samemodel', 'themodel', 'thislocalmodel']);
+/** The words people use for the model that runs in Cortex on this computer. */
+const LOCAL_WORDS = new Set(['local', 'localmodel', 'localcortex', 'thelocalmodel', 'mylocalmodel', 'cortex', 'cortexlocal', 'cortexmodel', 'localcortexmodel', 'cortexslocalmodel', 'default', 'thismodel', 'samemodel', 'themodel', 'thislocalmodel']);
 
 /** Letters and digits only, lower case: "DeepSeek: V3.2" and "deepseek v3.2" meet. */
 export const squash = value => String(value ?? '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');

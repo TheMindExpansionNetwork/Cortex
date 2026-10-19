@@ -72,7 +72,7 @@ test('GPU readings use UUIDs and never turn unavailable sensors into zero',()=>{
  assert.equal(parseNvidiaReadings('GPU-a, 999, -1, N/A')[0].temperatureC,null);
 });
 test('multiple Linux sensor paths stay separate and lost sensors become unavailable',async()=>{
- const dir=await mkdtemp(join(tmpdir(),'strata-gpu-'));
+ const dir=await mkdtemp(join(tmpdir(),'cortex-gpu-'));
  try {
   const gpus=[];
   for(const [id,temp] of [['a',42000],['b',73000]]) {

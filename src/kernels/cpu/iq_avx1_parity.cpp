@@ -13,9 +13,9 @@
 // Runs on any CPU with AVX (the kernels are compiled for SSE4.2 + AVX); on an AVX2 machine it checks the
 // older-CPU path exactly as an AVX-only machine runs it (the engine's dispatch gate is separate: this calls
 // the kernels directly).
-#include "strata/kernels/cpu/iq_avx1.hpp"
-#include "strata/kernels/cpu/native_expert.hpp"
-#include "strata/kernels/cpu/expert_layout.hpp"
+#include "cortex/kernels/cpu/iq_avx1.hpp"
+#include "cortex/kernels/cpu/native_expert.hpp"
+#include "cortex/kernels/cpu/expert_layout.hpp"
 
 #include "ggml.h"
 #include "ggml-cpu.h"
@@ -34,7 +34,7 @@
 #include <sched.h>
 #endif
 
-namespace cpu = strata::kernels::cpu;
+namespace cpu = cortex::kernels::cpu;
 using Clock = std::chrono::steady_clock;
 
 namespace {

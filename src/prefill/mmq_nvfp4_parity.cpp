@@ -1,15 +1,15 @@
 // src/prefill/mmq_nvfp4_parity.cpp - the prompt path's NVFP4 expert products (MMQ) against an exact reference.
 //
-//     STRATA_PREFILL_NVFP4=w4a8|w4a4 mmq_nvfp4_parity pack/experts.bin [rows ...]
-//     STRATA_PREFILL_NVFP4=w4a8|w4a4 mmq_nvfp4_parity pack/experts.bin --group
-//     STRATA_PREFILL_NVFP4=w4a8|w4a4 mmq_nvfp4_parity pack/experts.bin --layers [expert]
-//     STRATA_PREFILL_NVFP4=w4a8|w4a4 mmq_nvfp4_parity pack/experts.bin --real moe_input.bin layer
+//     CORTEX_PREFILL_NVFP4=w4a8|w4a4 mmq_nvfp4_parity pack/experts.bin [rows ...]
+//     CORTEX_PREFILL_NVFP4=w4a8|w4a4 mmq_nvfp4_parity pack/experts.bin --group
+//     CORTEX_PREFILL_NVFP4=w4a8|w4a4 mmq_nvfp4_parity pack/experts.bin --layers [expert]
+//     CORTEX_PREFILL_NVFP4=w4a8|w4a4 mmq_nvfp4_parity pack/experts.bin --real moe_input.bin layer
 //
 // --group: the prompt path's launch shape - 20 experts of layer 0 with 0..60 rows each, one activation array in
 // expert order, gate/up in two launches (experts 0-15, then 16-19 through the same absolute bounds, 16 in), and the
 // second group's down from its own rows through relative bounds.
 // --layers: one expert (default 7) of every one of the 48 layers, 64 rows - scales differ by layer.
-// --real: a layer's MoE input from a prompt (STRATA_DUMP_MOE_INPUT) through its 12 most-routed experts, gate/up on
+// --real: a layer's MoE input from a prompt (CORTEX_DUMP_MOE_INPUT) through its 12 most-routed experts, gate/up on
 // the real rows and down on the hidden they produce; also an FP16-activation product (the fp16 path) and the rows'
 // outlier ratio (max |x| / rms x).
 //
@@ -17,7 +17,7 @@
 // Activations are random rows; the reference dequantizes the weights with ggml's own NVFP4 decode and sums in double.
 // Reported per product: relative Frobenius error and the worst element relative to the row's largest output.
 // 8-bit activations land near 0.5%; FP4 activations near 10% - the difference between the two modes.
-#include "strata/prefill/moe_mmq.hpp"
+#include "cortex/prefill/moe_mmq.hpp"
 
 #include "ggml.h"
 
@@ -34,7 +34,7 @@
 #include <random>
 #include <vector>
 
-namespace mmq = strata::prefill::mmq;
+namespace mmq = cortex::prefill::mmq;
 
 namespace {
 
@@ -334,7 +334,7 @@ int main(int argc, char** argv) {
     if (argc >= 3 && std::string(argv[2]) == "--group") return group(argv[1]);
     if (argc >= 5 && std::string(argv[2]) == "--real") return real(argv[1], argv[3], std::atoi(argv[4]));
     if (argc >= 3 && std::string(argv[2]) == "--layers") return layers(argv[1], argc >= 4 ? std::atoi(argv[3]) : 7);
-    const char* mode = std::getenv("STRATA_PREFILL_NVFP4");
+    const char* mode = std::getenv("CORTEX_PREFILL_NVFP4");
     std::printf("mode %s, FP4 activations: %s\n", mode ? mode : "default", mmq::fp4_activations(GGML_TYPE_NVFP4) ? "yes" : "no");
     std::vector<int> Ts;
     for (int i = 2; i < argc; ++i) Ts.push_back(std::atoi(argv[i]));

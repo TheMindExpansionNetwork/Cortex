@@ -116,7 +116,7 @@ class Build(unittest.TestCase):
             src = QI.unpack_source(d, z1, z2)
             self.assertEqual((src / "ggml" / "CMakeLists.txt").read_text(), "project(ggml)")
             self.assertTrue(QI.source_ok(src))
-            (src / ".strata-pin").write_text("0" * 40 + "\n" + QI.SD_GGML_COMMIT + "\n")
+            (src / ".cortex-pin").write_text("0" * 40 + "\n" + QI.SD_GGML_COMMIT + "\n")
             self.assertFalse(QI.source_ok(src))          # another pin: unpacked again
 
     def test_build_is_skipped_when_the_stamp_matches(self):
@@ -147,7 +147,7 @@ class Config(unittest.TestCase):
 
     def test_images_no_drops_the_section(self):
         with tempfile.TemporaryDirectory() as d:
-            p = Path(d) / "strata-q2_0.json"
+            p = Path(d) / "cortex-q2_0.json"
             p.write_text(json.dumps({"exe": "x", "images": {"exe": "sd-cli"}, "mine": 1}))
             quiet(setup.write_setup_config, p, {"exe": "y", "images": None})
             cfg = json.loads(p.read_text())

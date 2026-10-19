@@ -1,17 +1,17 @@
 /**
  * Drive the host over HTTP (no browser) against a real model and print what the page would receive.
  *
- *   STRATA_URL=http://127.0.0.1:8899 node scripts/agent3-http.mjs <command> [args]
+ *   CORTEX_URL=http://127.0.0.1:8899 node scripts/agent3-http.mjs <command> [args]
  *
- *   connect <baseUrl> <modelId>        save an API connection to a model server (once per STRATA_HOME)
+ *   connect <baseUrl> <modelId>        save an API connection to a model server (once per CORTEX_HOME)
  *   stream "<message>" [mode]          one chat turn; prints every frame compactly with its time (status, goal, tools, deltas counted)
  *   goal "<objective>"                 /goal run, then the goal bar calls: state, pause, edit, clear, resume
  *   timeskip "<request>" [stopAfterS]  a Time-skip job; polls status (phase + activity); with stopAfterS, presses Stop that many seconds in
  *
- * Environment: STRATA_URL (required), CHAT (chat id, default a fresh one), WORKSPACE_ID.
+ * Environment: CORTEX_URL (required), CHAT (chat id, default a fresh one), WORKSPACE_ID.
  */
-const BASE = process.env.STRATA_URL;
-if (!BASE) { console.error('STRATA_URL is required'); process.exit(2); }
+const BASE = process.env.CORTEX_URL;
+if (!BASE) { console.error('CORTEX_URL is required'); process.exit(2); }
 const [command, ...rest] = process.argv.slice(2);
 const t0 = Date.now();
 const stamp = () => `${String(Math.round((Date.now() - t0) / 1000)).padStart(4)}s`;

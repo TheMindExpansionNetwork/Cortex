@@ -1,12 +1,12 @@
 // Standalone HIP INT8 QSA query-LDS-swizzle component probe.
 // Adapted from the cell-probability probe; input generation and full-byte dump are unchanged.
-// Build/link in the project with strata_kernels + hip::host (or its HIP runtime target).
+// Build/link in the project with cortex_kernels + hip::host (or its HIP runtime target).
 // Usage: gfx906_qsa_query_swizzle_probe [nq=32] [ctx=65536] [reps=20] [output.bin] [--masked-pages]
-// Output path may instead be supplied by STRATA_QSA_PROBE_OUT. It is required.
+// Output path may instead be supplied by CORTEX_QSA_PROBE_OUT. It is required.
 // Run candidate environment settings in SEPARATE processes: the dispatcher caches them.
 // No prompt-attention entry point, architecture skip, model loading, or repository writes.
-#include "strata/kernels/qsa.hpp"
-#include "strata/kernels/qsa_decode_attn.hpp"
+#include "cortex/kernels/qsa.hpp"
+#include "cortex/kernels/qsa_decode_attn.hpp"
 
 #include <hip/hip_runtime.h>
 
@@ -22,7 +22,7 @@
 #include <numeric>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 namespace {
 constexpr int64_t kBatch = 32;
 constexpr size_t kGuard = 64;
@@ -108,8 +108,8 @@ std::vector<float> read_checked(const Device<float>& storage, size_t count) {
 
 int run(int64_t nq, int64_t ctx, int reps, const char* output, bool masked) {
     if (ctx < nq) fail("ctx must be >= nq (query positions are ctx-nq through ctx-1)");
-    const char* lane = std::getenv("STRATA_ATTN_LANECELL");
-    if (lane && lane[0] == '1') fail("unset STRATA_ATTN_LANECELL or set it to 0 for this probe");
+    const char* lane = std::getenv("CORTEX_ATTN_LANECELL");
+    if (lane && lane[0] == '1') fail("unset CORTEX_ATTN_LANECELL or set it to 0 for this probe");
     static_assert(sizeof(float) == 4 && std::numeric_limits<float>::is_iec559,
                   "probe requires IEEE binary32 output");
     const k::QsaShapes s = k::qsa_real_shapes();
@@ -251,7 +251,7 @@ int run(int64_t nq, int64_t ctx, int reps, const char* output, bool masked) {
         prop.name, prop.gcnArchName, (long long)nq, (long long)ctx, (long long)cap,
         (long long)ps, (long long)kBatch, reps, warmups);
     std::printf("QUERY_SWIZZLE=%s LANECELL=%s seed=%016llx masked_pages=%zu masked_selected=%zu\n",
-        env("STRATA_GFX906_ATTN_QUERY_SWIZZLE"), env("STRATA_ATTN_LANECELL"), (unsigned long long)kSeed,
+        env("CORTEX_GFX906_ATTN_QUERY_SWIZZLE"), env("CORTEX_ATTN_LANECELL"), (unsigned long long)kSeed,
         size_t(std::count(table.begin(), table.end(), -1)), masked_selected);
     std::printf("INPUT_FNV1A64=%016llx OUTPUT_FNV1A64=%016llx output_floats=%zu output_bytes=%zu\n",
         (unsigned long long)input_hash, (unsigned long long)output_hash, count, count * sizeof(float));
@@ -274,8 +274,8 @@ int main(int argc, char** argv) {
         const int64_t nq = args.size() > 0 ? positive(args[0]) : 32;
         const int64_t ctx = args.size() > 1 ? positive(args[1]) : 65536;
         const int reps = args.size() > 2 ? int(positive(args[2])) : 20;
-        const char* output = args.size() > 3 ? args[3] : std::getenv("STRATA_QSA_PROBE_OUT");
-        if (!output || !*output) fail("pass output.bin as fourth positional argument or set STRATA_QSA_PROBE_OUT");
+        const char* output = args.size() > 3 ? args[3] : std::getenv("CORTEX_QSA_PROBE_OUT");
+        if (!output || !*output) fail("pass output.bin as fourth positional argument or set CORTEX_QSA_PROBE_OUT");
         return run(nq, ctx, reps, output, masked);
     } catch (const std::exception& e) {
         std::fprintf(stderr, "qsa_query_swizzle_probe: %s\n", e.what());

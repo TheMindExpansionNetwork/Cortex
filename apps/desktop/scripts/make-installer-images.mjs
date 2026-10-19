@@ -23,8 +23,8 @@ const { chromium } = await import(pathToFileURL(join(host, 'node_modules/playwri
 const CHROME = process.env.CHROME ?? ['C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/google-chrome'].find(existsSync);
 const font = pathToFileURL(join(host, 'public/fonts/GTWalsheimPro-Bold.woff2')).href;
 const fontMedium = pathToFileURL(join(host, 'public/fonts/GTWalsheimPro-Medium.woff2')).href;
-const lockup = readFileSync(join(host, 'public/brand/strata-lockup-light.svg'), 'utf8');
-const mark = readFileSync(join(host, 'public/brand/strata-mark-light.svg'), 'utf8');
+const lockup = readFileSync(join(host, 'public/brand/cortex-lockup-light.svg'), 'utf8');
+const mark = readFileSync(join(host, 'public/brand/cortex-mark-light.svg'), 'utf8');
 
 // the app's light tokens
 const SURFACE = '#f9fafb', INK = '#171b1e', MUTED = '#5b646b', ACCENT = '#10b981', LINE = '#e3e8ea';
@@ -43,7 +43,7 @@ const pages = {
 };
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
-const work = join(tmpdir(), 'strata-installer-images'); mkdirSync(work, { recursive: true });
+const work = join(tmpdir(), 'cortex-installer-images'); mkdirSync(work, { recursive: true });
 for (const [name, page] of Object.entries(pages)) {
   for (const scale of [1, 3]) {
     const file = join(work, `${name}.html`);

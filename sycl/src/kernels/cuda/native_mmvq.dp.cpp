@@ -27,12 +27,12 @@
 #include <sycl/sycl.hpp>
 #include <sycl/ext/intel/experimental/grf_size_properties.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/sycl_math.hpp"
-#include "strata/sycl_queue.hpp"
-#include "strata/kernels/native_mmvq.hpp"
-#include "strata/kernels/dp4a.hpp"
-#include "strata/kernels/q8_1_finite.hpp"
-#include "strata/kernels/iq_kernels.hpp"
+#include "cortex/sycl_math.hpp"
+#include "cortex/sycl_queue.hpp"
+#include "cortex/kernels/native_mmvq.hpp"
+#include "cortex/kernels/dp4a.hpp"
+#include "cortex/kernels/q8_1_finite.hpp"
+#include "cortex/kernels/iq_kernels.hpp"
 #include "s26_tsum.dp.hpp"
 
 #include <algorithm>
@@ -48,11 +48,11 @@
 #include <vector>
 #include <cmath>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
-#ifndef STRATA_MMVQ_UNROLL
-#define STRATA_MMVQ_UNROLL 2
+#ifndef CORTEX_MMVQ_UNROLL
+#define CORTEX_MMVQ_UNROLL 2
 #endif
 constexpr int QK = 256;
 constexpr int Q8K = 32;
@@ -159,11 +159,11 @@ template <int SG> __dpct_inline__ float sg_sum(float x) {   // SYCL port: warp_s
     return x;
 }
 // SYCL port: the decode mmvq kernels as Xe2-native SIMD16 sub-groups (twice the registers per lane, same 128
-// threads per group) or as the CUDA-shaped 32-lane warp (default). STRATA_MMVQ_SG: 16 = all SIMD16, 1 = IQ4_XS
+// threads per group) or as the CUDA-shaped 32-lane warp (default). CORTEX_MMVQ_SG: 16 = all SIMD16, 1 = IQ4_XS
 // only, 2 = short outputs (n_out <= 1024) only, 3 = both. mmvq_sg_bench alone: SIMD16 wins on IQ4_XS (up to
 // 1.45x) and short outputs (up to 1.3x), loses 10-25% on the large K-quant projections.
 inline int mmvq_sg() {
-    static const int v = std::getenv("STRATA_MMVQ_SG") ? std::atoi(std::getenv("STRATA_MMVQ_SG")) : 32;
+    static const int v = std::getenv("CORTEX_MMVQ_SG") ? std::atoi(std::getenv("CORTEX_MMVQ_SG")) : 32;
     return v;
 }
 inline bool mmvq_sg16(bool iq4xs, int n_out) {
@@ -244,8 +244,8 @@ q5_q8_dot_impl(const int *__restrict__ vl, const int *__restrict__ vh,
         const int vh1i = ((vh[1] >> i) << 4) & 0x10101010;
         const int v0i = vl0i | vh0i;
         const int v1i = vl1i | vh1i;
-        const int dot1 = STRATA_DP4A(v0i, u[2 * i], STRATA_DP4A(v1i, u[2 * i + 1], 0));
-        const int dot2 = STRATA_DP4A(0x01010101, u[2 * i], STRATA_DP4A(0x01010101, u[2 * i + 1], 0));
+        const int dot1 = CORTEX_DP4A(v0i, u[2 * i], CORTEX_DP4A(v1i, u[2 * i + 1], 0));
+        const int dot2 = CORTEX_DP4A(0x01010101, u[2 * i], CORTEX_DP4A(0x01010101, u[2 * i + 1], 0));
         sumf_d += d8[i] * (dot1 * sc[i]);
         sumf_m += d8[i] * (dot2 * m[i]);
     }
@@ -373,8 +373,8 @@ __dpct_inline__ float q2_q8_dot(const Q20Block *__restrict__ w,
         const int qo = dpct::byte_level_permute(0x020100ff, 0x020100ff, q >> 2);
         const int qx = dpct::byte_level_permute(qe, qo, 0x5140);
         const int qy = dpct::byte_level_permute(qe, qo, 0x7362);
-        sumi = STRATA_DP4A(u, qx, sumi);
-        sumi = STRATA_DP4A(v, qy, sumi);
+        sumi = CORTEX_DP4A(u, qx, sumi);
+        sumi = CORTEX_DP4A(v, qy, sumi);
     }
     const float d8 = chunk->ds[0];
     return d2 * d8 * sumi;
@@ -461,7 +461,7 @@ __dpct_inline__ float q3_q8_dot_impl(int vl, int vh, const int *__restrict__ u,
         const int vih = ((vh >> i) << 2) & 0x04040404;
         const int vi =
             dpct::vectorized_binary<sycl::char4>(vil, vih, dpct::sub_sat());
-        sumf += d8[i] * (STRATA_DP4A(vi, u[i], 0) * sc);
+        sumf += d8[i] * (CORTEX_DP4A(vi, u[i], 0) * sc);
     }
     return d3 * sumf;
 }
@@ -542,7 +542,7 @@ inline dpct::global_memory<int8_t, 1>& iq4nl_values = *new dpct::global_memory<i
 
 static constexpr int8_t kIq4nlTable[16] = {-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113};
 __dpct_inline__ sycl::int2 iq4_table_lookup(int q4, int8_t *iq4nl_values) {
-#if defined(STRATA_HIP_GFX906)
+#if defined(CORTEX_HIP_GFX906)
     // AMD: llama.cpp's HIP lookup (see iq_kernels.cu get_int_from_table_16): 4 v_perm_b32 per 8 values
     const uint32_t* v32 = reinterpret_cast<const uint32_t*>(iq4nl_values);
     const uint32_t q_even = (uint32_t) q4, q_odd = (uint32_t) q4 >> 4;
@@ -584,8 +584,8 @@ __dpct_inline__ float iq4_xs_q8_dot(const IQ4XSBlock *__restrict__ w,
         const sycl::int2 v = iq4_table_lookup(aux_q4, iq4nl_values);
         const int u0 = reinterpret_cast<const int*>(x[iqs / 4].qs)[j];
         const int u1 = reinterpret_cast<const int*>(x[iqs / 4].qs)[j + 4];
-        sumi = STRATA_DP4A(v.x(), u0, sumi);
-        sumi = STRATA_DP4A(v.y(), u1, sumi);
+        sumi = CORTEX_DP4A(v.x(), u0, sumi);
+        sumi = CORTEX_DP4A(v.y(), u1, sumi);
     }
     const int ls = ((w->scales_l[iqs / 8] >> (iqs & 0x04)) & 0x0f) |
                    (((w->scales_h >> (iqs / 2)) & 0x03) << 4);
@@ -659,8 +659,8 @@ q4_q8_dot_impl(const int *__restrict__ v, const int *__restrict__ u,
     for (int i = 0; i < 2; ++i) {
         const int v0i = (v[0] >> (4 * i)) & 0x0f0f0f0f;
         const int v1i = (v[1] >> (4 * i)) & 0x0f0f0f0f;
-        const int dot1 = STRATA_DP4A(v1i, u[2 * i + 1], STRATA_DP4A(v0i, u[2 * i], 0));
-        const int dot2 = STRATA_DP4A(0x01010101, u[2 * i + 1], STRATA_DP4A(0x01010101, u[2 * i], 0));
+        const int dot1 = CORTEX_DP4A(v1i, u[2 * i + 1], CORTEX_DP4A(v0i, u[2 * i], 0));
+        const int dot2 = CORTEX_DP4A(0x01010101, u[2 * i + 1], CORTEX_DP4A(0x01010101, u[2 * i], 0));
         sumf_d += d8[i] * (dot1 * sc[i]);
         sumf_m += d8[i] * (dot2 * m[i]);
     }
@@ -772,7 +772,7 @@ __dpct_inline__ float q6_q8_dot_impl(int vl, int vh, const int *__restrict__ u,
         const int vih = ((vh >> (4 * i)) << 4) & 0x30303030;
         const int vi = dpct::vectorized_binary<sycl::char4>(
             vil | vih, 0x20202020, dpct::sub_sat());
-        sumf += d8[i] * (STRATA_DP4A(vi, u[i], 0) * sc);
+        sumf += d8[i] * (CORTEX_DP4A(vi, u[i], 0) * sc);
     }
     return d * sumf;
 }
@@ -858,8 +858,8 @@ __dpct_inline__ float small_q8_dot(const Q40Block *__restrict__ w,
         const int v = load_int_b2(w->qs, iqs + i);
         const int vi0 = (v >> 0) & 0x0f0f0f0f;
         const int vi1 = (v >> 4) & 0x0f0f0f0f;
-        sumi = STRATA_DP4A(vi0, reinterpret_cast<const int*>(x->qs)[iqs + i], sumi);
-        sumi = STRATA_DP4A(vi1, reinterpret_cast<const int*>(x->qs)[iqs + i + 4], sumi);
+        sumi = CORTEX_DP4A(vi0, reinterpret_cast<const int*>(x->qs)[iqs + i], sumi);
+        sumi = CORTEX_DP4A(vi1, reinterpret_cast<const int*>(x->qs)[iqs + i + 4], sumi);
     }
     const sycl::float2 ds =
         (x->ds).template convert<float, sycl::rounding_mode::automatic>();
@@ -880,13 +880,13 @@ __dpct_inline__ float small_q8_dot(const Q50Block *__restrict__ w,
         vi0 |= (vh << 11) & 0x00001000;
         vi0 |= (vh << 18) & 0x00100000;
         vi0 |= (vh << 25) & 0x10000000;
-        sumi = STRATA_DP4A(vi0, reinterpret_cast<const int*>(x->qs)[iqs + i], sumi);
+        sumi = CORTEX_DP4A(vi0, reinterpret_cast<const int*>(x->qs)[iqs + i], sumi);
         int vi1 = (vl >> 4) & 0x0f0f0f0f;
         vi1 |= (vh >> 12) & 0x00000010;
         vi1 |= (vh >> 5) & 0x00001000;
         vi1 |= (vh << 2) & 0x00100000;
         vi1 |= (vh << 9) & 0x10000000;
-        sumi = STRATA_DP4A(vi1, reinterpret_cast<const int*>(x->qs)[iqs + i + 4], sumi);
+        sumi = CORTEX_DP4A(vi1, reinterpret_cast<const int*>(x->qs)[iqs + i + 4], sumi);
     }
     const sycl::float2 ds =
         (x->ds).template convert<float, sycl::rounding_mode::automatic>();
@@ -902,7 +902,7 @@ __dpct_inline__ float small_q8_dot(const Q80Block *__restrict__ w,
     for (int i = 0; i < 2; ++i) {
         const int v = load_int_b2(w->qs, iqs + i);
         const int u = reinterpret_cast<const int*>(x->qs)[iqs + i];
-        sumi = STRATA_DP4A(v, u, sumi);
+        sumi = CORTEX_DP4A(v, u, sumi);
     }
     const float d0 = w->d;
     const float d1 = x->ds[0];
@@ -918,8 +918,8 @@ __dpct_inline__ float small_q8_dot(const IQ4NLBlock *__restrict__ w,
     for (int i = 0; i < 2; ++i) {
         const sycl::int2 v =
             iq4_table_lookup(load_int_b2(w->qs, iqs + i), iq4nl_values);
-        sumi = STRATA_DP4A(v.x(), q8[i], sumi);
-        sumi = STRATA_DP4A(v.y(), q8[i + 4], sumi);
+        sumi = CORTEX_DP4A(v.x(), q8[i], sumi);
+        sumi = CORTEX_DP4A(v.y(), q8[i + 4], sumi);
     }
     const float d = sycl::vec<sycl::half, 1>(w->d)
                         .convert<float, sycl::rounding_mode::automatic>()[0] *
@@ -1102,8 +1102,8 @@ struct Q20Traits {
         int sumi = 0;
 #pragma unroll
         for (int j = 0; j < 4; ++j) {
-            sumi = STRATA_DP4A(q8[j * 2], r.qx[j], sumi);
-            sumi = STRATA_DP4A(q8[j * 2 + 1], r.qy[j], sumi);
+            sumi = CORTEX_DP4A(q8[j * 2], r.qx[j], sumi);
+            sumi = CORTEX_DP4A(q8[j * 2 + 1], r.qy[j], sumi);
         }
         const float d8 = chunk->ds[0];
         return r.d2 * d8 * sumi;
@@ -1164,7 +1164,7 @@ struct Q6KTraits {
 #pragma unroll
         for (int i = 0; i < 2; ++i) {
             const int u = reinterpret_cast<const int*>(x[r.bq8_offset + 2 * i].qs)[iqs % 8];
-            sumf += x[r.bq8_offset + 2 * i].ds[0] * r.dsc[i] * (float) strata::dp4a(r.vi[i], u, 0);
+            sumf += x[r.bq8_offset + 2 * i].ds[0] * r.dsc[i] * (float) cortex::dp4a(r.vi[i], u, 0);
         }
         return sumf;
     }
@@ -1182,8 +1182,8 @@ struct Q6KTraits {
         return a;
     }
     static float dot(const W& r, const A& a) {
-        return a.ds[0] * r.dsc[0] * (float) strata::dp4a(r.vi[0], a.u[0], 0) +
-               a.ds[1] * r.dsc[1] * (float) strata::dp4a(r.vi[1], a.u[1], 0);
+        return a.ds[0] * r.dsc[0] * (float) cortex::dp4a(r.vi[0], a.u[0], 0) +
+               a.ds[1] * r.dsc[1] * (float) cortex::dp4a(r.vi[1], a.u[1], 0);
     }
 };
 struct IQ4XSTraits {
@@ -1208,8 +1208,8 @@ struct IQ4XSTraits {
         for (int j = 0; j < 4; ++j) {
             const int u0 = reinterpret_cast<const int*>(x[iqs / 4].qs)[j];
             const int u1 = reinterpret_cast<const int*>(x[iqs / 4].qs)[j + 4];
-            sumi = STRATA_DP4A(r.v[j].x(), u0, sumi);
-            sumi = STRATA_DP4A(r.v[j].y(), u1, sumi);
+            sumi = CORTEX_DP4A(r.v[j].x(), u0, sumi);
+            sumi = CORTEX_DP4A(r.v[j].y(), u1, sumi);
         }
         sumi *= r.ls - 32;
         const float d = r.dw * x[iqs / 4].ds[0];
@@ -1217,7 +1217,7 @@ struct IQ4XSTraits {
     }
 };
 // The four 32-element formats: `load` decodes the two 32-bit weight chunks and block scale once per (row, block),
-// and `apply` runs the exact same STRATA_DP4A and scale arithmetic per activation column as `small_q8_dot`.
+// and `apply` runs the exact same CORTEX_DP4A and scale arithmetic per activation column as `small_q8_dot`.
 template<typename Weight, int Qi>
 struct SmallTraits;
 
@@ -1242,8 +1242,8 @@ struct SmallTraits<Q40Block, 4> {
         int sumi = 0;
 #pragma unroll
         for (int i = 0; i < 2; ++i) {
-            sumi = STRATA_DP4A(r.vi0[i], reinterpret_cast<const int*>(x->qs)[iqs + i], sumi);
-            sumi = STRATA_DP4A(r.vi1[i], reinterpret_cast<const int*>(x->qs)[iqs + i + 4], sumi);
+            sumi = CORTEX_DP4A(r.vi0[i], reinterpret_cast<const int*>(x->qs)[iqs + i], sumi);
+            sumi = CORTEX_DP4A(r.vi1[i], reinterpret_cast<const int*>(x->qs)[iqs + i + 4], sumi);
         }
         const sycl::float2 ds =
             (x->ds).template convert<float, sycl::rounding_mode::automatic>();
@@ -1284,8 +1284,8 @@ struct SmallTraits<Q50Block, 4> {
         int sumi = 0;
 #pragma unroll
         for (int i = 0; i < 2; ++i) {
-            sumi = STRATA_DP4A(r.vi0[i], reinterpret_cast<const int*>(x->qs)[iqs + i], sumi);
-            sumi = STRATA_DP4A(r.vi1[i], reinterpret_cast<const int*>(x->qs)[iqs + i + 4], sumi);
+            sumi = CORTEX_DP4A(r.vi0[i], reinterpret_cast<const int*>(x->qs)[iqs + i], sumi);
+            sumi = CORTEX_DP4A(r.vi1[i], reinterpret_cast<const int*>(x->qs)[iqs + i + 4], sumi);
         }
         const sycl::float2 ds =
             (x->ds).template convert<float, sycl::rounding_mode::automatic>();
@@ -1311,7 +1311,7 @@ struct SmallTraits<Q80Block, 8> {
 #pragma unroll
         for (int i = 0; i < 2; ++i) {
             const int u = reinterpret_cast<const int*>(x->qs)[iqs + i];
-            sumi = STRATA_DP4A(r.v[i], u, sumi);
+            sumi = CORTEX_DP4A(r.v[i], u, sumi);
         }
         const float d1 = x->ds[0];
         return r.d0 * d1 * float(sumi);
@@ -1339,8 +1339,8 @@ struct SmallTraits<IQ4NLBlock, 4> {
         int sumi = 0;
 #pragma unroll
         for (int i = 0; i < 2; ++i) {
-            sumi = STRATA_DP4A(r.v[i].x(), q8[i], sumi);
-            sumi = STRATA_DP4A(r.v[i].y(), q8[i + 4], sumi);
+            sumi = CORTEX_DP4A(r.v[i].x(), q8[i], sumi);
+            sumi = CORTEX_DP4A(r.v[i].y(), q8[i + 4], sumi);
         }
         const float d = r.dw * x->ds[0];
         return d * sumi;
@@ -1353,13 +1353,13 @@ struct SmallTraits<IQ4NLBlock, 4> {
 // equal to ncols = 1 only to float rounding (the cross-warp reduction groups partial sums differently).
 bool g_multi_exact = true;   // until the upstream layout is timed on an idle GPU (plan rule: default only what is measured)
 
-// S26 STRATA_TSUM=1 (TS): warp 0's NCOLS x ROWS sums as one transposed butterfly (s26_tsum.cuh), bitwise the same
+// S26 CORTEX_TSUM=1 (TS): warp 0's NCOLS x ROWS sums as one transposed butterfly (s26_tsum.cuh), bitwise the same
 static bool s26_tsum_on() {
-    static const bool on = [] { const char* v = std::getenv("STRATA_TSUM"); return v && v[0] == '1'; }();
+    static const bool on = [] { const char* v = std::getenv("CORTEX_TSUM"); return v && v[0] == '1'; }();
     return on;
 }
 
-// S26 STRATA_LFUSE (PAIR): blocks n_out.. compute the same rows of w2 into y2 (two matrices of one shape on one
+// S26 CORTEX_LFUSE (PAIR): blocks n_out.. compute the same rows of w2 into y2 (two matrices of one shape on one
 // input in one launch; each output's code is the single matrix's)
 template <typename F, int NCOLS, int NW, int ROWS, bool TS = false,
           bool PAIR = false, int SG = WARP>
@@ -1388,7 +1388,7 @@ native_mmvq_multi_kernel(const typename F::Block *__restrict__ w,
     const int blocks_per_row = n_in / F::DIV;
     const int x_stride = n_in / Q8K;                   // Q8_1 blocks per activation column
     float tmp[NCOLS][ROWS] = {};
-#pragma unroll STRATA_MMVQ_UNROLL   // SYCL port: several 256-blocks' loads in flight per warp (bytes in flight, not ALU)
+#pragma unroll CORTEX_MMVQ_UNROLL   // SYCL port: several 256-blocks' loads in flight per warp (bytes in flight, not ALU)
     for (int kbx = tid / F::T; kbx < blocks_per_row; kbx += BPI) {
         const int kby = kbx * F::KBY;
         const int kqs = F::kqs(tid);
@@ -1545,8 +1545,8 @@ __dpct_inline__ sycl::int4 load16_a2(const void* p) {
     for (int i = 0; i < 4; ++i) o[i] = half ? (w[i] >> 16) | (w[i + 1] << 16) : w[i];
     return sycl::int4((int) o[0], (int) o[1], (int) o[2], (int) o[3]);
 }
-inline bool q6k_a2() {   // STRATA_MMVQ_A2=0 turns the aligned-load path off
-    static const bool v = std::getenv("STRATA_MMVQ_A2") == nullptr || std::atoi(std::getenv("STRATA_MMVQ_A2")) != 0;
+inline bool q6k_a2() {   // CORTEX_MMVQ_A2=0 turns the aligned-load path off
+    static const bool v = std::getenv("CORTEX_MMVQ_A2") == nullptr || std::atoi(std::getenv("CORTEX_MMVQ_A2")) != 0;
     return v;
 }
 
@@ -1611,10 +1611,10 @@ void native_mmvq_q6k_wide_kernel(const Q6KBlock* __restrict__ w, const Q81Block*
 #pragma unroll
             for (int j = 0; j < NCOLS; ++j) {
                 int s0 = 0, s1 = 0;
-                s0 = strata::dp4a(vi0[0], u0[j].x(), s0); s0 = strata::dp4a(vi0[1], u0[j].y(), s0);
-                s0 = strata::dp4a(vi0[2], u0[j].z(), s0); s0 = strata::dp4a(vi0[3], u0[j].w(), s0);
-                s1 = strata::dp4a(vi1[0], u1[j].x(), s1); s1 = strata::dp4a(vi1[1], u1[j].y(), s1);
-                s1 = strata::dp4a(vi1[2], u1[j].z(), s1); s1 = strata::dp4a(vi1[3], u1[j].w(), s1);
+                s0 = cortex::dp4a(vi0[0], u0[j].x(), s0); s0 = cortex::dp4a(vi0[1], u0[j].y(), s0);
+                s0 = cortex::dp4a(vi0[2], u0[j].z(), s0); s0 = cortex::dp4a(vi0[3], u0[j].w(), s0);
+                s1 = cortex::dp4a(vi1[0], u1[j].x(), s1); s1 = cortex::dp4a(vi1[1], u1[j].y(), s1);
+                s1 = cortex::dp4a(vi1[2], u1[j].z(), s1); s1 = cortex::dp4a(vi1[3], u1[j].w(), s1);
                 acc[r][j] += ds0[j] * dsc0[r] * (float) s0 + ds1[j] * dsc1[r] * (float) s1;
             }
         }
@@ -1690,10 +1690,10 @@ void native_mmvq_q6k_pf_kernel(const Q6KBlock* __restrict__ w, const Q81Block* _
                     a1 = reinterpret_cast<const sycl::int4*>(xb[2].qs)[u_int4];
                 }
                 int s0 = 0, s1 = 0;
-                s0 = strata::dp4a(vi0[0], a0.x(), s0); s0 = strata::dp4a(vi0[1], a0.y(), s0);
-                s0 = strata::dp4a(vi0[2], a0.z(), s0); s0 = strata::dp4a(vi0[3], a0.w(), s0);
-                s1 = strata::dp4a(vi1[0], a1.x(), s1); s1 = strata::dp4a(vi1[1], a1.y(), s1);
-                s1 = strata::dp4a(vi1[2], a1.z(), s1); s1 = strata::dp4a(vi1[3], a1.w(), s1);
+                s0 = cortex::dp4a(vi0[0], a0.x(), s0); s0 = cortex::dp4a(vi0[1], a0.y(), s0);
+                s0 = cortex::dp4a(vi0[2], a0.z(), s0); s0 = cortex::dp4a(vi0[3], a0.w(), s0);
+                s1 = cortex::dp4a(vi1[0], a1.x(), s1); s1 = cortex::dp4a(vi1[1], a1.y(), s1);
+                s1 = cortex::dp4a(vi1[2], a1.z(), s1); s1 = cortex::dp4a(vi1[3], a1.w(), s1);
                 acc[j] += (float) xb[0].ds[0] * dsc0[u] * (float) s0 + (float) xb[2].ds[0] * dsc1[u] * (float) s1;
             }
         }
@@ -1707,24 +1707,24 @@ void native_mmvq_q6k_pf_kernel(const Q6KBlock* __restrict__ w, const Q81Block* _
         if (lane == 0) y[std::size_t(j) * n_out + row] = v;
     }
 }
-inline int q6k_pf() {   // STRATA_MMVQ_PF: weight-load steps issued ahead in the wide Q6_K kernel (0 = off)
-    static const int v = std::getenv("STRATA_MMVQ_PF") ? std::atoi(std::getenv("STRATA_MMVQ_PF")) : 0;
+inline int q6k_pf() {   // CORTEX_MMVQ_PF: weight-load steps issued ahead in the wide Q6_K kernel (0 = off)
+    static const int v = std::getenv("CORTEX_MMVQ_PF") ? std::atoi(std::getenv("CORTEX_MMVQ_PF")) : 0;
     return v;
 }
 inline int q6k_wide_rpw() {
-    static const int v = std::getenv("STRATA_MMVQ_WIDE_RPW") ? std::atoi(std::getenv("STRATA_MMVQ_WIDE_RPW")) : 1;
+    static const int v = std::getenv("CORTEX_MMVQ_WIDE_RPW") ? std::atoi(std::getenv("CORTEX_MMVQ_WIDE_RPW")) : 1;
     return v;
 }
 // Large-GRF mode (256 registers per thread instead of 128) for the wide kernels (Q6_K a2 and the generic one) at 2-8
 // columns: on the A770 they spill at 128, and mmvq_bench Q6_K 4 columns goes 70-80 -> 150-237 GB/s with the same
 // checksum. Large GRF halves the threads an Xe core keeps resident, so it is the default on Arc A-series (Alchemist)
 // only, where it was measured; Battlemage and anything else, and 1 column everywhere, launch the same kernels as before.
-// STRATA_MMVQ_LARGE_GRF=1 forces it on, =0 off.
+// CORTEX_MMVQ_LARGE_GRF=1 forces it on, =0 off.
 inline bool mmvq_large_grf(dpct::queue_ptr s) {
     static const bool v = [s] {
-        const char* e = std::getenv("STRATA_MMVQ_LARGE_GRF");
+        const char* e = std::getenv("CORTEX_MMVQ_LARGE_GRF");
         if (e != nullptr) return std::atoi(e) != 0;
-        return strata::intel_gpu_gen(s->get_device()) == strata::IntelGpuGen::Alchemist;
+        return cortex::intel_gpu_gen(s->get_device()) == cortex::IntelGpuGen::Alchemist;
     }();
     return v;
 }
@@ -1736,7 +1736,7 @@ void launch_q6k_wide(const void* weights, const void* x_q8_1, float* y, int n_in
     if (const int pf = q6k_pf(); pf > 0) {
         const unsigned blocks = unsigned((std::size_t(n_out) + WARPS - 1) / WARPS);
         const sycl::range<3> t(1, WARPS, WARP);
-#define STRATA_Q6PF(UU) if (pf == UU && q6k_a2()) { \
+#define CORTEX_Q6PF(UU) if (pf == UU && q6k_a2()) { \
             s->parallel_for<dpct_kernel_name<class native_mmvq_q6k_pf_a2, dpct_kernel_scalar<NCOLS>, dpct_kernel_scalar<UU>>>( \
                 sycl::nd_range<3>(sycl::range(1, 1, blocks) * t, t), \
                 [=](sycl::nd_item<3>) [[sycl::reqd_sub_group_size(32)]] { native_mmvq_q6k_pf_kernel<NCOLS, UU, true>(w, x, y, n_in, n_out); }); \
@@ -1746,8 +1746,8 @@ void launch_q6k_wide(const void* weights, const void* x_q8_1, float* y, int n_in
                 sycl::nd_range<3>(sycl::range(1, 1, blocks) * t, t), \
                 [=](sycl::nd_item<3>) [[sycl::reqd_sub_group_size(32)]] { native_mmvq_q6k_pf_kernel<NCOLS, UU>(w, x, y, n_in, n_out); }); \
             return; }
-        STRATA_Q6PF(2) STRATA_Q6PF(3) STRATA_Q6PF(4) STRATA_Q6PF(6)
-#undef STRATA_Q6PF
+        CORTEX_Q6PF(2) CORTEX_Q6PF(3) CORTEX_Q6PF(4) CORTEX_Q6PF(6)
+#undef CORTEX_Q6PF
     }
     if (rpw == 1 && q6k_a2()) {
         const unsigned blocks = unsigned((std::size_t(n_out) + WARPS - 1) / WARPS);
@@ -1778,8 +1778,8 @@ void launch_q6k_wide(const void* weights, const void* x_q8_1, float* y, int n_in
         return;
     }
     // RP rows per sub-group share each column's activation loads (the rows' own lanes, k order and butterfly: every
-    // output the same bits); with the aligned loads (A2) unless STRATA_MMVQ_A2=0
-#define STRATA_Q6W(RP) if (rpw == RP) { \
+    // output the same bits); with the aligned loads (A2) unless CORTEX_MMVQ_A2=0
+#define CORTEX_Q6W(RP) if (rpw == RP) { \
         const unsigned blocks = unsigned((std::size_t(n_out) + WARPS * RP - 1) / (WARPS * RP)); \
         if (q6k_a2()) { \
             s->parallel_for<dpct_kernel_name<class native_mmvq_q6k_wide_a2r, dpct_kernel_scalar<NCOLS>, dpct_kernel_scalar<RP>>>( \
@@ -1791,8 +1791,8 @@ void launch_q6k_wide(const void* weights, const void* x_q8_1, float* y, int n_in
             sycl::nd_range<3>(sycl::range(1, 1, blocks) * sycl::range(1, WARPS, WARP), sycl::range(1, WARPS, WARP)), \
             [=](sycl::nd_item<3>) [[sycl::reqd_sub_group_size(32)]] { native_mmvq_q6k_wide_kernel<NCOLS, RP>(w, x, y, n_in, n_out); }); \
         return; }
-    STRATA_Q6W(1) STRATA_Q6W(2) STRATA_Q6W(4)
-#undef STRATA_Q6W
+    CORTEX_Q6W(1) CORTEX_Q6W(2) CORTEX_Q6W(4)
+#undef CORTEX_Q6W
     const unsigned blocks = unsigned((std::size_t(n_out) + WARPS - 1) / WARPS);
     s->parallel_for<dpct_kernel_name<class native_mmvq_q6k_wide1, dpct_kernel_scalar<NCOLS>>>(
         sycl::nd_range<3>(sycl::range(1, 1, blocks) * sycl::range(1, WARPS, WARP), sycl::range(1, WARPS, WARP)),
@@ -1809,8 +1809,8 @@ __dpct_inline__ sycl::int4 ld_q8_16(const Q81Block* b, int half) {   // Q8_1 qs 
     return ld_i4_a4(reinterpret_cast<const int*>(b->qs) + 4 * half);
 }
 __dpct_inline__ int dp4a4(const sycl::int4 a, const sycl::int4 b, int acc) {
-    acc = strata::dp4a(a.x(), b.x(), acc); acc = strata::dp4a(a.y(), b.y(), acc);
-    acc = strata::dp4a(a.z(), b.z(), acc); return strata::dp4a(a.w(), b.w(), acc);
+    acc = cortex::dp4a(a.x(), b.x(), acc); acc = cortex::dp4a(a.y(), b.y(), acc);
+    acc = cortex::dp4a(a.z(), b.z(), acc); return cortex::dp4a(a.w(), b.w(), acc);
 }
 __dpct_inline__ void k4_scale_min(const uint8_t* sc, int j, float& s, float& m) {   // ggml get_scale_min_k4
     if (j < 4) { s = (float) (sc[j] & 63); m = (float) (sc[j + 4] & 63); }
@@ -1913,7 +1913,7 @@ struct WideIQ4XS {
     }
     static float dot(const W& r, const A& v) { return r.d * v.ds * (float) dp4a4(r.hi, v.u1, dp4a4(r.lo, v.u0, 0)); }
 };
-// SYCL port: native_mmvq_wide_kernel with RPW rows per sub-group (STRATA_MMVQ_WIDE_K_RPW): each column's activations
+// SYCL port: native_mmvq_wide_kernel with RPW rows per sub-group (CORTEX_MMVQ_WIDE_K_RPW): each column's activations
 // are loaded once (act) and used by the RPW rows (dot); a row's lanes, its k order and its butterfly are the
 // one-row kernel's, so every output is the same bits. At 2-4 columns the one-row kernel reads ~5x its weight bytes
 // in activations (each row re-reads the whole vector per column).
@@ -1952,8 +1952,8 @@ void native_mmvq_wide_rpw_kernel(const typename F::Block* __restrict__ w, const 
             if (lane == 0 && row0 + r < n_out) y[std::size_t(j) * n_out + row0 + r] = v;
         }
 }
-inline int wide_k_rpw() {   // STRATA_MMVQ_WIDE_K_RPW: rows per sub-group of the Q4_K / Q5_K / IQ4_XS wide kernel (1, 2, 4)
-    static const int v = std::getenv("STRATA_MMVQ_WIDE_K_RPW") ? std::atoi(std::getenv("STRATA_MMVQ_WIDE_K_RPW")) : 1;
+inline int wide_k_rpw() {   // CORTEX_MMVQ_WIDE_K_RPW: rows per sub-group of the Q4_K / Q5_K / IQ4_XS wide kernel (1, 2, 4)
+    static const int v = std::getenv("CORTEX_MMVQ_WIDE_K_RPW") ? std::atoi(std::getenv("CORTEX_MMVQ_WIDE_K_RPW")) : 1;
     return v;
 }
 template <typename F, int NCOLS>
@@ -1985,14 +1985,14 @@ template <typename F, int NCOLS>
 void launch_wide(const void* weights, const void* x_q8_1, float* y, int n_in, int n_out, dpct::queue_ptr s) {
     const auto* w = static_cast<const typename F::Block*>(weights);
     const auto* x = static_cast<const Q81Block*>(x_q8_1);
-#define STRATA_WKR(RP) if (wide_k_rpw() == RP) { \
+#define CORTEX_WKR(RP) if (wide_k_rpw() == RP) { \
         const unsigned b = unsigned((std::size_t(n_out) + WARPS * RP - 1) / (WARPS * RP)); \
         s->parallel_for<dpct_kernel_name<class native_mmvq_wide_rpw, F, dpct_kernel_scalar<NCOLS>, dpct_kernel_scalar<RP>>>( \
             sycl::nd_range<3>(sycl::range(1, 1, b) * sycl::range(1, WARPS, WARP), sycl::range(1, WARPS, WARP)), \
             [=](sycl::nd_item<3>) [[sycl::reqd_sub_group_size(32)]] { native_mmvq_wide_rpw_kernel<F, NCOLS, RP>(w, x, y, n_in, n_out); }); \
         return; }
-    STRATA_WKR(2) STRATA_WKR(4)
-#undef STRATA_WKR
+    CORTEX_WKR(2) CORTEX_WKR(4)
+#undef CORTEX_WKR
     const unsigned blocks = unsigned((std::size_t(n_out) + WARPS - 1) / WARPS);
     if constexpr (NCOLS > 1) {
         if (mmvq_large_grf(s)) {
@@ -2007,14 +2007,14 @@ void launch_wide(const void* weights, const void* x_q8_1, float* y, int n_in, in
         sycl::nd_range<3>(sycl::range(1, 1, blocks) * sycl::range(1, WARPS, WARP), sycl::range(1, WARPS, WARP)),
         [=](sycl::nd_item<3>) [[sycl::reqd_sub_group_size(32)]] { native_mmvq_wide_kernel<F, NCOLS>(w, x, y, n_in, n_out); });
 }
-inline bool wide_k() {   // STRATA_MMVQ_WIDE_K=0: Q4_K/Q5_K/IQ4_XS through the multi kernel (the old path)
-    static const bool v = std::getenv("STRATA_MMVQ_WIDE_K") == nullptr || std::atoi(std::getenv("STRATA_MMVQ_WIDE_K")) != 0;
+inline bool wide_k() {   // CORTEX_MMVQ_WIDE_K=0: Q4_K/Q5_K/IQ4_XS through the multi kernel (the old path)
+    static const bool v = std::getenv("CORTEX_MMVQ_WIDE_K") == nullptr || std::atoi(std::getenv("CORTEX_MMVQ_WIDE_K")) != 0;
     return v;
 }
 template <typename F>
 bool try_wide(const void* weights, const void* x_q8_1, float* y, int n_in, int n_out, int ncols, void* stream) {
     if (!wide_k() || ncols < 1 || ncols > 8 || n_in % QK != 0) return false;
-    const auto s = strata::q_of(stream);
+    const auto s = cortex::q_of(stream);
     switch (ncols) {
         case 1: launch_wide<F, 1>(weights, x_q8_1, y, n_in, n_out, s); return true;
         case 2: launch_wide<F, 2>(weights, x_q8_1, y, n_in, n_out, s); return true;
@@ -2096,14 +2096,14 @@ void launch_wide32(const void* weights, const void* x_q8_1, float* y, int n_in, 
         sycl::nd_range<3>(sycl::range(1, 1, blocks) * sycl::range(1, WARPS, WARP), sycl::range(1, WARPS, WARP)),
         [=](sycl::nd_item<3>) [[sycl::reqd_sub_group_size(32)]] { native_mmvq_wide32_kernel<F, NCOLS>(w, x, y, n_in, n_out); });
 }
-inline bool wide_32() {   // STRATA_MMVQ_WIDE_32=0: Q8_0/IQ4_NL through the small/multi kernels (the old path)
-    static const bool v = std::getenv("STRATA_MMVQ_WIDE_32") == nullptr || std::atoi(std::getenv("STRATA_MMVQ_WIDE_32")) != 0;
+inline bool wide_32() {   // CORTEX_MMVQ_WIDE_32=0: Q8_0/IQ4_NL through the small/multi kernels (the old path)
+    static const bool v = std::getenv("CORTEX_MMVQ_WIDE_32") == nullptr || std::atoi(std::getenv("CORTEX_MMVQ_WIDE_32")) != 0;
     return v;
 }
 template <typename F>
 bool try_wide32(const void* weights, const void* x_q8_1, float* y, int n_in, int n_out, int ncols, void* stream) {
     if (!wide_32() || ncols < 1 || ncols > 8 || n_in % 32 != 0) return false;
-    const auto s = strata::q_of(stream);
+    const auto s = cortex::q_of(stream);
     switch (ncols) {
         case 1: launch_wide32<F, 1>(weights, x_q8_1, y, n_in, n_out, s); return true;
         case 2: launch_wide32<F, 2>(weights, x_q8_1, y, n_in, n_out, s); return true;
@@ -2126,7 +2126,7 @@ void launch_q6k_wide224(const void* weights, const void* x_q8_1, float* y, int n
         sycl::nd_range<3>(sycl::range(1, 1, blocks) * sycl::range(1, WARPS, WARP), sycl::range(1, WARPS, WARP)),
         [=](sycl::nd_item<3>) [[sycl::reqd_sub_group_size(32)]] { native_mmvq_q6k_wide_kernel<NCOLS, 1, WARP, 224>(w, x, y, n_in, n_out); });
 }
-bool g_q6k_wide = std::getenv("STRATA_MMVQ_WIDE") == nullptr || std::atoi(std::getenv("STRATA_MMVQ_WIDE")) != 0;
+bool g_q6k_wide = std::getenv("CORTEX_MMVQ_WIDE") == nullptr || std::atoi(std::getenv("CORTEX_MMVQ_WIDE")) != 0;
 
 template <typename F, int NCOLS, int RPW>
 void launch_rowwarp(const void* weights, const void* x_q8_1, float* y, int n_in, int n_out, dpct::queue_ptr s) {
@@ -2137,8 +2137,8 @@ void launch_rowwarp(const void* weights, const void* x_q8_1, float* y, int n_in,
         sycl::nd_range<3>(sycl::range(1, 1, blocks) * sycl::range(1, WARPS, WARP), sycl::range(1, WARPS, WARP)),
         [=](sycl::nd_item<3>) [[sycl::reqd_sub_group_size(32)]] { native_mmvq_rowwarp_kernel<F, NCOLS, RPW>(w, x, y, n_in, n_out); });
 }
-inline int rowwarp_rpw() {   // STRATA_MMVQ_RPW: 0 = the shared kernel, 1/2/4 = rows per warp (bench knob)
-    static const int v = std::getenv("STRATA_MMVQ_RPW") ? std::atoi(std::getenv("STRATA_MMVQ_RPW")) : 0;   // default: the shared kernel (measured equal at warm clocks)
+inline int rowwarp_rpw() {   // CORTEX_MMVQ_RPW: 0 = the shared kernel, 1/2/4 = rows per warp (bench knob)
+    static const int v = std::getenv("CORTEX_MMVQ_RPW") ? std::atoi(std::getenv("CORTEX_MMVQ_RPW")) : 0;   // default: the shared kernel (measured equal at warm clocks)
     return v;
 }
 
@@ -2187,9 +2187,9 @@ void launch_multi_n(const void *weights, const void *x_q8_1, float *y, int n_in,
     }
     const dpct::dim3 threads(WARP, WARPS);
     // #783 PR-h (stuchapin909): two rows per block for every K, not only small K - each row keeps its own partial sums and
-    // reduction, so a row's result does not depend on its neighbour; STRATA_NO_MMVQ_ROWS2=1 keeps one row for large K
+    // reduction, so a row's result does not depend on its neighbour; CORTEX_NO_MMVQ_ROWS2=1 keeps one row for large K
     static const bool rows1 = [] {
-        const char* v = std::getenv("STRATA_NO_MMVQ_ROWS2");
+        const char* v = std::getenv("CORTEX_NO_MMVQ_ROWS2");
         return v != nullptr && v[0] != '\0' && v[0] != '0';
     }();
     if (rows1 && n_in / F::DIV >= F::BPI) {
@@ -2244,7 +2244,7 @@ void launch_multi_n(const void *weights, const void *x_q8_1, float *y, int n_in,
 template<typename F>
 void launch_multi(const void* weights, const void* x_q8_1, float* y, int n_in, int n_out, int ncols,
                   void* stream) {
-    const auto s = strata::q_of(stream);
+    const auto s = cortex::q_of(stream);
     switch (ncols) {
         case 2: launch_multi_n<F, 2>(weights, x_q8_1, y, n_in, n_out, s); break;
         case 3: launch_multi_n<F, 3>(weights, x_q8_1, y, n_in, n_out, s); break;
@@ -2297,13 +2297,13 @@ void launch_check() {
 }
 
 
-#if defined(STRATA_HIP_GFX906)
+#if defined(CORTEX_HIP_GFX906)
 // ---- AMD (wave64) layout: one wavefront per R rows, four wavefronts per block, the row's blocks strided over the
 // 64 lanes exactly as the CUDA kernels stride them over a block (kbx = lane / T, stride 64 / T), and a 64-lane
 // butterfly instead of the LDS partials and __syncthreads of the one-block-per-row layout: on gfx906 a block per
 // 2 KB row spent most of its time being launched and joined.  The SAME kernel serves every column count 1..8, so a
-// column's sums do not depend on how many columns (verify tokens) ride along.  STRATA_MMVQ_WAVE=0: the CUDA layout.
-bool g_wave_off = std::getenv("STRATA_MMVQ_WAVE") && std::string(std::getenv("STRATA_MMVQ_WAVE")) == "0";
+// column's sums do not depend on how many columns (verify tokens) ride along.  CORTEX_MMVQ_WAVE=0: the CUDA layout.
+bool g_wave_off = std::getenv("CORTEX_MMVQ_WAVE") && std::string(std::getenv("CORTEX_MMVQ_WAVE")) == "0";
 template<typename F, int NCOLS, int R>
 __launch_bounds__(256)
 __global__ void native_mmvq_wave_kernel(const typename F::Block* __restrict__ w, const Q81Block* __restrict__ x,
@@ -2361,10 +2361,10 @@ void wave_launch(const void* weights, const void* x_q8_1, float* y, int n_in, in
         default: throw std::invalid_argument("native MMVQ (wave) requires 1 <= ncols <= 8");
     }
 }
-#define STRATA_WAVE_MMVQ(...) \
+#define CORTEX_WAVE_MMVQ(...) \
     if (!g_wave_off) { wave_launch<__VA_ARGS__>(weights, x_q8_1, y, n_in, n_out, ncols, stream); launch_check(); return; }
 #else
-#define STRATA_WAVE_MMVQ(...)
+#define CORTEX_WAVE_MMVQ(...)
 #endif
 
 template<typename Weight, int Qi>
@@ -2376,7 +2376,7 @@ void small_mmvq(const void* weights, const void* x_q8_1, float* y,
     validate_pointer(x_q8_1);
     validate_pointer(y);
     validate_stream(stream);
-    STRATA_WAVE_MMVQ(SmallTraits<Weight, Qi>)
+    CORTEX_WAVE_MMVQ(SmallTraits<Weight, Qi>)
     if (ncols > 1) {
         launch_multi<SmallTraits<Weight, Qi>>(weights, x_q8_1, y, n_in, n_out, ncols, stream);
         launch_check();
@@ -2384,7 +2384,7 @@ void small_mmvq(const void* weights, const void* x_q8_1, float* y,
     }
     const auto* w = static_cast<const Weight*>(weights);
     const auto* x = static_cast<const Q81Block*>(x_q8_1);
-    const auto s = strata::q_of(stream);
+    const auto s = cortex::q_of(stream);
     const dpct::dim3 threads(WARP, WARPS);
     if (n_in / 32 < 2 * WARPS * WARP / Qi) {
         const unsigned blocks = unsigned((std::size_t(n_out) + WARPS - 1) / WARPS);
@@ -2459,7 +2459,7 @@ void small_f32(const void* weights, const float* x, void* scratch_q8_1,
     small_mmvq<Weight, Qi>(weights, scratch_q8_1, y, n_in, n_out, ncols, stream);
 }
 
-// ============================ STRATA_Q8_PACKED=1: the packed Q8_0 decode layout (opt-in) ============================
+// ============================ CORTEX_Q8_PACKED=1: the packed Q8_0 decode layout (opt-in) ============================
 //
 // A lossless load-time repack of a Q8_0 matrix: the SAME int8 values in a qs plane (row-major, n_in bytes per row)
 // followed by the SAME fp16 scales in a d plane (row-major, n_in / 32 per row) - no requantization, same bytes.
@@ -2473,7 +2473,7 @@ void small_f32(const void* weights, const float* x, void* scratch_q8_1,
 // 6144/10240/12288 +10-12% per call (engine trace: -10.7% on those calls). 6144 -> 2560 (one workgroup per row)
 // was +2-4% standalone but -3% in the engine, and rows < 2048 lose: neither is packed.
 #if defined(__HIPCC__)
-#define STRATA_Q8P_LOAD(p) __builtin_nontemporal_load(p)
+#define CORTEX_Q8P_LOAD(p) __builtin_nontemporal_load(p)
 #else
 /*
 DPCT1098: The '*' expression is used instead of the __ldcs call. These two
@@ -2484,7 +2484,7 @@ code for potential precision and/or performance issues.
 DPCT1064: Migrated __ldcs call is used in a macro/template definition and
 may not be valid for all macro/template uses. Adjust the code.
 */
-#define STRATA_Q8P_LOAD(p) (*(p))
+#define CORTEX_Q8P_LOAD(p) (*(p))
 #endif
 constexpr int Q8P_PERSIST_GRID = 640;
 constexpr int Q8P_PERSIST_MAX_IN = 4096;
@@ -2517,16 +2517,16 @@ native_q8_0_packed_kernel(const int8_t *__restrict__ qs,
         for (int kbx = tid / 4; kbx < nb; kbx += 2 * WARPS * WARP / 8) {
             const std::size_t block = std::size_t(row) * nb + kbx;
             const int* p = reinterpret_cast<const int*>(qs + block * 32) + kqs;
-            const int v0 = STRATA_Q8P_LOAD(p);
-            const int v1 = STRATA_Q8P_LOAD(p + 1);
+            const int v0 = CORTEX_Q8P_LOAD(p);
+            const int v1 = CORTEX_Q8P_LOAD(p + 1);
             const float d0 = dpl[block];
 #pragma unroll
             for (int j = 0; j < NCOLS; ++j) {
                 const Q81Block* xb = x + std::size_t(j) * nb + kbx;
                 const int* u = reinterpret_cast<const int*>(xb->qs);
                 int sumi = 0;
-                sumi = STRATA_DP4A(v0, u[kqs], sumi);
-                sumi = STRATA_DP4A(v1, u[kqs + 1], sumi);
+                sumi = CORTEX_DP4A(v0, u[kqs], sumi);
+                sumi = CORTEX_DP4A(v1, u[kqs + 1], sumi);
                 const float d1 = xb->ds[0];
                 tmp[j] += d0 * d1 * float(sumi);
             }
@@ -2548,7 +2548,7 @@ native_q8_0_packed_kernel(const int8_t *__restrict__ qs,
         */
         item_ct1.barrier();
         if (TS && item_ct1.get_local_id(1) ==
-                      0) { // S26 STRATA_TSUM=1: one transposed butterfly,
+                      0) { // S26 CORTEX_TSUM=1: one transposed butterfly,
                            // bitwise the same sums
             constexpr int P = s26ts::pow2_ceil(NCOLS);
             float v[P];
@@ -2643,7 +2643,7 @@ bool q8_packed_mmvq(const void* weights, const void* x_q8_1, float* y, int n_in,
     validate_pointer(y);
     validate_stream(stream);
     const auto* x = static_cast<const Q81Block*>(x_q8_1);
-    const auto s = strata::q_of(stream);
+    const auto s = cortex::q_of(stream);
     switch (ncols) {
         case 1: q8_packed_launch<1>(found->second, x, y, s); break;
         case 2: q8_packed_launch<2>(found->second, x, y, s); break;
@@ -2660,7 +2660,7 @@ bool q8_packed_mmvq(const void* weights, const void* x_q8_1, float* y, int n_in,
 }
 
 
-// ============================ STRATA_Q6_PACKED=1: the packed Q6_K head layout (opt-in) ============================
+// ============================ CORTEX_Q6_PACKED=1: the packed Q6_K head layout (opt-in) ============================
 //
 // The output heads (the main head, 248320 rows, and the MTP draft head's row subset) are Q6_K matrices of 2560-wide
 // rows: 10 blocks of 210 bytes each, so every int load is 2-byte aligned and a row is 2100 bytes. The packed copy
@@ -2668,11 +2668,11 @@ bool q8_packed_mmvq(const void* weights, const void* x_q8_1, float* y, int n_in,
 // two words are aligned dword loads (non-temporal). Thread ownership (block tid / 32 + 4 i, word tid % 32), the
 // q6_q8_dot_impl expression, the per-thread order and the reduction are those of native_q6_k_mmvq_kernel<false> /
 // native_mmvq_multi_kernel<Q6KTraits, NC, 4, 1>: every output is bitwise equal. Persistent workgroups.
-int g_q6p_grid_override = 0;   // the self-test's grid sweep (STRATA_Q6P_SELFTEST=2)
+int g_q6p_grid_override = 0;   // the self-test's grid sweep (CORTEX_Q6P_SELFTEST=2)
 int q6p_grid() {
     if (g_q6p_grid_override > 0) return g_q6p_grid_override;
     static const int grid = [] {
-        const char* v = std::getenv("STRATA_Q6P_GRID");
+        const char* v = std::getenv("CORTEX_Q6P_GRID");
         const int g = v ? std::atoi(v) : 0;
         return g > 0 ? g : 640;
     }();
@@ -2711,8 +2711,8 @@ __dpct_inline__ void native_q6_k_packed_kernel(
         float tmp[NCOLS] = {};
         for (int kbx = tid / 32; kbx < nb; kbx += WARPS * WARP / 32) {
             const std::size_t block = std::size_t(row) * nb + kbx;
-            const int vl = STRATA_Q8P_LOAD(ql + block * 32 + iqs);
-            const int vh = STRATA_Q8P_LOAD(qh + block * 16 + qh_word) >> vh_shift;
+            const int vl = CORTEX_Q8P_LOAD(ql + block * 32 + iqs);
+            const int vh = CORTEX_Q8P_LOAD(qh + block * 16 + qh_word) >> vh_shift;
             const int8_t* scales = sc + block * 16 + scale_offset;
             const float d = dpl[block];
             const int kby = kbx * 8;
@@ -2746,7 +2746,7 @@ __dpct_inline__ void native_q6_k_packed_kernel(
         */
         item_ct1.barrier();
         if (TS && item_ct1.get_local_id(1) ==
-                      0) { // S26 STRATA_TSUM=1: one transposed butterfly,
+                      0) { // S26 CORTEX_TSUM=1: one transposed butterfly,
                            // bitwise the same sums
             constexpr int P = s26ts::pow2_ceil(NCOLS);
             float v[P];
@@ -2846,7 +2846,7 @@ bool q6_packed_mmvq(const void* weights, const void* x_q8_1, float* y, int n_in,
     validate_pointer(y);
     validate_stream(stream);
     const auto* x = static_cast<const Q81Block*>(x_q8_1);
-    const auto s = strata::q_of(stream);
+    const auto s = cortex::q_of(stream);
     switch (ncols) {
         case 1: q6_packed_launch<1>(found->second, x, y, s); break;
         case 2: q6_packed_launch<2>(found->second, x, y, s); break;
@@ -2862,7 +2862,7 @@ bool q6_packed_mmvq(const void* weights, const void* x_q8_1, float* y, int n_in,
     return true;
 }
 
-// ============================ STRATA_Q6_PLANAR: the Q6_K heads as 16-byte-aligned planes (SYCL port) ============================
+// ============================ CORTEX_Q6_PLANAR: the Q6_K heads as 16-byte-aligned planes (SYCL port) ============================
 //
 // native_mmvq_q6k_wide_kernel<..., A2 = true> reads each lane's ql / qh run as two aligned 16-byte loads and a funnel shift
 // because a 210-byte block is only 2-byte aligned. The planar layout holds the same bytes as four planes (ql 128 B, qh 64 B,
@@ -2924,10 +2924,10 @@ void native_mmvq_q6k_planar_kernel(const uint8_t* __restrict__ qlp, const uint8_
 #pragma unroll
         for (int j = 0; j < NCOLS; ++j) {
             int s0 = 0, s1 = 0;
-            s0 = strata::dp4a(vi0[0], u0[j].x(), s0); s0 = strata::dp4a(vi0[1], u0[j].y(), s0);
-            s0 = strata::dp4a(vi0[2], u0[j].z(), s0); s0 = strata::dp4a(vi0[3], u0[j].w(), s0);
-            s1 = strata::dp4a(vi1[0], u1[j].x(), s1); s1 = strata::dp4a(vi1[1], u1[j].y(), s1);
-            s1 = strata::dp4a(vi1[2], u1[j].z(), s1); s1 = strata::dp4a(vi1[3], u1[j].w(), s1);
+            s0 = cortex::dp4a(vi0[0], u0[j].x(), s0); s0 = cortex::dp4a(vi0[1], u0[j].y(), s0);
+            s0 = cortex::dp4a(vi0[2], u0[j].z(), s0); s0 = cortex::dp4a(vi0[3], u0[j].w(), s0);
+            s1 = cortex::dp4a(vi1[0], u1[j].x(), s1); s1 = cortex::dp4a(vi1[1], u1[j].y(), s1);
+            s1 = cortex::dp4a(vi1[2], u1[j].z(), s1); s1 = cortex::dp4a(vi1[3], u1[j].w(), s1);
             acc[j] += ds0[j] * dsc0 * (float) s0 + ds1[j] * dsc1 * (float) s1;
         }
     }
@@ -2976,7 +2976,7 @@ bool q6_planar_mmvq(const void* weights, const void* x_q8_1, float* y, int n_in,
     validate_pointer(x_q8_1);
     validate_pointer(y);
     validate_stream(stream);
-    const auto s = strata::q_of(stream);
+    const auto s = cortex::q_of(stream);
     const std::size_t x_col = std::size_t(n_in / Q8K);   // Q8_1 blocks per column
     for (int c0 = 0; c0 < ncols; c0 += 8) {
         const int nc = std::min(8, ncols - c0);
@@ -3016,7 +3016,7 @@ Q6Planar q6_planar_make(void* dev, std::size_t nb, int n_in, int n_out) {
 
 bool native_q8_0_packed_enabled() {
     static const bool enabled = [] {
-        const char* v = std::getenv("STRATA_Q8_PACKED");
+        const char* v = std::getenv("CORTEX_Q8_PACKED");
         return v && v[0] == '1' && v[1] == '\0';
     }();
     return enabled;
@@ -3053,7 +3053,7 @@ void native_q8_0_packed_unregister(const void* gguf_weights) { q8_packed_registr
 
 bool native_q6_k_packed_enabled() {
     static const bool enabled = [] {
-        const char* v = std::getenv("STRATA_Q6_PACKED");
+        const char* v = std::getenv("CORTEX_Q6_PACKED");
         return v && v[0] == '1' && v[1] == '\0';
     }();
     return enabled;
@@ -3061,7 +3061,7 @@ bool native_q6_k_packed_enabled() {
 
 bool native_q6_k_planar_enabled() {
     static const bool enabled = [] {
-        const char* v = std::getenv("STRATA_Q6_PLANAR");
+        const char* v = std::getenv("CORTEX_Q6_PLANAR");
         return !(v && v[0] == '0' && v[1] == '\0');
     }();
     return enabled;
@@ -3079,9 +3079,9 @@ void* native_q6_k_planar_adopt(void* weights, int n_in, int n_out, const char* w
     const std::size_t nb = std::size_t(n_in / 256) * std::size_t(n_out);
     const Q6PlanarLayout l = q6_planar_layout(nb);
     void* dev = nullptr;
-    try { dev = strata::malloc_device_guarded(l.total, q, what); } catch (...) { dev = nullptr; }
+    try { dev = cortex::malloc_device_guarded(l.total, q, what); } catch (...) { dev = nullptr; }
     if (dev == nullptr) {
-        std::fprintf(stderr, "strata: STRATA_Q6_PLANAR: no VRAM for the %s's planar copy (+%.1f MiB), keeping the GGUF layout\n", what,
+        std::fprintf(stderr, "cortex: CORTEX_Q6_PLANAR: no VRAM for the %s's planar copy (+%.1f MiB), keeping the GGUF layout\n", what,
                      l.total / 1048576.0);
         return weights;
     }
@@ -3106,11 +3106,11 @@ void* native_q6_k_planar_adopt(void* weights, int n_in, int n_out, const char* w
     q.wait();
     sycl::free(weights, q);
     q6_planar_registry()[dev] = q6_planar_make(dev, nb, n_in, n_out);
-    std::fprintf(stderr, "strata: STRATA_Q6_PLANAR: the %s (%d x %d) is stored as 16-byte-aligned planes (same bytes)\n", what, n_out, n_in);
+    std::fprintf(stderr, "cortex: CORTEX_Q6_PLANAR: the %s (%d x %d) is stored as 16-byte-aligned planes (same bytes)\n", what, n_out, n_in);
     return dev;
 }
 catch (sycl::exception const& exc) {
-    std::fprintf(stderr, "strata: STRATA_Q6_PLANAR conversion failed: %s\n", exc.what());
+    std::fprintf(stderr, "cortex: CORTEX_Q6_PLANAR conversion failed: %s\n", exc.what());
     return weights;
 }
 
@@ -3123,7 +3123,7 @@ void* native_q6_k_planar_gather(const void* planar, int n_in, const int32_t* row
     const std::size_t nb = std::size_t(nbr) * std::size_t(n_sel);
     const Q6PlanarLayout l = q6_planar_layout(nb);
     void* dev = nullptr;
-    try { dev = strata::malloc_device_guarded(l.total, q, what); } catch (...) { dev = nullptr; }
+    try { dev = cortex::malloc_device_guarded(l.total, q, what); } catch (...) { dev = nullptr; }
     if (dev == nullptr) return nullptr;
     const Q6Planar src = found->second;
     uint8_t* base = static_cast<uint8_t*>(dev);
@@ -3143,11 +3143,11 @@ void* native_q6_k_planar_gather(const void* planar, int n_in, const int32_t* row
     });
     q.wait();
     q6_planar_registry()[dev] = q6_planar_make(dev, nb, n_in, (int) n_sel);
-    std::fprintf(stderr, "strata: STRATA_Q6_PLANAR: the %s (%lld x %d) is gathered from the planar head\n", what, (long long) n_sel, n_in);
+    std::fprintf(stderr, "cortex: CORTEX_Q6_PLANAR: the %s (%lld x %d) is gathered from the planar head\n", what, (long long) n_sel, n_in);
     return dev;
 }
 catch (sycl::exception const& exc) {
-    std::fprintf(stderr, "strata: STRATA_Q6_PLANAR gather failed: %s\n", exc.what());
+    std::fprintf(stderr, "cortex: CORTEX_Q6_PLANAR gather failed: %s\n", exc.what());
     return nullptr;
 }
 
@@ -3211,10 +3211,10 @@ bool native_q6_k_pack(const void *weights, int n_in, int n_out,
                  reinterpret_cast<const sycl::half *>(base + o_d),
                  n_in,
                  n_out};
-    std::fprintf(stderr, "strata: STRATA_Q6_PACKED=1 packed the %s (%d x %d, +%.1f MiB)\n", what, n_out, n_in,
+    std::fprintf(stderr, "cortex: CORTEX_Q6_PACKED=1 packed the %s (%d x %d, +%.1f MiB)\n", what, n_out, n_in,
                  total / 1048576.0);
-    // STRATA_Q6P_SELFTEST=1: bitwise check against the GGUF-layout kernels (1..4 columns) and paired timings
-    if (const char* v = std::getenv("STRATA_Q6P_SELFTEST"); v && (v[0] == '1' || v[0] == '2')) {
+    // CORTEX_Q6P_SELFTEST=1: bitwise check against the GGUF-layout kernels (1..4 columns) and paired timings
+    if (const char* v = std::getenv("CORTEX_Q6P_SELFTEST"); v && (v[0] == '1' || v[0] == '2')) {
         dpct::queue_ptr s = &dpct::get_in_order_queue();
         /*
         DPCT1025: The SYCL queue is created ignoring the flag and priority
@@ -3280,10 +3280,10 @@ bool native_q6_k_pack(const void *weights, int n_in, int n_out,
             }
             g_q6_bypass = false;
             std::sort(tb.begin(), tb.end()); std::sort(tc.begin(), tc.end());
-            std::fprintf(stderr, "strata: Q6_K packed self-test %s ncols %d: GGUF %.1f us (%.1f-%.1f), packed %.1f us "
+            std::fprintf(stderr, "cortex: Q6_K packed self-test %s ncols %d: GGUF %.1f us (%.1f-%.1f), packed %.1f us "
                          "(%.1f-%.1f), 11 paired samples\n", what, nc, tb[5], tb[0], tb[10], tc[5], tc[0], tc[10]);
         }
-        std::fprintf(stderr, "strata: Q6_K packed self-test %s: outputs %s (1-4 columns)\n", what,
+        std::fprintf(stderr, "cortex: Q6_K packed self-test %s: outputs %s (1-4 columns)\n", what,
                      same ? "BITWISE EQUAL" : "DIFFER");
         if (v[0] == '2') {   // grid sweep of the packed kernel
             for (int grid : {160, 320, 640, 1280, 2560, 5120, 20480}) {
@@ -3305,7 +3305,7 @@ bool native_q6_k_pack(const void *weights, int n_in, int n_out,
                         tc.push_back(ms * 1000.0f / 5);
                     }
                     std::sort(tc.begin(), tc.end());
-                    std::fprintf(stderr, "strata: Q6_K packed grid sweep %s grid %d ncols %d: %.1f us (%.1f-%.1f)\n",
+                    std::fprintf(stderr, "cortex: Q6_K packed grid sweep %s grid %d ncols %d: %.1f us (%.1f-%.1f)\n",
                                  what, grid, nc, tc[3], tc[0], tc[6]);
                 }
             }
@@ -3339,7 +3339,7 @@ void native_mmvq_set_multi_exact(bool exact) { g_multi_exact = exact; }
 void native_mmvq_set_q6k_wide(bool on) { g_q6k_wide = on; }
 void native_q6_k_mmvq_stride224(const void* weights, const void* x_q8_1, float* y, int n_in, int n_out, int ncols,
                                 void* stream) {
-    const auto s = strata::q_of(stream);
+    const auto s = cortex::q_of(stream);
     switch (ncols) {
         case 1: launch_q6k_wide224<1>(weights, x_q8_1, y, n_in, n_out, s); return;
         case 2: launch_q6k_wide224<2>(weights, x_q8_1, y, n_in, n_out, s); return;
@@ -3368,7 +3368,7 @@ void native_quantize_q8_1(const float* x, void* x_q8_1, int n_in, int ncols, voi
         auto exp_props = sycl::ext::oneapi::experimental::properties{
             sycl::ext::oneapi::experimental::use_root_sync};
 
-        ((sycl::queue *)(strata::q_of(stream)))
+        ((sycl::queue *)(cortex::q_of(stream)))
             ->parallel_for<
                 dpct_kernel_name<class native_quantize_q8_1_kernel_b480d2>>(
                 sycl::nd_range<3>(sycl::range(1, 1, blocks) *
@@ -3397,11 +3397,11 @@ void native_swiglu_quantize_q8_1(const float* gate, const float* up, void* x_q8_
         auto exp_props = sycl::ext::oneapi::experimental::properties{
             sycl::ext::oneapi::experimental::use_root_sync};
         dpct::has_capability_or_fail(
-            ((sycl::queue *)(strata::q_of(stream)))
+            ((sycl::queue *)(cortex::q_of(stream)))
                 ->get_device(),
             {sycl::aspect::fp16});
 
-        ((sycl::queue *)(strata::q_of(stream)))
+        ((sycl::queue *)(cortex::q_of(stream)))
             ->parallel_for<dpct_kernel_name<
                 class native_swiglu_quantize_q8_1_kernel_85e13e>>(
                 sycl::nd_range<3>(sycl::range(1, 1, blocks) *
@@ -3426,7 +3426,7 @@ void native_q5_k_mmvq(const void* weights, const void* x_q8_1, float* y,
     validate_pointer(y);
     validate_stream(stream);
     if (try_wide<WideQ5K>(weights, x_q8_1, y, n_in, n_out, ncols, stream)) { launch_check(); return; }
-    STRATA_WAVE_MMVQ(Q5KTraits)
+    CORTEX_WAVE_MMVQ(Q5KTraits)
     if (ncols > 1) {
         launch_multi<Q5KTraits>(weights, x_q8_1, y, n_in, n_out, ncols, stream);
         launch_check();
@@ -3434,7 +3434,7 @@ void native_q5_k_mmvq(const void* weights, const void* x_q8_1, float* y,
     }
     const auto* w = static_cast<const Q5KBlock*>(weights);
     const auto* x = static_cast<const Q81Block*>(x_q8_1);
-    const auto s = strata::q_of(stream);
+    const auto s = cortex::q_of(stream);
     const dpct::dim3 threads(WARP, WARPS);
     if (n_in / QK < VDR * WARPS * WARP / QI) {
         const unsigned blocks = unsigned((std::size_t(n_out) + WARPS - 1) / WARPS);
@@ -3502,7 +3502,7 @@ void native_q2_0_mmvq(const void* weights, const void* x_q8_1, float* y,
     validate_pointer(x_q8_1);
     validate_pointer(y);
     validate_stream(stream);
-    STRATA_WAVE_MMVQ(Q20Traits)
+    CORTEX_WAVE_MMVQ(Q20Traits)
     if (ncols > 1) {
         launch_multi<Q20Traits>(weights, x_q8_1, y, n_in, n_out, ncols, stream);
         launch_check();
@@ -3510,7 +3510,7 @@ void native_q2_0_mmvq(const void* weights, const void* x_q8_1, float* y,
     }
     const auto* w = static_cast<const Q20Block*>(weights);
     const auto* x = static_cast<const Q81Block*>(x_q8_1);
-    const auto s = strata::q_of(stream);
+    const auto s = cortex::q_of(stream);
     const dpct::dim3 threads(WARP, WARPS);
     if (n_in / 64 < WARPS * WARP / 2) {
         const unsigned blocks = unsigned((std::size_t(n_out) + WARPS - 1) / WARPS);
@@ -3575,7 +3575,7 @@ void native_q3_k_mmvq(const void* weights, const void* x_q8_1, float* y,
     validate_pointer(x_q8_1);
     validate_pointer(y);
     validate_stream(stream);
-    STRATA_WAVE_MMVQ(Q3KTraits)
+    CORTEX_WAVE_MMVQ(Q3KTraits)
     if (ncols > 1) {
         launch_multi<Q3KTraits>(weights, x_q8_1, y, n_in, n_out, ncols, stream);
         launch_check();
@@ -3583,7 +3583,7 @@ void native_q3_k_mmvq(const void* weights, const void* x_q8_1, float* y,
     }
     const auto* w = static_cast<const Q3KBlock*>(weights);
     const auto* x = static_cast<const Q81Block*>(x_q8_1);
-    const auto s = strata::q_of(stream);
+    const auto s = cortex::q_of(stream);
     const dpct::dim3 threads(WARP, WARPS);
     if (n_in / 256 < WARPS * WARP / 16) {
         const unsigned blocks = unsigned((std::size_t(n_out) + WARPS - 1) / WARPS);
@@ -3649,7 +3649,7 @@ void native_iq4_xs_mmvq(const void* weights, const void* x_q8_1, float* y,
     validate_pointer(y);
     validate_stream(stream);
     if (try_wide<WideIQ4XS>(weights, x_q8_1, y, n_in, n_out, ncols, stream)) { launch_check(); return; }
-    STRATA_WAVE_MMVQ(IQ4XSTraits)
+    CORTEX_WAVE_MMVQ(IQ4XSTraits)
     if (ncols > 1) {
         launch_multi<IQ4XSTraits>(weights, x_q8_1, y, n_in, n_out, ncols, stream);
         launch_check();
@@ -3657,7 +3657,7 @@ void native_iq4_xs_mmvq(const void* weights, const void* x_q8_1, float* y,
     }
     const auto* w = static_cast<const IQ4XSBlock*>(weights);
     const auto* x = static_cast<const Q81Block*>(x_q8_1);
-    const auto s = strata::q_of(stream);
+    const auto s = cortex::q_of(stream);
     const dpct::dim3 threads(WARP, WARPS);
     if (n_in / 256 < 4 * WARPS * WARP / 32) {
         const unsigned blocks = unsigned((std::size_t(n_out) + WARPS - 1) / WARPS);
@@ -3740,7 +3740,7 @@ void native_q4_k_mmvq(const void* weights, const void* x_q8_1, float* y,
     validate_pointer(y);
     validate_stream(stream);
     if (try_wide<WideQ4K>(weights, x_q8_1, y, n_in, n_out, ncols, stream)) { launch_check(); return; }
-    STRATA_WAVE_MMVQ(Q4KTraits)
+    CORTEX_WAVE_MMVQ(Q4KTraits)
     if (ncols > 1) {
         launch_multi<Q4KTraits>(weights, x_q8_1, y, n_in, n_out, ncols, stream);
         launch_check();
@@ -3748,7 +3748,7 @@ void native_q4_k_mmvq(const void* weights, const void* x_q8_1, float* y,
     }
     const auto* w = static_cast<const Q4KBlock*>(weights);
     const auto* x = static_cast<const Q81Block*>(x_q8_1);
-    const auto s = strata::q_of(stream);
+    const auto s = cortex::q_of(stream);
     const dpct::dim3 threads(WARP, WARPS);
     if (n_in / 256 < WARPS * WARP / 16) {
         const unsigned blocks = unsigned((std::size_t(n_out) + WARPS - 1) / WARPS);
@@ -3809,16 +3809,16 @@ void native_q4_k_f32(const void* weights, const float* x, void* scratch_q8_1,
 
 void native_q6_k_mmvq(const void* weights, const void* x_q8_1, float* y,
                       int n_in, int n_out, int ncols, void* stream) {
-    if (q6_packed_mmvq(weights, x_q8_1, y, n_in, n_out, ncols, stream)) return;   // STRATA_Q6_PACKED=1 heads
-    if (q6_planar_mmvq(weights, x_q8_1, y, n_in, n_out, ncols, stream)) return;   // STRATA_Q6_PLANAR copies
+    if (q6_packed_mmvq(weights, x_q8_1, y, n_in, n_out, ncols, stream)) return;   // CORTEX_Q6_PACKED=1 heads
+    if (q6_planar_mmvq(weights, x_q8_1, y, n_in, n_out, ncols, stream)) return;   // CORTEX_Q6_PLANAR copies
     // SYCL port: 16-byte-load kernel for the decode shapes (ncols <= 4)
     // With the aligned loads (load16_a2) the wide kernel wins on every Q6_K shape and window width: 2.6-3.4x the
     // misaligned-load kernels in q6k_align_bench, decode 44.9 -> 54 tok/s on the Coder, output tokens identical.
-    // Without them (STRATA_MMVQ_A2=0) it won only on n_out >= 4096 at 1-4 columns, the old gate.
-    static const int wide_min = std::getenv("STRATA_MMVQ_WIDE_MIN") ? std::atoi(std::getenv("STRATA_MMVQ_WIDE_MIN")) : q6k_a2() ? 0 : 4096;
-    static const int wide_maxc = std::getenv("STRATA_MMVQ_WIDE_MAXC") ? std::atoi(std::getenv("STRATA_MMVQ_WIDE_MAXC")) : q6k_a2() ? 8 : 4;
+    // Without them (CORTEX_MMVQ_A2=0) it won only on n_out >= 4096 at 1-4 columns, the old gate.
+    static const int wide_min = std::getenv("CORTEX_MMVQ_WIDE_MIN") ? std::atoi(std::getenv("CORTEX_MMVQ_WIDE_MIN")) : q6k_a2() ? 0 : 4096;
+    static const int wide_maxc = std::getenv("CORTEX_MMVQ_WIDE_MAXC") ? std::atoi(std::getenv("CORTEX_MMVQ_WIDE_MAXC")) : q6k_a2() ? 8 : 4;
     if (g_q6k_wide && ncols >= 1 && ncols <= wide_maxc && n_in % 256 == 0 && n_out >= wide_min) {
-        const auto s = strata::q_of(stream);
+        const auto s = cortex::q_of(stream);
         switch (ncols) {
             case 1: launch_q6k_wide<1>(weights, x_q8_1, y, n_in, n_out, s); return;
             case 2: launch_q6k_wide<2>(weights, x_q8_1, y, n_in, n_out, s); return;
@@ -3832,12 +3832,12 @@ void native_q6_k_mmvq(const void* weights, const void* x_q8_1, float* y,
     }
     // SYCL port: the row-blocked kernel for the decode shapes (ncols <= 4)
     if (ncols >= 1 && ncols <= 4 && rowwarp_rpw() > 0 && n_in % 256 == 0) {
-        dpct::queue_ptr s = strata::q_of(stream);
+        dpct::queue_ptr s = cortex::q_of(stream);
         const int rpw = rowwarp_rpw();
-#define STRATA_RW(NC, RP) if (ncols == NC && rpw == RP) { launch_rowwarp<Q6KTraits, NC, RP>(weights, x_q8_1, y, n_in, n_out, s); return; }
-        STRATA_RW(1, 1) STRATA_RW(1, 2) STRATA_RW(1, 4) STRATA_RW(2, 1) STRATA_RW(2, 2) STRATA_RW(2, 4)
-        STRATA_RW(3, 1) STRATA_RW(3, 2) STRATA_RW(3, 4) STRATA_RW(4, 1) STRATA_RW(4, 2) STRATA_RW(4, 4)
-#undef STRATA_RW
+#define CORTEX_RW(NC, RP) if (ncols == NC && rpw == RP) { launch_rowwarp<Q6KTraits, NC, RP>(weights, x_q8_1, y, n_in, n_out, s); return; }
+        CORTEX_RW(1, 1) CORTEX_RW(1, 2) CORTEX_RW(1, 4) CORTEX_RW(2, 1) CORTEX_RW(2, 2) CORTEX_RW(2, 4)
+        CORTEX_RW(3, 1) CORTEX_RW(3, 2) CORTEX_RW(3, 4) CORTEX_RW(4, 1) CORTEX_RW(4, 2) CORTEX_RW(4, 4)
+#undef CORTEX_RW
     }
 
     validate_shape(n_in, ncols, 256);
@@ -3846,7 +3846,7 @@ void native_q6_k_mmvq(const void* weights, const void* x_q8_1, float* y,
     validate_pointer(x_q8_1);
     validate_pointer(y);
     validate_stream(stream);
-    STRATA_WAVE_MMVQ(Q6KTraits)
+    CORTEX_WAVE_MMVQ(Q6KTraits)
     if (ncols > 1) {
         launch_multi<Q6KTraits>(weights, x_q8_1, y, n_in, n_out, ncols, stream);
         launch_check();
@@ -3854,7 +3854,7 @@ void native_q6_k_mmvq(const void* weights, const void* x_q8_1, float* y,
     }
     const auto* w = static_cast<const Q6KBlock*>(weights);
     const auto* x = static_cast<const Q81Block*>(x_q8_1);
-    const auto s = strata::q_of(stream);
+    const auto s = cortex::q_of(stream);
     const dpct::dim3 threads(WARP, WARPS);
     if (n_in / 256 < WARPS * WARP / 32) {
         const unsigned blocks = unsigned((std::size_t(n_out) + WARPS - 1) / WARPS);
@@ -3996,7 +3996,7 @@ bool native_mmvq_pair(int ggml_type, const void* w1, const void* w2, const void*
     const auto* a = static_cast<const Q80Block*>(w1);
     const auto* b = static_cast<const Q80Block*>(w2);
     const auto* x = static_cast<const Q81Block*>(x_q8_1);
-    const auto s = strata::q_of(stream);
+    const auto s = cortex::q_of(stream);
     switch (ncols) {
         case 2: q8_0_pair_launch<2>(a, b, x, y1, y2, n_in, n_out, s); break;
         case 3: q8_0_pair_launch<3>(a, b, x, y1, y2, n_in, n_out, s); break;
@@ -4012,7 +4012,7 @@ bool native_mmvq_pair(int ggml_type, const void* w1, const void* w2, const void*
 
 void native_q8_0_mmvq(const void* weights, const void* x_q8_1, float* y,
                        int n_in, int n_out, int ncols, void* stream) {
-    if (q8_packed_mmvq(weights, x_q8_1, y, n_in, n_out, ncols, stream)) return;   // STRATA_Q8_PACKED=1 tensors
+    if (q8_packed_mmvq(weights, x_q8_1, y, n_in, n_out, ncols, stream)) return;   // CORTEX_Q8_PACKED=1 tensors
     if (try_wide32<Wide32Q8>(weights, x_q8_1, y, n_in, n_out, ncols, stream)) { launch_check(); return; }
     small_mmvq<Q80Block, 8>(weights, x_q8_1, y, n_in, n_out, ncols, stream);
 }
@@ -4087,4 +4087,4 @@ void native_mmvq(int ggml_type, const void* weights, const void* x_q8_1, float* 
     }
 }
 
-} // namespace strata::kernels
+} // namespace cortex::kernels

@@ -1,12 +1,12 @@
 #!/bin/bash
-# Smoke test of one Strata image on a real card (docs/DOCKER.md, "Build it yourself"). Run it under your own GPU lock if the box is shared.
+# Smoke test of one Cortex image on a real card (docs/DOCKER.md, "Build it yourself"). Run it under your own GPU lock if the box is shared.
 #
-#   IMAGE=strata:0.1.45-sycl NAME=strata-t PORT=18080 BASE=http://127.0.0.1:18080 \
+#   IMAGE=cortex:0.1.45-sycl NAME=cortex-t PORT=18080 BASE=http://127.0.0.1:18080 \
 #   RUN_FLAGS="--device /dev/dri -p 18080:8080" ENVS="-e MODEL=IQ3_S -e MODEL_PATH=/models -e API_KEY=..." VOLS="-v $HOME/dt/data:/data -v /m:/models:ro" \
 #   GPU_USED_CMD='nvidia-smi --query-gpu=memory.used --format=csv,noheader' OUT=$HOME/dt/out docker/smoke-test.sh
 #
-# Steps: run -> wait for the model (health check) -> GET /v1/models -> pong chat -> tool call -> docker exec strata monitor --once ->
-# strata connect opencode --check (from inside) -> docker stop (time, exit code, log) -> GPU memory back, no strata process left.
+# Steps: run -> wait for the model (health check) -> GET /v1/models -> pong chat -> tool call -> docker exec cortex monitor --once ->
+# cortex connect opencode --check (from inside) -> docker stop (time, exit code, log) -> GPU memory back, no cortex process left.
 set -u
 : "${IMAGE:?}" "${NAME:?}" "${BASE:?}" "${OUT:?}"
 DOCKER=${DOCKER:-docker}
@@ -21,9 +21,9 @@ fail=0
 ok() { echo "PASS: $*"; }
 bad() { echo "FAIL: $*"; fail=1; }
 gpu_used() { if [ -n "${GPU_USED_CMD:-}" ]; then bash -c "$GPU_USED_CMD" 2>&1 | head -3 | tr '\n' ' '; else echo n/a; fi; }
-procs() { pgrep -af "strata --serve|strata.py (serve|runtime)" | grep -v -E "pgrep|test_container|bash -c" | cut -c1-120; }
+procs() { pgrep -af "cortex --serve|cortex.py (serve|runtime)" | grep -v -E "pgrep|test_container|bash -c" | cut -c1-120; }
 
-step "before: GPU used = $(gpu_used); strata-like host processes:"; procs
+step "before: GPU used = $(gpu_used); cortex-like host processes:"; procs
 $DOCKER rm -f "$NAME" >/dev/null 2>&1
 step "docker run"
 # shellcheck disable=SC2086
@@ -49,7 +49,7 @@ step "GET /v1/models"
 models=$(curl -s -m 10 -H "Authorization: Bearer $KEY" "$BASE/v1/models"); echo "$models" | cut -c1-300
 echo "$models" | grep -q '"data"' && ok "GET /v1/models" || bad "GET /v1/models"
 code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 "$BASE/v1/models"); [ "$code" = "401" ] && ok "no key -> 401" || bad "no key gave $code (expected 401)"
-MODEL=$(echo "$models" | python3 -c 'import sys,json; print(json.load(sys.stdin)["data"][0]["id"])' 2>/dev/null || echo strata)
+MODEL=$(echo "$models" | python3 -c 'import sys,json; print(json.load(sys.stdin)["data"][0]["id"])' 2>/dev/null || echo cortex)
 
 step "pong chat"
 r=$(curl -s -m 300 -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' "$BASE/v1/chat/completions" \
@@ -67,12 +67,12 @@ m=json.load(sys.stdin)["choices"][0]["message"]; tc=m.get("tool_calls") or []
 print("tool_calls:",[(t["function"]["name"],t["function"]["arguments"]) for t in tc])
 sys.exit(0 if tc and tc[0]["function"]["name"]=="get_weather" and "paris" in tc[0]["function"]["arguments"].lower() else 1)' && ok "tool call get_weather(Paris)" || bad "tool call"
 
-step "docker exec strata monitor --once (no key typed: the wrapper supplies it)"
-$DOCKER exec "$NAME" strata monitor --once 2>&1 | head -40 && ok "monitor --once ran" || bad "monitor --once"
-step "docker exec strata status"
-$DOCKER exec "$NAME" strata status 2>&1 | head -12
-step "docker exec strata connect opencode --check (inside the container)"
-chk=$($DOCKER exec "$NAME" strata connect opencode --check 2>&1); echo "$chk" | tail -8
+step "docker exec cortex monitor --once (no key typed: the wrapper supplies it)"
+$DOCKER exec "$NAME" cortex monitor --once 2>&1 | head -40 && ok "monitor --once ran" || bad "monitor --once"
+step "docker exec cortex status"
+$DOCKER exec "$NAME" cortex status 2>&1 | head -12
+step "docker exec cortex connect opencode --check (inside the container)"
+chk=$($DOCKER exec "$NAME" cortex connect opencode --check 2>&1); echo "$chk" | tail -8
 echo "$chk" | grep -q "^FAIL" && bad "connect opencode --check reported a failure (model answered in words instead of calling the tool? see above)" || ok "connect opencode --check: prompt and tool call"
 step "GPU used while serving: $(gpu_used)"
 step "docker stats / health"
@@ -89,7 +89,7 @@ echo "stop took $((s1 - s0))s, exit code $ec"
 $DOCKER logs --tail 12 "$NAME" 2>&1 | cut -c1-200
 sleep 3
 echo "GPU used after stop: $(gpu_used)"
-leftover=$(procs); [ -z "$leftover" ] && ok "no strata process left on the host" || { bad "processes left:"; echo "$leftover"; }
+leftover=$(procs); [ -z "$leftover" ] && ok "no cortex process left on the host" || { bad "processes left:"; echo "$leftover"; }
 
 if [ "${RESTART:-1}" = "1" ]; then
   step "docker start (second start: the preset in /data is reused, no download)"

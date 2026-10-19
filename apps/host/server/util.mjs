@@ -1,4 +1,4 @@
-/** Shared helpers for the Strata host. */
+/** Shared helpers for the Cortex host. */
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';

@@ -1,7 +1,7 @@
-STRATA FOR MAC - APP (Strata @APP_VERSION@)
+CORTEX FOR MAC - APP (Cortex @APP_VERSION@)
 ==========================================
 
-This is the Strata desktop app for Macs with Apple silicon (M1 or newer). The AI engine (it runs on the Mac's graphics processor through
+This is the Cortex desktop app for Macs with Apple silicon (M1 or newer). The AI engine (it runs on the Mac's graphics processor through
 Metal) is already inside the app, so there is nothing to install for it and no engine to download. Only the AI model itself is
 downloaded (from Hugging Face), when you pick one.
 
@@ -19,13 +19,13 @@ WHAT YOU NEED
 
 START IT
 --------
-1. Double-click @APPIMAGE@. A window opens with Strata and the Applications folder.
-2. Drag Strata onto Applications.
-3. Open Strata from Applications (or Launchpad). The first start takes a little longer, because the engine inside the app is copied
+1. Double-click @APPIMAGE@. A window opens with Cortex and the Applications folder.
+2. Drag Cortex onto Applications.
+3. Open Cortex from Applications (or Launchpad). The first start takes a little longer, because the engine inside the app is copied
    into your home folder. Then open the Models page, pick a model and press the install button. A model download is big; it carries
    on where it stopped if it is interrupted.
 
-Closing the window stops Strata and its engine.
+Closing the window stops Cortex and its engine.
 
 Pictures: this Mac build has no picture reader yet, so models read text only here. Picture input works on the Windows and
 Linux builds.

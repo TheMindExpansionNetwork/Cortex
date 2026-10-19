@@ -1,11 +1,11 @@
 /**
- * The owner's "open my Downloads folder" in each Mode through the real app, with screenshots.  STRATA_URL, SHOTS, MODEL (picker text).
+ * The owner's "open my Downloads folder" in each Mode through the real app, with screenshots.  CORTEX_URL, SHOTS, MODEL (picker text).
  * Manual: the folder is NOT opened until the one Approve card is approved; Plan: nothing changes and no card asks; Bypass: it just opens.
  */
 import { chromium } from 'playwright-core';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-const BASE = process.env.STRATA_URL; if (!BASE) { console.error('STRATA_URL required'); process.exit(2); }
+const BASE = process.env.CORTEX_URL; if (!BASE) { console.error('CORTEX_URL required'); process.exit(2); }
 const SHOTS = resolve(process.env.SHOTS ?? 'mode-shots'); mkdirSync(SHOTS, { recursive: true });
 const MODEL = process.env.MODEL ?? 'Cloud model';
 const PROMPT = process.env.PROMPT ?? 'open my Downloads folder';

@@ -18,7 +18,7 @@ test('unknown download totals never invent a countdown',()=>{
 });
 test('storage errors expose needed/free space without paths or command flags',()=>{
  for(const location of ['/Users/name/Documents/Private','D:\\private\\weights']){
-  const result=onboardingError(`Not enough free disk space for Q2_0: about 75 GB needed at ${location}, 18 GB free; choose data_dir (e.g. D:\\Strata-data)`);
+  const result=onboardingError(`Not enough free disk space for Q2_0: about 75 GB needed at ${location}, 18 GB free; choose data_dir (e.g. D:\\Cortex-data)`);
   assert.equal(result.storage,true);assert.equal(result.message,'This model needs about 75 GB. You have 18 GB free.');
   assert.equal(JSON.stringify(result).includes(location),false);assert.equal(JSON.stringify(result).includes('data_dir'),false);
  }
@@ -26,7 +26,7 @@ test('storage errors expose needed/free space without paths or command flags',()
  assert.equal(onboardingError('Network unavailable').message,'Network unavailable');
 });
 test('default folder labels are readable across platform separators',()=>{
- assert.equal(modelFolderLabel('C:\\Users\\Me\\Documents\\Strata\\Models'),'Documents / Strata / Models');
- assert.equal(modelFolderLabel('/home/me/Documents/Strata/Models'),'Documents / Strata / Models');
+ assert.equal(modelFolderLabel('C:\\Users\\Me\\Documents\\Cortex\\Models'),'Documents / Cortex / Models');
+ assert.equal(modelFolderLabel('/home/me/Documents/Cortex/Models'),'Documents / Cortex / Models');
  assert.equal(modelFolderLabel('/mnt/external/models'),'/mnt/external/models');
 });

@@ -23,8 +23,8 @@ import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 
 const run = promisify(execFile);
-const BASE = process.env.STRATA_URL ?? 'http://localhost:5199';
-const ROOT = resolve(process.env.STRATA_SHOTS ?? '.shots');
+const BASE = process.env.CORTEX_URL ?? 'http://localhost:5199';
+const ROOT = resolve(process.env.CORTEX_SHOTS ?? '.shots');
 const TMP = join(ROOT, 'motion-frames');
 mkdirSync(TMP, { recursive: true });
 
@@ -239,8 +239,8 @@ try {
          modal may be covering — the setup screen renders one over the whole
          window, and clicking through it timed out. */
       await page.evaluate(() => {
-        const raw = JSON.parse(localStorage.getItem('strata.prefs.v2') ?? '{}');
-        localStorage.setItem('strata.prefs.v2', JSON.stringify({ ...raw, theme: 'dark' }));
+        const raw = JSON.parse(localStorage.getItem('cortex.prefs.v2') ?? '{}');
+        localStorage.setItem('cortex.prefs.v2', JSON.stringify({ ...raw, theme: 'dark' }));
       });
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(1200);

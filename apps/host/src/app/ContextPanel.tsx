@@ -15,7 +15,7 @@ export function ContextPanel({ session, open, inline = false, onClose }: {
     const library = useStore(s => s.library);
     const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
         try {
-            return JSON.parse(localStorage.getItem('strata.inspector-sections') ?? '{"conversation":true}');
+            return JSON.parse(localStorage.getItem('cortex.inspector-sections') ?? '{"conversation":true}');
         }
         catch {
             return { conversation: true };
@@ -31,7 +31,7 @@ export function ContextPanel({ session, open, inline = false, onClose }: {
     function change(key: string, value: boolean) {
         const next = { ...expanded, [key]: value };
         setExpanded(next);
-        localStorage.setItem('strata.inspector-sections', JSON.stringify(next));
+        localStorage.setItem('cortex.inspector-sections', JSON.stringify(next));
     }
     const content = <aside className="contextpanel" aria-label={tr("Conversation context")}>
     <header className="contextpanel__head st-card__head"><div><h2 className="h4">{tr("Conversation context")}</h2><p className="xs muted">{session ? sessionTitle(session) : tr('No conversation selected')}</p></div><IconBtn name="x" title={tr("Close conversation context")} onClick={onClose}/></header>

@@ -17,11 +17,11 @@
 // and per expert (native_gu_rows -> native_quant_h -> native_down_rows, the engine's entry points, which now take
 // these kernels) against the same expert computed with ggml-cpu's vec_dot: float rounding plus the odd Q8_0
 // rounding flip of the intermediate.
-#include "strata/kernels/cpu/tq_cpu.hpp"
-#include "strata/kernels/cpu/native_expert.hpp"
-#include "strata/kernels/cpu/expert.hpp"
-#include "strata/kernels/cpu/expert_layout.hpp"
-#include "strata/kernels/cpu/hadamard.hpp"
+#include "cortex/kernels/cpu/tq_cpu.hpp"
+#include "cortex/kernels/cpu/native_expert.hpp"
+#include "cortex/kernels/cpu/expert.hpp"
+#include "cortex/kernels/cpu/expert_layout.hpp"
+#include "cortex/kernels/cpu/hadamard.hpp"
 
 #include "ggml.h"
 #include "ggml-cpu.h"
@@ -39,7 +39,7 @@
 #include <thread>
 #include <vector>
 
-using namespace strata::kernels::cpu;
+using namespace cortex::kernels::cpu;
 
 namespace {
 
@@ -333,14 +333,14 @@ double time_parallel(const std::vector<BenchExpert>& ex, const ExpertFn& fn, int
 int bench(bool quick, const std::string& only) {
     const int ncold = quick ? 48 : 96;   // ~50-130 MB of weights: past the last-level cache
     std::printf("CPU: %s | AVX-512 kernels: %s, AVX2: %s | ggml-cpu built for this CPU (-march=native unless "
-                "STRATA_PORTABLE)\n", cpu_name().c_str(), cpu_avx512_ok() ? "yes" : "no", cpu_avx2_ok() ? "yes" : "no");
+                "CORTEX_PORTABLE)\n", cpu_name().c_str(), cpu_avx512_ok() ? "yes" : "no", cpu_avx2_ok() ? "yes" : "no");
     std::printf("expert = gate+up %d x %d and down %d x %d of one type, %d distinct experts cycled (their weights come "
                 "from DRAM, as a cache miss's do)\n\n", FF, H, H, FF, ncold);
     struct Variant { std::string name; int type; ExpertFn fn; bool ok; };
     std::vector<Variant> vars;
     auto add_tq = [&](int type) {
         for (TqIsa isa : {TqIsa::scalar, TqIsa::avx2, TqIsa::avx512}) {
-            vars.push_back({std::string("strata ") + tq_isa_name(isa), type,
+            vars.push_back({std::string("cortex ") + tq_isa_name(isa), type,
                             [type, isa](const BenchExpert& e, int nt) {
                                 thread_local std::vector<uint8_t> a, h;
                                 thread_local std::vector<float> ff, out;
@@ -383,7 +383,7 @@ int bench(bool quick, const std::string& only) {
                         true});
     };
     auto add_q2 = [&](bool avx512) {
-        vars.push_back({avx512 ? "strata Q2_0 avx512" : "strata Q2_0 avx2", 42,
+        vars.push_back({avx512 ? "cortex Q2_0 avx512" : "cortex Q2_0 avx2", 42,
                         [avx512](const BenchExpert& e, int nt) {
                             thread_local ActQ a1[MAXT], a2[MAXT];
                             thread_local bool init = false;
@@ -412,7 +412,7 @@ int bench(bool quick, const std::string& only) {
     add_q2(false);
     add_q2(true);
     // the Q2_0 pack's own AVX-512 kernel (the repacked 1,382,400-byte blob that setup makes on AVX-512 CPUs)
-    vars.push_back({"strata Q2_0 avx512 pack", 42,
+    vars.push_back({"cortex Q2_0 avx512 pack", 42,
                     [](const BenchExpert& e, int nt) {
                         thread_local ActQ a1, a2;
                         thread_local bool init = false;
@@ -534,7 +534,7 @@ int bench(bool quick, const std::string& only) {
 int main(int argc, char** argv) {
     ggml_cpu_init();
     if (GGML_TYPE_COUNT <= 146) {
-        std::fprintf(stderr, "this ggml has no trellis types (build with STRATA_GGML_DIR = the agention llama.cpp fork)\n");
+        std::fprintf(stderr, "this ggml has no trellis types (build with CORTEX_GGML_DIR = the agention llama.cpp fork)\n");
         return 1;
     }
     if (argc >= 2 && std::strcmp(argv[1], "--bench") == 0) {   // --bench [--quick] [--only <kernel name part>]

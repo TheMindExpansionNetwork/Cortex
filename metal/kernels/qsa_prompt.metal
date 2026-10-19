@@ -8,8 +8,8 @@
 // The operands are fp16 (q rounded from fp32; k, v = int8 * scale rounded): to rounding of qsa_attn's fp32.
 #include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>
 using namespace mpp::tensor_ops;
-#ifndef STRATA_COOP_K4
-#define STRATA_COOP_K4
+#ifndef CORTEX_COOP_K4
+#define CORTEX_COOP_K4
 // function constant 7: the right-input cooperative tensor holds runs of 4 consecutive k at one n per lane (the M5's
 // layout; tests/coop_layout).  false (the M4: runs of 2 n at one k): every element decoded on its own.
 constant bool COOP_K4 [[function_constant(7)]];

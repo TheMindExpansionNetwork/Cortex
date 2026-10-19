@@ -49,7 +49,7 @@ export function UsageDashboard({ loaded }: {
     const peak = usage.peakHour === null ? '—' : new Date(2026, 0, 1, usage.peakHour).toLocaleTimeString(localeTag(), { hour: 'numeric', minute: '2-digit' });
     const firstChat = !sessions.some(s => !s.showcase && s.messages.some(m => m.role === 'user' && !m.example && !m.timeSkipId));
     if (firstChat && canChat)
-        return <section className="first-chat-start" aria-label={tr("Start your first chat")}><span className="first-chat-mark"><Brand variant="mark" height={38} decorative/><span className="first-chat-status"><Icon name="check" size={11}/></span></span><h2>{tr("Hello, I\u2019m Strata.")}</h2><p>{tr("Say hello, or jump straight in.")}</p></section>;
+        return <section className="first-chat-start" aria-label={tr("Start your first chat")}><span className="first-chat-mark"><Brand variant="mark" height={38} decorative/><span className="first-chat-status"><Icon name="check" size={11}/></span></span><h2>{tr("Hello, I\u2019m Cortex.")}</h2><p>{tr("Say hello, or jump straight in.")}</p></section>;
     return <section className="usage-home" aria-label={tr("Usage dashboard")}>
     <h2>{tr("What do we start with?")}</h2>
     <div className="usage-card">

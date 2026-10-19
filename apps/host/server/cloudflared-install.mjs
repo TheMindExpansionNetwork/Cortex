@@ -1,4 +1,4 @@
-/** Install the official connector into Strata's own data folder, without sudo. */
+/** Install the official connector into Cortex's own data folder, without sudo. */
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, lstat, rename, rm, chmod, writeFile, access } from 'node:fs/promises';
@@ -35,7 +35,7 @@ export function createConnectorInstaller({ directory, componentDirectory = null,
   const name = platform === 'win32' ? 'cloudflared.exe' : 'cloudflared';
   const binary = join(directory, name);
   let installing = null, last = { found: null, skipped: [] };
-  /** Strata's own folder first, then the component folder, PATH and the usual install places (cloudflared-find.mjs). */
+  /** Cortex's own folder first, then the component folder, PATH and the usual install places (cloudflared-find.mjs). */
   async function look() {
     last = await findConnector({ directory, componentDirectory, platform, env, home, run: runVersion, usable, search });
     return last;
@@ -52,7 +52,7 @@ export function createConnectorInstaller({ directory, componentDirectory = null,
     const name = connectorAsset(platform, arch);
     await mkdir(directory, { recursive: true });
     const stage = await mkdtemp(join(directory, '.install-'));
-    const request = url => fetchImpl(url, { signal: AbortSignal.timeout(120000), headers: { 'user-agent': 'Strata-connector-setup', accept: 'application/vnd.github+json' } });
+    const request = url => fetchImpl(url, { signal: AbortSignal.timeout(120000), headers: { 'user-agent': 'Cortex-connector-setup', accept: 'application/vnd.github+json' } });
     try {
       const metadata = await request(RELEASES);
       if (!metadata.ok) throw new Error('Cloudflare’s download service is unavailable. Try again in a moment.');

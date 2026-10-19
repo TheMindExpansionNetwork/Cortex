@@ -4,7 +4,7 @@ engines behind real schema-2 packages, the real start path for the test start.
 Proves: an update downloads (with resume), verifies signature and every hash, installs side by side, test-starts the new
 engine from a staging folder through the owner runtime, and only then switches; a failing test start leaves the old engine
 working; the previous version is kept and can be returned to; saved presets are marked, not touched; models are never
-fetched; nothing runs while an engine serves; and a start/serve process (STRATA_NO_ACQUIRE) cannot reach any of it."""
+fetched; nothing runs while an engine serves; and a start/serve process (CORTEX_NO_ACQUIRE) cannot reach any of it."""
 
 import hashlib
 import json
@@ -16,8 +16,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from strata_control import acquisition, engine_component as ec, feed as feedmod, preset_marks, signing, updater
-from strata_control.targets import host_platform
+from cortex_control import acquisition, engine_component as ec, feed as feedmod, preset_marks, signing, updater
+from cortex_control.targets import host_platform
 from tests.terminal import update_fixture as fx
 
 PLATFORM = host_platform()
@@ -26,21 +26,21 @@ WINDOWS = os.name == "nt"
 
 class UpdaterCase(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="strata-updater-")
+        self.temp = tempfile.TemporaryDirectory(prefix="cortex-updater-")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.components = self.root / "components"
         self.state_base = self.root / "state"
         self.release = self.root / "release"
         self.release.mkdir()
-        for name in ("STRATA_NO_ACQUIRE", "STRATA_API_KEY", "STRATA_REQUIRE_SIGNED_COMPONENTS", "STRATA_UPDATE_TRUSTED_KEYS"):
+        for name in ("CORTEX_NO_ACQUIRE", "CORTEX_API_KEY", "CORTEX_REQUIRE_SIGNED_COMPONENTS", "CORTEX_UPDATE_TRUSTED_KEYS"):
             patch = mock.patch.dict(os.environ)
             patch.start()
             self.addCleanup(patch.stop)
             os.environ.pop(name, None)
         env = mock.patch.dict(os.environ, {
-            "STRATA_PROFILE_DIR": str(self.root / "profiles"), "STRATA_RUNTIME_DIR": str(self.root / "runtime"),
-            "STRATA_COMPONENTS_DIR": str(self.components), "STRATA_ENGINE_BACKEND": "cuda",
+            "CORTEX_PROFILE_DIR": str(self.root / "profiles"), "CORTEX_RUNTIME_DIR": str(self.root / "runtime"),
+            "CORTEX_COMPONENTS_DIR": str(self.components), "CORTEX_ENGINE_BACKEND": "cuda",
             "FAKE_ENGINE_MARK": str(self.root / "ran.txt")})
         env.start()
         self.addCleanup(env.stop)
@@ -60,7 +60,7 @@ class UpdaterCase(unittest.TestCase):
         # tester build passes its key
         self.test_keys = self.root / "test-trust.json"
         self.test_keys.write_text(json.dumps({"keys": [signing.public_part(self.key)]}))
-        patch = mock.patch.dict(os.environ, {"STRATA_UPDATE_TRUSTED_KEYS": str(self.test_keys)})
+        patch = mock.patch.dict(os.environ, {"CORTEX_UPDATE_TRUSTED_KEYS": str(self.test_keys)})
         patch.start()
         self.addCleanup(patch.stop)
         self.hardware = {"platform": PLATFORM, "backend": "cuda", "runtime": None, "nvidia_driver": "610.47",
@@ -81,7 +81,7 @@ class UpdaterCase(unittest.TestCase):
         self.addCleanup(self._stop_runtime)
 
     def _stop_runtime(self):
-        from strata_control import runtime
+        from cortex_control import runtime
         try:
             if runtime._read_state("updtest") is not None:
                 runtime.stop("updtest", timeout=10)
@@ -89,7 +89,7 @@ class UpdaterCase(unittest.TestCase):
             pass
 
     def _run_config(self):
-        from tools.strata_tokenizer import BYTE_TO_UNICODE
+        from tools.cortex_tokenizer import BYTE_TO_UNICODE
         tokenizer = self.root / "tokenizer"
         tokenizer.mkdir()
         tokens = [BYTE_TO_UNICODE[i] for i in range(256)] + ["ab", "<|im_start|>", "<|im_end|>", "<|endoftext|>"]
@@ -400,7 +400,7 @@ class EngineUpdate(UpdaterCase):
     def test_a_process_that_forbids_acquiring_cannot_update(self):
         self.install_current()
         self.publish(("0.1.46", fx.GOOD_ENGINE))
-        with mock.patch.dict(os.environ, {"STRATA_NO_ACQUIRE": "1"}):
+        with mock.patch.dict(os.environ, {"CORTEX_NO_ACQUIRE": "1"}):
             with self.assertRaises(acquisition.AcquisitionRefused):
                 updater.run_update(self.ctx(), control=False)
             with self.assertRaises(acquisition.AcquisitionRefused):
@@ -410,9 +410,9 @@ class EngineUpdate(UpdaterCase):
     def test_a_started_engine_check_does_not_import_the_updater(self):
         """The start path (engine_component, runtime) must not reach the update machinery or the network code."""
         import subprocess
-        code = ("import sys; import strata_control.engine_component, strata_control.runtime, strata_control.acquisition; "
-                "import strata_cli.cli as c; c.parser(); "
-                "print(sorted(m for m in sys.modules if m in ('strata_control.updater','strata_control.transfer','strata_control.feed')))")
+        code = ("import sys; import cortex_control.engine_component, cortex_control.runtime, cortex_control.acquisition; "
+                "import cortex_cli.cli as c; c.parser(); "
+                "print(sorted(m for m in sys.modules if m in ('cortex_control.updater','cortex_control.transfer','cortex_control.feed')))")
         done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=str(fx.ROOT))
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(done.stdout.strip(), "[]")
@@ -425,7 +425,7 @@ class StartPathSignature(UpdaterCase):
         super().setUp()
         self.pub = self.root / "feed-key.pub.json"
         self.pub.write_text(json.dumps({"keys": [signing.public_part(self.key)]}))
-        patch = mock.patch.dict(os.environ, {"STRATA_UPDATE_TRUSTED_KEYS": str(self.pub)})
+        patch = mock.patch.dict(os.environ, {"CORTEX_UPDATE_TRUSTED_KEYS": str(self.pub)})
         patch.start()
         self.addCleanup(patch.stop)
         ec.register_signature_verifier(None)
@@ -446,7 +446,7 @@ class StartPathSignature(UpdaterCase):
 
     def test_without_trusted_keys_a_signed_package_is_unverified_and_required_signing_refuses_it(self):
         folder = fx.build_package(self.root / "signed", "0.1.46", key=self.key)
-        with mock.patch.dict(os.environ, {"STRATA_UPDATE_TRUSTED_KEYS": ""}):
+        with mock.patch.dict(os.environ, {"CORTEX_UPDATE_TRUSTED_KEYS": ""}):
             ec.register_signature_verifier(None)
             self.assertEqual(ec.verify_signature(ec.read_manifest(folder)), "unverified")
             with self.assertRaises(ec.IntegrityProblem):
@@ -457,7 +457,7 @@ class LazyModel(UpdaterCase):
     """A server that is "ready" with its model unloaded has not generated anything yet; the test start forces the load and the probe."""
 
     def run_default(self, started, verified):
-        from strata_control import runtime
+        from cortex_control import runtime
         self.install_current()
         folder = fx.build_package(self.root / "lazy", "0.1.46", key=self.key)
         stage = self.root / "stage"
@@ -484,10 +484,10 @@ class OtherComponents(UpdaterCase):
         public, secret = fx.minisign_pair()
         installer = os.urandom(5000)
         (self.release / "app").mkdir(parents=True, exist_ok=True)
-        (self.release / "app" / "Strata_setup.bin").write_bytes(installer)
+        (self.release / "app" / "Cortex_setup.bin").write_bytes(installer)
         sig = fx.minisign_sign(installer + (b"x" if tamper else b""), secret)
         app = {"version": version, "notes": "Faster starts.", "pub_date": "2026-10-15T00:00:00Z",
-               "platforms": {feedmod.TAURI_TARGETS[PLATFORM]: {"url": "app/Strata_setup.bin", "signature": sig,
+               "platforms": {feedmod.TAURI_TARGETS[PLATFORM]: {"url": "app/Cortex_setup.bin", "signature": sig,
                                                               "sha256": hashlib.sha256(installer).hexdigest(), "size": len(installer)}}}
         (self.root / "tauri.json").write_text(json.dumps(app))
         from feed_tool import build_feed
@@ -498,7 +498,7 @@ class OtherComponents(UpdaterCase):
 
     def test_the_app_installer_is_downloaded_and_its_signature_checked(self):
         public, installer = self.build_with_app()
-        ctx = self.ctx(app_version="0.1.0", environ={**os.environ, "STRATA_APP_UPDATE_PUBKEY": public})
+        ctx = self.ctx(app_version="0.1.0", environ={**os.environ, "CORTEX_APP_UPDATE_PUBKEY": public})
         report = updater.check(ctx)
         self.assertEqual((report["app"]["status"], report["app"]["offered"]), ("available", "0.2.0"))
         out = updater.run_update(ctx, engine=False, control=False, app=True)
@@ -508,11 +508,11 @@ class OtherComponents(UpdaterCase):
         self.assertEqual((self.release / "app" / "latest.json").exists(), True, "the Tauri updater's file is written beside the feed")
         self.assertEqual(self.engine_folders(), [], "an app-only update downloads 0 engine bytes")
         self.assertEqual(self.archive_requests(), [])
-        self.assertTrue(all(r[1].startswith(("/strata-feed", "/app/")) for r in self.server.requests))
+        self.assertTrue(all(r[1].startswith(("/cortex-feed", "/app/")) for r in self.server.requests))
 
     def test_an_installer_with_a_bad_signature_is_deleted(self):
         public, _ = self.build_with_app(tamper=True)
-        ctx = self.ctx(app_version="0.1.0", environ={**os.environ, "STRATA_APP_UPDATE_PUBKEY": public})
+        ctx = self.ctx(app_version="0.1.0", environ={**os.environ, "CORTEX_APP_UPDATE_PUBKEY": public})
         out = updater.run_update(ctx, engine=False, control=False, app=True)
         self.assertEqual(out["exit_code"], 5)
         self.assertIn("signature", out["results"][0]["error"])
@@ -520,7 +520,7 @@ class OtherComponents(UpdaterCase):
 
     def test_no_app_key_no_app_download(self):
         self.build_with_app()
-        ctx = self.ctx(app_version="0.1.0", environ={k: v for k, v in os.environ.items() if k != "STRATA_APP_UPDATE_PUBKEY"})
+        ctx = self.ctx(app_version="0.1.0", environ={k: v for k, v in os.environ.items() if k != "CORTEX_APP_UPDATE_PUBKEY"})
         with mock.patch.object(updater, "app_public_key", return_value=None):
             out = updater.run_update(ctx, engine=False, control=False, app=True)
         self.assertEqual(out["exit_code"], 5)
@@ -528,9 +528,9 @@ class OtherComponents(UpdaterCase):
 
     def test_control_is_staged_run_once_and_pointed_at(self):
         bundle = self.root / "control-bundle"
-        (bundle / "strata_control").mkdir(parents=True)
-        (bundle / "strata.py").write_text("print('strata 0.1.46 (python stub)')\n")
-        (bundle / "strata_control" / "__init__.py").write_text("")
+        (bundle / "cortex_control").mkdir(parents=True)
+        (bundle / "cortex.py").write_text("print('cortex 0.1.46 (python stub)')\n")
+        (bundle / "cortex_control" / "__init__.py").write_text("")
         from feed_tool import build_feed, pack_control
         (self.release / "control").mkdir()
         pack_control(bundle, self.release / "control", version="0.1.46", platform=PLATFORM)
@@ -539,14 +539,14 @@ class OtherComponents(UpdaterCase):
         self.assertEqual(out["results"][0]["status"], "updated", out)
         active = updater.active_control(self.components)
         self.assertEqual(active["version"], "0.1.46")
-        self.assertTrue((self.components / "control" / "0.1.46" / "strata.py").is_file())
+        self.assertTrue((self.components / "control" / "0.1.46" / "cortex.py").is_file())
         again = updater.run_update(self.ctx(), engine=False, control=True)
         self.assertEqual(again["results"][0]["status"], "current")
 
     def test_a_control_that_cannot_run_is_not_switched_to(self):
         bundle = self.root / "control-bad"
         bundle.mkdir()
-        (bundle / "strata.py").write_text("import sys; sys.exit(9)\n")
+        (bundle / "cortex.py").write_text("import sys; sys.exit(9)\n")
         from feed_tool import build_feed, pack_control
         (self.release / "control").mkdir()
         pack_control(bundle, self.release / "control", version="0.1.46", platform=PLATFORM)
@@ -560,7 +560,7 @@ class OtherComponents(UpdaterCase):
     def test_a_control_bundle_may_link_inside_itself_and_nowhere_else(self):
         bundle = self.root / "control-links"
         (bundle / "python" / "lib").mkdir(parents=True)
-        (bundle / "strata.py").write_text("print('strata 0.1.46 (stub)')\n")
+        (bundle / "cortex.py").write_text("print('cortex 0.1.46 (stub)')\n")
         (bundle / "python" / "lib" / "libpython3.12.so").write_bytes(b"lib")
         os.symlink("libpython3.12.so", bundle / "python" / "lib" / "libpython3.so")
         from feed_tool import build_feed, pack_control
@@ -579,19 +579,19 @@ class OtherComponents(UpdaterCase):
         from feed_tool import build_feed
         (self.release / "control").mkdir()
         archive = self.release / "control" / "evil.tar.gz"
-        good = self.root / "strata.py"
-        good.write_text("print('strata 0.1.46')\n")
+        good = self.root / "cortex.py"
+        good.write_text("print('cortex 0.1.46')\n")
         for target in ("/etc/passwd", "../../outside", "a/../../../outside"):
             with self.subTest(target=target):
                 with tarfile.open(archive, "w:gz") as tar:
-                    tar.add(good, arcname="strata.py")
+                    tar.add(good, arcname="cortex.py")
                     info = tarfile.TarInfo("python/evil")
                     info.type, info.linkname = tarfile.SYMTYPE, target
                     tar.addfile(info)
                 data = archive.read_bytes()
                 (self.release / "control" / "evil.entry.json").write_text(json.dumps({
                     "version": "0.1.46", "platform": PLATFORM, "format": "tar.gz", "url": "control/evil.tar.gz", "size": len(data),
-                    "sha256": hashlib.sha256(data).hexdigest(), "installed_bytes": 100, "entry": "strata.py"}))
+                    "sha256": hashlib.sha256(data).hexdigest(), "installed_bytes": 100, "entry": "cortex.py"}))
                 build_feed(self.release, key=self.key, sequence=self.sequence + 1, control_dir=self.release / "control")
                 self.sequence += 1
                 out = updater.run_update(self.ctx(), engine=False, control=True)
@@ -601,14 +601,14 @@ class OtherComponents(UpdaterCase):
 
 
 class Cli(UpdaterCase):
-    """`strata update`, `strata components update|rollback` against a feed in a folder, with the test key file the way the
-    owner's local setup uses it (STRATA_UPDATE_TRUSTED_KEYS)."""
+    """`cortex update`, `cortex components update|rollback` against a feed in a folder, with the test key file the way the
+    owner's local setup uses it (CORTEX_UPDATE_TRUSTED_KEYS)."""
 
     def setUp(self):
         super().setUp()
         self.pub = self.root / "feed-key.pub.json"
         self.pub.write_text(json.dumps({"keys": [signing.public_part(self.key)]}))
-        patch = mock.patch.dict(os.environ, {"STRATA_UPDATE_TRUSTED_KEYS": str(self.pub)})
+        patch = mock.patch.dict(os.environ, {"CORTEX_UPDATE_TRUSTED_KEYS": str(self.pub)})
         patch.start()
         self.addCleanup(patch.stop)
         patch = mock.patch.object(updater, "detect_hardware", return_value=dict(self.hardware))
@@ -621,7 +621,7 @@ class Cli(UpdaterCase):
     def cli(self, *args):
         import io
         from contextlib import redirect_stderr, redirect_stdout
-        from strata_cli.cli import main
+        from cortex_cli.cli import main
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
             code = main(list(args))
@@ -636,16 +636,16 @@ class Cli(UpdaterCase):
         code, text, _ = self.cli("update", "--check", *self.common())
         self.assertEqual(code, 0)
         self.assertIn("update available: 0.1.45 -> 0.1.46", text)
-        self.assertEqual(ec.cached_notice(self.components), "update available (engine 0.1.46): run `strata update`")
+        self.assertEqual(ec.cached_notice(self.components), "update available (engine 0.1.46): run `cortex update`")
         code, listing, _ = self.cli("components", "engine", "--components-dir", str(self.components))
-        self.assertIn("update available (engine 0.1.46): run `strata update`", listing)
+        self.assertIn("update available (engine 0.1.46): run `cortex update`", listing)
         code, text, _ = self.cli("update", "--check", "--json", *self.common())
         self.assertEqual((code, json.loads(text)["engine"]["status"]), (0, "available"))
         code, text, _ = self.cli("update", *self.common())
         self.assertEqual(code, 0, text)
         self.assertIn("0.1.45 -> 0.1.46   updated (tested: started, answered one token, stopped)", text)
         self.assertIn("Saved tuning presets: marked for the short re-check (nothing was deleted).", text)
-        self.assertIn("strata components rollback", text)
+        self.assertIn("cortex components rollback", text)
         self.assertEqual(self.resolved(), "0.1.46")
         self.assertIsNone(ec.cached_notice(self.components))
         code, text, _ = self.cli("update", *self.common())
@@ -680,20 +680,20 @@ class Cli(UpdaterCase):
     def test_an_untrusted_or_forbidden_update_is_exit_5_and_fetches_nothing(self):
         self.install_current()
         self.publish(("0.1.46", fx.GOOD_ENGINE))
-        with mock.patch.dict(os.environ, {"STRATA_UPDATE_TRUSTED_KEYS": ""}):
+        with mock.patch.dict(os.environ, {"CORTEX_UPDATE_TRUSTED_KEYS": ""}):
             code, _, err = self.cli("update", *self.common())
             self.assertEqual(code, 5)
             self.assertIn("trusts no update key", err)
         wrong = self.root / "wrong.json"
         wrong.write_text(json.dumps({"keys": [signing.public_part(fx.make_key())]}))
-        with mock.patch.dict(os.environ, {"STRATA_UPDATE_TRUSTED_KEYS": str(wrong)}):
+        with mock.patch.dict(os.environ, {"CORTEX_UPDATE_TRUSTED_KEYS": str(wrong)}):
             code, _, err = self.cli("update", *self.common())
             self.assertEqual(code, 5)
             self.assertIn("does not trust", err)
-        with mock.patch.dict(os.environ, {"STRATA_NO_ACQUIRE": "1"}):
+        with mock.patch.dict(os.environ, {"CORTEX_NO_ACQUIRE": "1"}):
             code, _, err = self.cli("update", *self.common())
             self.assertEqual(code, 5)
-            self.assertIn("STRATA_NO_ACQUIRE", err)
+            self.assertIn("CORTEX_NO_ACQUIRE", err)
         self.assertEqual(self.resolved(), "0.1.45")
         self.assertEqual(self.archive_requests(), [])
 
@@ -712,7 +712,7 @@ class AnotherCardFamilyNote(unittest.TestCase):
             report, offered = updater._choose_engine(SimpleNamespace(engine=[pkg]), ctx, SimpleNamespace(section=lambda name: {}))
         self.assertIsNone(offered)
         self.assertEqual(report["status"], "none-for-this-pc")
-        self.assertEqual(report["note"], "This build of Strata is for AMD RX 7000 cards. This computer has an AMD RX 9000 card (gfx1201). Ask for the RX 9000 build.")
+        self.assertEqual(report["note"], "This build of Cortex is for AMD RX 7000 cards. This computer has an AMD RX 9000 card (gfx1201). Ask for the RX 9000 build.")
 
 
 if __name__ == "__main__":

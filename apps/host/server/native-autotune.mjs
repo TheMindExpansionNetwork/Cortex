@@ -1,5 +1,5 @@
 /**
- * The app's side of the auto-tuner. The tuner itself is Strata Control's (`strata tune auto`, `strata presets`): the same code and the
+ * The app's side of the auto-tuner. The tuner itself is Cortex Control's (`cortex tune auto`, `cortex presets`): the same code and the
  * same preset store the Terminal uses, so tuning in one place covers the other. This module only runs those commands, follows the
  * status file the tuner rewrites at every step, and turns the answer into the sentence the app shows. It measures nothing itself.
  */
@@ -33,10 +33,10 @@ export function createAutoTune({ launcher, workDir, spawnProcess = spawn, pollMs
       const child = spawnProcess(l.command, [...(l.prefix ?? []), ...args], { cwd: l.cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: l.env });
       let out = '', err = '', done = false;
       const finish = (fn, v) => { if (done) return; done = true; clearTimeout(alarm); fn(v); };
-      const alarm = setTimeout(() => { try { child.kill(); } catch { /* gone */ } finish(reject, new Error('Strata did not answer in time.')); }, timeoutMs);
+      const alarm = setTimeout(() => { try { child.kill(); } catch { /* gone */ } finish(reject, new Error('Cortex did not answer in time.')); }, timeoutMs);
       child.stdout?.on('data', c => { out += c; });
       child.stderr?.on('data', c => { err += c; if (err.length > 100_000) err = err.slice(-50_000); });
-      child.on('error', e => finish(reject, new Error(`Strata could not start: ${e.message}`)));
+      child.on('error', e => finish(reject, new Error(`Cortex could not start: ${e.message}`)));
       child.on('close', code => {
         let json = null;
         const text = out.trim();
@@ -94,7 +94,7 @@ export function createAutoTune({ launcher, workDir, spawnProcess = spawn, pollMs
         if (opts.leaveRam) args.push('--leave-ram', String(Math.max(0, Math.min(50, Math.round(opts.leaveRam)))));
         if (opts.allowSmallDifferences) args.push('--allow-small-differences');
         // For headless checks on a PC where another engine runs: do not wait for it (the tuner would sit in its quiet check).
-        if (process.env.STRATA_TUNE_NO_QUIET_CHECK === '1') args.push('--no-quiet-check');
+        if (process.env.CORTEX_TUNE_NO_QUIET_CHECK === '1') args.push('--no-quiet-check');
         if (opts.name) args.push('--name', String(opts.name).slice(0, 80));
       }
       const child = spawnProcess(l.command, [...(l.prefix ?? []), ...args], { cwd: l.cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: l.env });

@@ -1,4 +1,4 @@
-// A770 port: grouped FP16 XMX GEMM for the prompt path's experts (STRATA_PF_XMX=1).
+// A770 port: grouped FP16 XMX GEMM for the prompt path's experts (CORTEX_PF_XMX=1).
 // Y[r][n] = sum_k X[r][k] * W_e[n][k] for each expert e of a group, its rows r in [row0 + off[e], row0 + off[e+1]).
 // One launch per group instead of one oneMKL call per expert.  joint_matrix 8x8x16 (DG2), SLM-tiled, 256 GRF.
 // Measured standalone on the A770 (64 experts, gamma-distributed rows, vs per-expert oneMKL): down 6.1x at mean 40
@@ -8,16 +8,16 @@
 #include <sycl/ext/intel/experimental/grf_size_properties.hpp>
 #include <cstdlib>
 #include <cstdio>
-#include "strata/sycl_queue.hpp"
-#include "strata/prefill/xmx_moe.hpp"
+#include "cortex/sycl_queue.hpp"
+#include "cortex/prefill/xmx_moe.hpp"
 
-namespace strata::prefill::xmx {
+namespace cortex::prefill::xmx {
 namespace {
 using half = sycl::half;
 namespace jm = sycl::ext::oneapi::experimental::matrix;
 // Sub-group width = the XMX tile's N: 8 on Alchemist (DG2, joint_matrix 8x8x16), 16 on Xe2 (Battlemage, 8x16x16; the
-// CMake switch STRATA_XMX_SG16 for an AOT bmg / lnl build).  A build has one shape: the other is not valid there.
-#ifdef STRATA_XMX_SG16
+// CMake switch CORTEX_XMX_SG16 for an AOT bmg / lnl build).  A build has one shape: the other is not valid there.
+#ifdef CORTEX_XMX_SG16
 constexpr int kSgW = 16;
 #else
 constexpr int kSgW = 8;
@@ -42,7 +42,7 @@ void launch(sycl::queue& q, const half* X, float* Y, const Grp& gp, int ntiles, 
     constexpr int BM = C::BM, BN = C::BN, KS = C::KS, WG = C::WG, SG = C::SG;
     constexpr int LDA = KS + 8, LDB = KS + 8;
     const int nb = N / BN;
-#ifndef STRATA_NO_DG2_XMX
+#ifndef CORTEX_NO_DG2_XMX
     constexpr int TN = kSgW;
     q.submit([&](sycl::handler& h) {
         sycl::local_accessor<half, 1> sa(BM * LDA, h), sb(BN * LDB, h);
@@ -119,13 +119,13 @@ void launch(sycl::queue& q, const half* X, float* Y, const Grp& gp, int ntiles, 
     });
 #else
     (void) q; (void) X; (void) Y; (void) gp; (void) ntiles; (void) N; (void) K;
-    std::fprintf(stderr, "grouped XMX: the 8x8x16 / sub-group 8 kernel is not built for this device (STRATA_NO_DG2_XMX)\n");
+    std::fprintf(stderr, "grouped XMX: the 8x8x16 / sub-group 8 kernel is not built for this device (CORTEX_NO_DG2_XMX)\n");
     std::exit(1);
 #endif
 }
 
 class k_small; class k_big;
-#ifdef STRATA_XMX_SG16
+#ifdef CORTEX_XMX_SG16
 using Small = Cfg<2, 4, 4, 2, 32>;   // 64 x 128 tile: few rows per expert (8 sub-groups of 16)
 using Big = Cfg<4, 2, 4, 4, 32>;     // 128 x 128 tile
 #else
@@ -146,23 +146,23 @@ int fill(Grp& gp, const int32_t* cnt, int n) {
 }  // namespace
 
 int mode() {
-    // The kernels are joint_matrix 8x8x16 on sub-group 8 (DG2, Arc A-series) or, in a STRATA_XMX_SG16 build, 8x16x16 on
+    // The kernels are joint_matrix 8x8x16 on sub-group 8 (DG2, Arc A-series) or, in a CORTEX_XMX_SG16 build, 8x16x16 on
     // sub-group 16 (Xe2, Battlemage).
     static const int v = [] {
-        const char* e = std::getenv("STRATA_PF_XMX");
+        const char* e = std::getenv("CORTEX_PF_XMX");
         // 0.1.48 (owner approved 2026-10-18): mode 2 (the fused grouped XMX launch) is the default on Arc Alchemist (A-series): A750 prompts +30..39% (4K), +32..35% (1-2K tokens),
         // first-token KL 0.002 against a 0.0005 floor, HumanEval / reasoning / agent / CJK / needles inside the run-to-run spread; Battlemage is
-        // 7-11% slower with it, so it stays off there.  STRATA_PF_XMX=0 turns it off, 1 is the dequantize + grouped XMX variant.
-        const bool alchemist = strata::intel_gpu_gen(strata::q_of(nullptr)->get_device()) == strata::IntelGpuGen::Alchemist;
+        // 7-11% slower with it, so it stays off there.  CORTEX_PF_XMX=0 turns it off, 1 is the dequantize + grouped XMX variant.
+        const bool alchemist = cortex::intel_gpu_gen(cortex::q_of(nullptr)->get_device()) == cortex::IntelGpuGen::Alchemist;
         const int want = e ? std::atoi(e) : alchemist ? 2 : 0;
         if (want == 0) return 0;
-#ifdef STRATA_NO_DG2_XMX
-        std::fprintf(stderr, "STRATA_PF_XMX ignored: this build is AOT for a device without the sub-group 8 XMX kernels\n");
+#ifdef CORTEX_NO_DG2_XMX
+        std::fprintf(stderr, "CORTEX_PF_XMX ignored: this build is AOT for a device without the sub-group 8 XMX kernels\n");
         return 0;
 #else
-#ifndef STRATA_XMX_SG16
-        if (strata::intel_gpu_gen(strata::q_of(nullptr)->get_device()) == strata::IntelGpuGen::Battlemage) {
-            std::fprintf(stderr, "STRATA_PF_XMX ignored: this build has the sub-group 8 / 8x8x16 kernels (Arc A-series); Battlemage needs the AOT bmg build\n");
+#ifndef CORTEX_XMX_SG16
+        if (cortex::intel_gpu_gen(cortex::q_of(nullptr)->get_device()) == cortex::IntelGpuGen::Battlemage) {
+            std::fprintf(stderr, "CORTEX_PF_XMX ignored: this build has the sub-group 8 / 8x8x16 kernels (Arc A-series); Battlemage needs the AOT bmg build\n");
             return 0;
         }
 #endif
@@ -174,14 +174,14 @@ int mode() {
 bool enabled() { return mode() != 0; }
 
 int gu_max_mean() {
-    static const int v = [] { const char* e = std::getenv("STRATA_PF_XMX_GU_MAX"); return e ? std::atoi(e) : 250; }();
+    static const int v = [] { const char* e = std::getenv("CORTEX_PF_XMX_GU_MAX"); return e ? std::atoi(e) : 250; }();
     return v;
 }
 
 void grouped_f16(const uint16_t* X, const uint16_t* const* W, const int32_t* cnt, int n, float* Y, int N, int K,
                  void* stream) {
     if (n <= 0) return;
-    sycl::queue& q = *strata::q_of(stream);
+    sycl::queue& q = *cortex::q_of(stream);
     Grp gp{};
     int64_t tot = 0;
     for (int i = 0; i < n; ++i) { gp.w[i] = reinterpret_cast<const half*>(W[i]); tot += cnt[i]; }
@@ -195,4 +195,4 @@ void grouped_f16(const uint16_t* X, const uint16_t* const* W, const int32_t* cnt
         launch<Big, k_big>(q, Xh, Y, gp, nt, N, K);
     }
 }
-}  // namespace strata::prefill::xmx
+}  // namespace cortex::prefill::xmx

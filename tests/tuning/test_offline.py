@@ -24,7 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from strata_control import offline as O  # noqa: E402
+from cortex_control import offline as O  # noqa: E402
 
 
 class TestUrlDecisions(unittest.TestCase):
@@ -77,7 +77,7 @@ class TestChildEnvironment(unittest.TestCase):
         self.assertEqual(env["HF_HUB_OFFLINE"], "1")
         self.assertEqual(env["TRANSFORMERS_OFFLINE"], "1")
         self.assertEqual(env["PIP_NO_INDEX"], "1")
-        self.assertEqual(env["STRATA_OFFLINE"], "1")
+        self.assertEqual(env["CORTEX_OFFLINE"], "1")
 
     def test_proxies_are_emptied_so_an_accidental_call_fails_fast(self):
         env = O.child_environment(offline=True,
@@ -99,7 +99,7 @@ class TestChildEnvironment(unittest.TestCase):
 
     def test_the_real_environment_is_used_by_default(self):
         env = O.child_environment(offline=True)
-        self.assertEqual(env["STRATA_OFFLINE"], "1")
+        self.assertEqual(env["CORTEX_OFFLINE"], "1")
         self.assertIn("PATH", env, "the child still needs a PATH")
 
 

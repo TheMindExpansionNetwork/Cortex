@@ -21,7 +21,7 @@ import setup  # noqa: E402
 def engine(folder: Path, version: str, exe: bytes) -> None:
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "BUILD.json").write_text(json.dumps({"version": version}), encoding="utf-8")
-    (folder / "strata.exe").write_bytes(exe)
+    (folder / "cortex.exe").write_bytes(exe)
     (folder / "lib").mkdir(exist_ok=True)
     (folder / "lib" / "x.dll").write_bytes(exe)
 
@@ -38,19 +38,19 @@ class KeepPrevious(unittest.TestCase):
         engine(self.eng, "0.1.39", b"old")
         engine(self.new, "0.1.40", b"new")
         setup.install_unpacked(self.new, self.eng)
-        self.assertEqual((self.eng / "strata.exe").read_bytes(), b"new")
+        self.assertEqual((self.eng / "cortex.exe").read_bytes(), b"new")
         self.assertEqual(setup.engine_version_of(self.eng), "0.1.40")
         prev = self.eng / ".previous"
-        self.assertEqual((prev / "strata.exe").read_bytes(), b"old")
+        self.assertEqual((prev / "cortex.exe").read_bytes(), b"old")
         self.assertEqual((prev / "lib" / "x.dll").read_bytes(), b"old")
         self.assertEqual(setup.engine_version_of(prev), "0.1.39")
         with mock.patch.object(setup, "ROOT", self.root):
             self.assertEqual(setup.rollback_engine(), 0)
-            self.assertEqual((self.eng / "strata.exe").read_bytes(), b"old")
+            self.assertEqual((self.eng / "cortex.exe").read_bytes(), b"old")
             self.assertEqual(setup.engine_version_of(self.eng), "0.1.39")
             self.assertEqual(setup.engine_version_of(prev), "0.1.40")     # forward again
             self.assertEqual(setup.rollback_engine(), 0)
-            self.assertEqual((self.eng / "strata.exe").read_bytes(), b"new")
+            self.assertEqual((self.eng / "cortex.exe").read_bytes(), b"new")
 
     def test_previous_keeps_its_build_json_after_get_prebuilt_moved_it_aside(self):
         """get_prebuilt takes the old BUILD.json out of the way (BUILD.json.prev) before the unpack, so the
@@ -76,7 +76,7 @@ class KeepPrevious(unittest.TestCase):
         self.eng.mkdir()
         engine(self.new, "0.1.40", b"new")
         setup.install_unpacked(self.new, self.eng)
-        self.assertEqual((self.eng / "strata.exe").read_bytes(), b"new")
+        self.assertEqual((self.eng / "cortex.exe").read_bytes(), b"new")
         self.assertFalse((self.eng / ".previous").exists())
         with mock.patch.object(setup, "ROOT", self.root):
             self.assertEqual(setup.rollback_engine(), 1)
@@ -95,7 +95,7 @@ class KeepPrevious(unittest.TestCase):
 
         with mock.patch.object(Path, "replace", flaky), self.assertRaises(OSError):
             setup.install_unpacked(self.new, self.eng)
-        self.assertEqual((self.eng / "strata.exe").read_bytes(), b"old")
+        self.assertEqual((self.eng / "cortex.exe").read_bytes(), b"old")
         self.assertEqual((self.eng / "lib" / "x.dll").read_bytes(), b"old")
         self.assertEqual(setup.engine_version_of(self.eng), "0.1.39")
         self.assertFalse((self.eng / ".previous").exists())

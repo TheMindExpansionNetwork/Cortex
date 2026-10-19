@@ -1,4 +1,4 @@
-"""The monitor as `strata launch` opens it: the Connect view (key 7), its keys, the check, and the quit question."""
+"""The monitor as `cortex launch` opens it: the Connect view (key 7), its keys, the check, and the quit question."""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from strata_cli.launch import check
-from strata_cli.launch.monitor_ext import LaunchMonitor
+from cortex_cli.launch import check
+from cortex_cli.launch.monitor_ext import LaunchMonitor
 from tests.terminal.launch_support import Home, text_of
 from tests.terminal.test_overview import Source, metrics
 
-INFO = {"url": "http://127.0.0.1:8080", "urls": ["http://127.0.0.1:8080", "http://192.168.1.5:8080"], "key": "sk-strata-abcdefghijklmnop",
+INFO = {"url": "http://127.0.0.1:8080", "urls": ["http://127.0.0.1:8080", "http://192.168.1.5:8080"], "key": "sk-cortex-abcdefghijklmnop",
         "model": "qwen3.8-flash-next-iq3_xxs", "context": 32768, "profile": "launch-x", "name": "Demo"}
 
 
@@ -43,7 +43,7 @@ class Connect(unittest.TestCase):
             self.assertIn("Connect an app", t)
             self.assertIn("URL http://127.0.0.1:8080/v1", t)
             self.assertIn("also reachable at http://192.168.1.5:8080/v1", t)
-            self.assertIn("key sk-strata-", t)
+            self.assertIn("key sk-cortex-", t)
             self.assertNotIn("abcdefghijklmnop", t)                      # masked until k
             for name in ("OpenCode", "Codex CLI", "Claude Code", "oh-my-pi", "pi (pi.dev)", "Hermes Agent", "OpenClaw", "DeepSeek Harness"):
                 self.assertIn(name, t)
@@ -87,7 +87,7 @@ class Connect(unittest.TestCase):
             self.assertIn("Node 24.16", flat(app))
             await pilot.press("down")
             await pilot.pause(0.2)
-            self.assertIn("built into the Strata app", flat(app))
+            self.assertIn("built into the Cortex app", flat(app))
             await pilot.press("up", "up", "up", "up", "up", "up", "up")
             await pilot.pause(0.2)
             self.assertIn("OpenCode setup", flat(app))
@@ -124,8 +124,8 @@ class Connect(unittest.TestCase):
             self.run_app(case)
             data = json.loads(target.read_text())
             self.assertEqual(data["theme"], "dark")
-            self.assertIn("strata", data["provider"])
-            self.assertEqual(len(list(target.parent.glob("opencode.json.strata-bak-*"))), 1)
+            self.assertIn("cortex", data["provider"])
+            self.assertEqual(len(list(target.parent.glob("opencode.json.cortex-bak-*"))), 1)
 
     def test_write_can_be_declined(self):
         with Home():

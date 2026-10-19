@@ -13,7 +13,7 @@ from serve import server  # noqa: E402
 
 class ControlCancelTest(unittest.TestCase):
     def _engine(self, lines):
-        eng = object.__new__(server.StrataEngine)
+        eng = object.__new__(server.CortexEngine)
         eng.lines = queue.Queue()
         for l in lines:
             eng.lines.put(l)

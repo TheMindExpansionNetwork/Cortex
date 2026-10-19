@@ -27,11 +27,11 @@ sys.path.insert(0, str(ROOT))
 
 import setup  # noqa: E402
 
-ASSET = "strata-windows-x64.zip"
-HIP_ASSET = "strata-windows-x64-hip.zip"
+ASSET = "cortex-windows-x64.zip"
+HIP_ASSET = "cortex-windows-x64-hip.zip"
 TAG_BASE = "https://github.com/Niko1221/Strata/releases/download/v0.1.40/"
 LATEST_BASE = "https://github.com/Niko1221/Strata/releases/latest/download/"
-FORK_BASE = "https://github.com/someone/Strata/releases/download/v1.0/"
+FORK_BASE = "https://github.com/someone/Cortex/releases/download/v1.0/"
 LOCAL_BASE = r"C:\my\mirror"
 
 
@@ -39,7 +39,7 @@ def zip_bytes() -> bytes:
     """A stand-in engine archive. Small; its hash is what matters, not its size."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr("strata.exe", b"not a real engine")
+        zf.writestr("cortex.exe", b"not a real engine")
         zf.writestr("BUILD.json", b'{"version": "0.1.40"}')
     return buf.getvalue()
 
@@ -63,7 +63,7 @@ class WhereTheHashComesFrom(unittest.TestCase):
         # The repository used to be hardcoded, so a fork's own tag was looked up under Niko1221/Strata,
         # where it does not exist - every fork install would be refused.
         self.assertEqual(setup.release_of(FORK_BASE),
-                         ("https://api.github.com/repos/someone/Strata/releases", "1.0"))
+                         ("https://api.github.com/repos/someone/Cortex/releases", "1.0"))
 
     def test_something_that_is_not_a_github_release_url_names_nothing(self):
         # This is the case that mattered: a local folder or a plain mirror used to match no tag, fall
@@ -142,7 +142,7 @@ class DigestLookup(unittest.TestCase):
         seen = self.asked(self.release_json(
             "v1.0", [{"name": ASSET, "size": 9, "digest": "sha256:" + "c" * 64}]))
         self.assertEqual(setup.engine_digest(ASSET, FORK_BASE), (9, "c" * 64))
-        self.assertIn("/repos/someone/Strata/releases/tags/v1.0", seen[0])
+        self.assertIn("/repos/someone/Cortex/releases/tags/v1.0", seen[0])
 
     def test_none_when_no_digest_is_published(self):
         # No digest is not a pass. The caller refuses.
@@ -171,11 +171,11 @@ class DigestLookup(unittest.TestCase):
         # v0.1.40.1 ships several engine builds with different hashes; the one asked for must be the one
         # used, not whichever the API lists first.
         self.asked(self.release_json("v0.1.40.1", [
-            {"name": "strata-windows-x64.zip", "size": 1, "digest": "sha256:" + "1" * 64},
-            {"name": "strata-windows-x64-cuda12.zip", "size": 2, "digest": "sha256:" + "2" * 64},
+            {"name": "cortex-windows-x64.zip", "size": 1, "digest": "sha256:" + "1" * 64},
+            {"name": "cortex-windows-x64-cuda12.zip", "size": 2, "digest": "sha256:" + "2" * 64},
             {"name": HIP_ASSET, "size": 3, "digest": "sha256:" + "3" * 64},
         ]))
-        self.assertEqual(setup.engine_digest("strata-windows-x64-cuda12.zip", LATEST_BASE), (2, "2" * 64))
+        self.assertEqual(setup.engine_digest("cortex-windows-x64-cuda12.zip", LATEST_BASE), (2, "2" * 64))
         self.assertEqual(setup.engine_digest(HIP_ASSET, LATEST_BASE), (3, "3" * 64))
 
 
@@ -191,7 +191,7 @@ class ArchiveVerification(unittest.TestCase):
         patch = mock.patch.dict(os.environ, {}, clear=False)
         env = patch.start()
         self.addCleanup(patch.stop)
-        env.pop("STRATA_SKIP_SHA256", None)
+        env.pop("CORTEX_SKIP_SHA256", None)
 
     def digest(self, value):
         return mock.patch.object(setup, "engine_digest", return_value=value)
@@ -236,17 +236,17 @@ class ArchiveVerification(unittest.TestCase):
             self.assertTrue(self.z.exists())
 
     def test_skip_env_skips_the_check_loudly(self):
-        os.environ["STRATA_SKIP_SHA256"] = "1"
+        os.environ["CORTEX_SKIP_SHA256"] = "1"
         said = io.StringIO()
         with mock.patch.object(setup, "engine_digest", return_value=(1, "0" * 64)) as m,                 mock.patch.object(setup, "warn", said.write):
             setup.verify_engine_archive(self.z, ASSET, TAG_BASE)     # a wrong digest, but skipped
         self.assertEqual(m.call_count, 0)
-        self.assertIn("STRATA_SKIP_SHA256", said.getvalue())
+        self.assertIn("CORTEX_SKIP_SHA256", said.getvalue())
         self.assertIn("NOT checking", said.getvalue())
         self.assertTrue(self.z.exists())
 
     def test_skip_env_needs_exactly_1(self):
-        os.environ["STRATA_SKIP_SHA256"] = "0"
+        os.environ["CORTEX_SKIP_SHA256"] = "0"
         with self.digest((1, "0" * 64)):
             with self.assertRaises(setup.UnverifiedEngine):
                 setup.verify_engine_archive(self.z, ASSET, TAG_BASE)
@@ -331,8 +331,8 @@ class WhatARefusalDoesToTheCaller(unittest.TestCase):
         # get_prebuilt_hip downloads the AMD engine from a SECOND `download(base + ...)` call site, which
         # the first version of this change missed entirely - so AMD users got nothing from it.
         src = (ROOT / "setup.py").read_text(encoding="utf-8")
-        for call in ('download(base + asset, z, "Strata engine")',
-                     'download(base + WIN_HIP_ASSET, z, "Strata AMD engine")'):
+        for call in ('download(base + asset, z, "Cortex engine")',
+                     'download(base + WIN_HIP_ASSET, z, "Cortex AMD engine")'):
             i = src.index(call)
             self.assertIn("verify_engine_archive", src[i:i + 400], f"{call} is not verified")
 

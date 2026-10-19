@@ -1,6 +1,6 @@
 // The elastic K/V's VMM ranges (vmm.hpp): chunks map readable and writable, a chunk unmapped from one range and mapped
 // into another keeps its bytes (what the expert cache hands the K/V), and a range releases what it holds.
-#include "strata/core/vmm.hpp"
+#include "cortex/core/vmm.hpp"
 
 #include <cuda_runtime.h>
 
@@ -9,18 +9,18 @@
 #include <thread>
 #include <vector>
 
-using strata::core::VmmChunk;
-using strata::core::VmmRange;
+using cortex::core::VmmChunk;
+using cortex::core::VmmRange;
 
 static int fails = 0;
 #define CHECK(c) do { if (!(c)) { std::fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); ++fails; } } while (0)
 
 int main() {
-    if (cudaFree(nullptr) != cudaSuccess || !strata::core::vmm_available()) {
+    if (cudaFree(nullptr) != cudaSuccess || !cortex::core::vmm_available()) {
         std::printf("vmm_test: no CUDA device with virtual memory - skipped\n");
         return 0;
     }
-    const uint64_t G = strata::core::vmm_granularity();
+    const uint64_t G = cortex::core::vmm_granularity();
     CHECK(G >= 4096);
     VmmRange a, b;
     CHECK(a.reserve(8 * G + 1));   // rounds up

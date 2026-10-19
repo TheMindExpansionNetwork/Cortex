@@ -2,7 +2,7 @@
 """SAVE / RESTORE round trip with parked conversations holding the host RAM (#1572 / #1573).
 
   python3 tools/session_pressure_test.py CFG OUTFILE
-  STRATA_EXTRA_ARGS="--prompt-cache 4 --conversation-cache-mib 3072 --conversation-cache-slots 4
+  CORTEX_EXTRA_ARGS="--prompt-cache 4 --conversation-cache-mib 3072 --conversation-cache-slots 4
                      --conversation-cache-min-free-mib <floor> [--session-save-reclaim]"
 
 Parks three conversations, runs a fourth (D), SAVEs it, runs an unrelated one, RESTOREs, and checks that D's next turn
@@ -11,11 +11,11 @@ gives the same token ids after the restore as it does when continued live.  Prin
 import json, os, sys, threading, time
 from pathlib import Path
 
-REPO = Path(os.environ.get("STRATA_REPO", Path(__file__).resolve().parent.parent))
+REPO = Path(os.environ.get("CORTEX_REPO", Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(REPO / "tools")); sys.path.insert(0, str(REPO))
-import strata_tokenizer as ST
+import cortex_tokenizer as ST
 from serve import server as S
-from serve.server import StrataEngine, child_env
+from serve.server import CortexEngine, child_env
 
 cfg = json.load(open(sys.argv[1]))
 out_file = sys.argv[2]
@@ -25,8 +25,8 @@ toks = [None] * len(vocab)
 for t, i in vocab.items():
     toks[i] = t
 tok = ST.Tokenizer(toks, (tp / "merges.txt").read_text().split("\n"), json.loads((tp / "token_type.json").read_text()))
-args = cfg["args"] + os.environ.get("STRATA_EXTRA_ARGS", "").split()
-eng = StrataEngine(os.environ.get("STRATA_EXE", cfg["exe"]), args, cwd=cfg.get("cwd"),
+args = cfg["args"] + os.environ.get("CORTEX_EXTRA_ARGS", "").split()
+eng = CortexEngine(os.environ.get("CORTEX_EXE", cfg["exe"]), args, cwd=cfg.get("cwd"),
                    log=os.environ.get("SMOKE_LOG", cfg["log"]), env=child_env(cfg))
 GEN = "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
 

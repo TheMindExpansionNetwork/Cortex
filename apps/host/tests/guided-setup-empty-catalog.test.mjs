@@ -30,7 +30,7 @@ const stubs={
 let dir,mod;
 async function load(){
  if(mod)return mod;
- dir=mkdtempSync(join(tmpdir(),'strata-gs-'));
+ dir=mkdtempSync(join(tmpdir(),'cortex-gs-'));
  const stubPlugin={name:'stubs',setup(b){
   b.onResolve({filter:/\/lib\/(native|store|client|router)$/},args=>({path:args.path.split('/').pop(),namespace:'stub'}));
   b.onLoad({filter:/.*/,namespace:'stub'},args=>({contents:stubs[args.path],loader:'js',resolveDir:root}));

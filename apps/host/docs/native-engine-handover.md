@@ -1,6 +1,6 @@
-# Native Strata UI integration handover
+# Native Cortex UI integration handover
 
-Implemented 14 October 2026 in the React/Node app under `backups/strata`.
+Implemented 14 October 2026 in the React/Node app under `backups/cortex`.
 
 ## Consumer flow
 
@@ -31,19 +31,19 @@ Normal Models shows Version, optional picture reading, context, Computer use and
 5. Use **Split across GPUs…** and layer split points when one model needs several cards.
 6. Use in chat changes the default chat instance. An identical load is idempotent; changed settings reload that placement while preserving its public ID.
 
-The native catalog determines supported architectures. Arbitrary GGUF imports use the separate local engine adapter; importing a compatible-looking file does not grant Strata-native optimization. CPU-only native text inference is not offered by this adapter. CPU vision encoding is available when the installed native version supports it. Qwen-Image generation remains its own optional model flow; the public Strata text engine does not provide an image-generation backend.
+The native catalog determines supported architectures. Arbitrary GGUF imports use the separate local engine adapter; importing a compatible-looking file does not grant Cortex-native optimization. CPU-only native text inference is not offered by this adapter. CPU vision encoding is available when the installed native version supports it. Qwen-Image generation remains its own optional model flow; the public Cortex text engine does not provide an image-generation backend.
 
 Preparing new native files unloads managed native instances because the installer can replace shared engine files. The confirmation explains this. Download/prepare all needed versions before loading them concurrently.
 
 ## Connecting the native installation
 
-Set `STRATA_NATIVE_REPO` to the absolute path to the official Strata checkout. It must contain `setup.py`, `tools/strata_mcp.py` and `serve/server.py`. Settings → Engine can connect a different existing installation. The source checkout is separate from this UI app.
+Set `CORTEX_NATIVE_REPO` to the absolute path to the official Cortex checkout. It must contain `setup.py`, `tools/cortex_mcp.py` and `serve/server.py`. Settings → Engine can connect a different existing installation. The source checkout is separate from this UI app.
 
-The catalog adapter requires Python 3.10+. `STRATA_NATIVE_PYTHON` selects it explicitly; otherwise the installed virtual environment or an available system Python is used. The native installer creates the model's `.venv`. Loading uses that environment, rather than installing packages into a random system interpreter.
+The catalog adapter requires Python 3.10+. `CORTEX_NATIVE_PYTHON` selects it explicitly; otherwise the installed virtual environment or an available system Python is used. The native installer creates the model's `.venv`. Loading uses that environment, rather than installing packages into a random system interpreter.
 
-For desktop distribution, bundle the tested native source and a supported Python runtime, set these paths from the launcher, and retain the installer’s platform checks. Consumers should receive this installation as part of the app; manual source-folder connection is the fallback. The current relative development fallback locates the sibling `Strata` checkout in this workspace.
+For desktop distribution, bundle the tested native source and a supported Python runtime, set these paths from the launcher, and retain the installer’s platform checks. Consumers should receive this installation as part of the app; manual source-folder connection is the fallback. The current relative development fallback locates the sibling `Cortex` checkout in this workspace.
 
-The native adapter works independently of `STRATA_REAL_ENGINE`. That flag continues to select real versus simulated behavior for the older GGUF/llama adapter. Set it to `1` for actual imported GGUF inference. The existing preview conversations and design demonstrations are retained. Switching into the native execution group stops an owned real GGUF engine; concurrent placement applies to native instances.
+The native adapter works independently of `CORTEX_REAL_ENGINE`. That flag continues to select real versus simulated behavior for the older GGUF/llama adapter. Set it to `1` for actual imported GGUF inference. The existing preview conversations and design demonstrations are retained. Switching into the native execution group stops an owned real GGUF engine; concurrent placement applies to native instances.
 
 ## Backend boundaries
 
@@ -60,13 +60,13 @@ The native adapter works independently of `STRATA_REAL_ENGINE`. That flag contin
 
 Each instance runs `serve/server.py` on a distinct private loopback port with a random private API key and a configuration copy in the UI data directory. The public API URL remains the single URL shown in Serving. Its existing API key and local-network/tunnel access controls still apply. Private host controls are not exposed through the sharing proxy.
 
-The public ID is added to the private native config as an alias, including suffixes for repeated versions on different GPUs. Clients put that exact ID in `model`. Unknown and ambiguous IDs fail before streaming. Responses input, client tool schemas, tool results, reasoning fields and protocol events are preserved. Public clients cannot opt into the host’s configured MCP servers; only local chat's explicit Tools opt-in sends `strata_mcp: true`.
+The public ID is added to the private native config as an alias, including suffixes for repeated versions on different GPUs. Clients put that exact ID in `model`. Unknown and ambiguous IDs fail before streaming. Responses input, client tool schemas, tool results, reasoning fields and protocol events are preserved. Public clients cannot opt into the host’s configured MCP servers; only local chat's explicit Tools opt-in sends `cortex_mcp: true`.
 
 ## Settings and tools
 
-Expert parameters include thinking budget, output fitting, Anthropic thinking, GPU/layer order, VRAM reserve, elastic cache, concurrent requests, idle unload, lazy loading, stall timeout, API monitoring, image tokens and MCP limits. Sampling includes temperature, top-p/k, min-p, penalties and seed. JSON also exposes engine arguments and `STRATA_` environment flags. Fields absent from the installed server source are disabled with an update hint; the server rejects newly configured unsupported fields.
+Expert parameters include thinking budget, output fitting, Anthropic thinking, GPU/layer order, VRAM reserve, elastic cache, concurrent requests, idle unload, lazy loading, stall timeout, API monitoring, image tokens and MCP limits. Sampling includes temperature, top-p/k, min-p, penalties and seed. JSON also exposes engine arguments and `CORTEX_` environment flags. Fields absent from the installed server source are disabled with an update hint; the server rejects newly configured unsupported fields.
 
-Saving validates first, preserves unrelated config keys and non-Strata environment values, writes a `.bak`, and atomically replaces the config. Existing env/header credentials are masked and preserved when the mask is submitted. Clearing a normal field restores its native default. New settings apply on the next load. Context/KV/vision/low-RAM preparation changes go through the official installer so dependent native flags stay consistent.
+Saving validates first, preserves unrelated config keys and non-Cortex environment values, writes a `.bak`, and atomically replaces the config. Existing env/header credentials are masked and preserved when the mask is submitted. Clearing a normal field restores its native default. New settings apply on the next load. Context/KV/vision/low-RAM preparation changes go through the official installer so dependent native flags stay consistent.
 
 MCP servers can be local programs or HTTP connections. Arguments are separate argv entries. Add/Edit/Remove and enabled state are available without using JSON; advanced credentials, working directory and raw configuration remain accessible. Saving a server does not run its tools. In chat, **Enable connected tools** explicitly opts into automatic calls and Bypass permissions; calls/results become visible tool traces. Tools stay off by default.
 
@@ -80,13 +80,13 @@ Serving shows one base URL and all available model IDs/devices. Requests can be 
 
 ## Files, failures and recovery
 
-Storage retains the existing configurable model directory and rescan flow. New installations default to the user’s Documents/Strata/Models folder. Windows resolves the known Documents folder (including redirected/OneDrive locations); Linux honors XDG_DOCUMENTS_DIR; macOS uses Documents. Saved custom libraries and legacy libraries with real weights remain selected. STRATA_MODELS_DIR is an explicit override for tests and custom deployments. For the default folder, native preparation uses Documents/Strata as data_dir so its models/<variant> layout lands in Models. On case-sensitive volumes, the host creates a relative models → Models alias; existing conflicting folders are never replaced. The native checkout remains unchanged. Existing native configs retain their original paths; retuning and repair target that model’s original data folder rather than the default folder for new downloads. Completed native downloads and partial SDK downloads are retained for resume. SDK preparation running across a host restart is rediscovered and its progress reattached; interrupted UI operations are recorded with a retry message.
+Storage retains the existing configurable model directory and rescan flow. New installations default to the user’s Documents/Cortex/Models folder. Windows resolves the known Documents folder (including redirected/OneDrive locations); Linux honors XDG_DOCUMENTS_DIR; macOS uses Documents. Saved custom libraries and legacy libraries with real weights remain selected. CORTEX_MODELS_DIR is an explicit override for tests and custom deployments. For the default folder, native preparation uses Documents/Cortex as data_dir so its models/<variant> layout lands in Models. On case-sensitive volumes, the host creates a relative models → Models alias; existing conflicting folders are never replaced. The native checkout remains unchanged. Existing native configs retain their original paths; retuning and repair target that model’s original data folder rather than the default folder for new downloads. Completed native downloads and partial SDK downloads are retained for resume. SDK preparation running across a host restart is rediscovered and its progress reattached; interrupted UI operations are recorded with a retry message.
 
 Settings → Engine provides the original engine/preparation logs and export. Managed native process groups are stopped on unload and host shutdown; temporary instance configs are removed. Servers started outside this UI are detected and preserved; loading/updating here asks the user to stop that server or connect its API first.
 
 **Tune model** runs a fixed, greedy, thinking-off benchmark and saves reported engine timings. Stop benchmark aborts its request. NVIDIA calibration invokes the installed native `calibrate_config` for the selected existing model; failures are surfaced rather than accepted as a successful measurement.
 
-About checks release availability inline. Explicit update actions run the official native update path; Strata source updates require a clean checkout and the official origin, and use `git pull --ff-only`. Updates require unloading native instances. Engine rollback is enabled only when the installer supports it and a saved `.previous` engine exists. UI-source rollback is not fabricated. These buttons manage the configured native installation; updating the React app itself belongs to the desktop distribution updater.
+About checks release availability inline. Explicit update actions run the official native update path; Cortex source updates require a clean checkout and the official origin, and use `git pull --ff-only`. Updates require unloading native instances. Engine rollback is enabled only when the installer supports it and a saved `.previous` engine exists. UI-source rollback is not fabricated. These buttons manage the configured native installation; updating the React app itself belongs to the desktop distribution updater.
 
 ## Verification and deployment limits
 

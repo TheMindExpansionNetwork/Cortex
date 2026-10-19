@@ -1,4 +1,4 @@
-export const PREVIEW_SPLIT_KEY='strata.preview-split.v1';
+export const PREVIEW_SPLIT_KEY='cortex.preview-split.v1';
 export const DEFAULT_PREVIEW_FRACTION=1.15/2.15;
 export const MIN_CHAT_WIDTH=360, MIN_PREVIEW_WIDTH=320;
 export function previewWidth(total:number,fraction:number){

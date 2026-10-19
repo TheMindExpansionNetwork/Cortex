@@ -10,9 +10,9 @@ import time
 import unittest
 from pathlib import Path
 
-from strata_control import presets
+from cortex_control import presets
 
-CFG = {"exe": "strata", "model_name": "swift-iq2_xs", "ui_resource_profile": "work", "vram_reserve_mib": 1536,
+CFG = {"exe": "cortex", "model_name": "swift-iq2_xs", "ui_resource_profile": "work", "vram_reserve_mib": 1536,
        "args": ["--pack", "P", "--native", "Swift-IQ3_S-00001-of-00002.gguf", "--expert-cache", "auto", "--prefill", "auto",
                 "--spec", "4", "--max-context", "131072", "--kv", "int8"]}
 
@@ -34,8 +34,8 @@ RESULT = {"outcome": "improved", "seconds": 1100, "settings": {"args": {"--host-
 class StoreTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        os.environ["STRATA_PRESET_DIR"] = str(Path(self.tmp.name) / "presets")
-        self.addCleanup(lambda: os.environ.pop("STRATA_PRESET_DIR", None))
+        os.environ["CORTEX_PRESET_DIR"] = str(Path(self.tmp.name) / "presets")
+        self.addCleanup(lambda: os.environ.pop("CORTEX_PRESET_DIR", None))
         self.addCleanup(self.tmp.cleanup)
         self.choices = presets.choices_from_config(CFG)
 
@@ -134,11 +134,11 @@ class StoreTest(unittest.TestCase):
         res["settings"]["per_request"] = {"spec_min_p": 0.7}
         self.make(result=res)
         out, info = presets.overlay(CFG, now=identity())
-        self.assertEqual(out["sampling"]["strata_tune"], {"spec_min_p": 0.7})
+        self.assertEqual(out["sampling"]["cortex_tune"], {"spec_min_p": 0.7})
 
     def test_a_broken_store_never_breaks_a_start(self):
         self.make()
-        for f in Path(os.environ["STRATA_PRESET_DIR"]).glob("*.json"):
+        for f in Path(os.environ["CORTEX_PRESET_DIR"]).glob("*.json"):
             f.write_text("{not json")
         out, info = presets.overlay(CFG, now=identity())
         self.assertEqual(out, CFG)

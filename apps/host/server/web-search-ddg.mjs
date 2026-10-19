@@ -17,11 +17,11 @@
  *   - when every source refuses the answer is one plain sentence that also tells the model not to retry (see LIMITED_MESSAGE).
  * Results come from DuckDuckGo or Bing; they are not ranked or filtered here.
  *
- * Nothing in this file touches the Harness, so it can be tested alone. `strata-search.mjs` is the plugin that registers it.
+ * Nothing in this file touches the Harness, so it can be tested alone. `cortex-search.mjs` is the plugin that registers it.
  */
 import { BING_URL, bingLooksBlocked, parseBingResults } from './web-search-bing.mjs';
 
-export const DDG_PROVIDER_ID = 'strata-duckduckgo';
+export const DDG_PROVIDER_ID = 'cortex-duckduckgo';
 
 const HTML_URL = 'https://html.duckduckgo.com/html/';
 const LITE_URL = 'https://lite.duckduckgo.com/lite/';

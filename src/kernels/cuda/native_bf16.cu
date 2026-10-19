@@ -1,7 +1,7 @@
-#include "strata/kernels/bf16_gemv.hpp"
+#include "cortex/kernels/bf16_gemv.hpp"
 #include "s26_tsum.cuh"
-#include "strata/kernels/bf16_bits.hpp"
-#include "strata/kernels/pdl.hpp"
+#include "cortex/kernels/bf16_bits.hpp"
+#include "cortex/kernels/pdl.hpp"
 
 #include <cuda_runtime.h>
 #include <cstdlib>
@@ -9,7 +9,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
 // The FP32-activation MMVF implementation below is adapted from llama.cpp
@@ -77,8 +77,8 @@ __global__ void bf16_f32_mmvf_kernel(const float* __restrict__ x, const uint16_t
 template <int BLOCK_SIZE, int NT, bool EXACT_T = true>
 __global__ void bf16_f32_mmvf_multi_kernel(const float* x_, int64_t ldx, const uint16_t* __restrict__ w,
                                           float* y_, int64_t ldy, int n_in, int n_tok) {
-    const float* STRATA_PDL_RESTRICT x = x_;   // __restrict__ below sm_70 only (pdl.hpp, #1469)
-    float* STRATA_PDL_RESTRICT y = y_;
+    const float* CORTEX_PDL_RESTRICT x = x_;   // __restrict__ below sm_70 only (pdl.hpp, #1469)
+    float* CORTEX_PDL_RESTRICT y = y_;
     const int t = threadIdx.x;
     const uint16_t* row = w + (size_t) blockIdx.x * n_in;
     const uint32_t* weights2 = reinterpret_cast<const uint32_t*>(row);
@@ -133,11 +133,11 @@ __global__ void bf16_f32_mmvf_multi_kernel(const float* x_, int64_t ldx, const u
             if (EXACT_T || k < n_tok) y[(size_t) k * ldy + blockIdx.x] = acc[k];
 }
 
-// S25 (STRATA_MMVF_ROWS=1): RPB output rows per block. Each block read its row's weights once but all T activation
+// S25 (CORTEX_MMVF_ROWS=1): RPB output rows per block. Each block read its row's weights once but all T activation
 // rows again (n_out blocks x T x n_in floats through L2 - the part that grew with T); here a block reads the
 // activations once for RPB rows. Per output, thread t still walks pairs t, t + BLOCK_SIZE, ... with the same two
 // ordered FMAs and the same warp and block reductions: bit-identical to bf16_f32_mmvf_multi_kernel.
-// S26 STRATA_LFUSE=1 (AUX): one more block computes row 0 of w_aux into y_aux[k * ldy_aux] - the same per-output
+// S26 CORTEX_LFUSE=1 (AUX): one more block computes row 0 of w_aux into y_aux[k * ldy_aux] - the same per-output
 // code, so each aux output is bitwise what its own bf16_f32_mmvf_multi_kernel launch gave (the shared expert's gate)
 template <int BLOCK_SIZE, int NT, int RPB, bool TS = false, bool AUX = false>
 __global__ void bf16_f32_mmvf_rows_kernel(const float* __restrict__ x, int64_t ldx, const uint16_t* __restrict__ w,
@@ -182,7 +182,7 @@ __global__ void bf16_f32_mmvf_rows_kernel(const float* __restrict__ x, int64_t l
             }
         }
     }
-    if constexpr (TS) {   // S26 STRATA_TSUM=1: the RPB x NT warp sums (both stages) as transposed butterflies, bitwise the same
+    if constexpr (TS) {   // S26 CORTEX_TSUM=1: the RPB x NT warp sums (both stages) as transposed butterflies, bitwise the same
         constexpr int V = RPB * NT, P = s26ts::pow2_ceil(V);
         const int lane = t & 31, j = s26ts::tsum_token<P>(lane);
         const bool own = lane == s26ts::tsum_lane<P>(j) && j < V;
@@ -233,8 +233,8 @@ void launch_rows(const float* x, int64_t ldx, const uint16_t* w, float* y, int64
                  cudaStream_t st, const uint16_t* w_aux = nullptr, float* y_aux = nullptr, int64_t ldy_aux = 0) {
     constexpr int RPB = 4;
     const unsigned nb = (unsigned) ((n_out + RPB - 1) / RPB);
-    static const bool ts = [] { const char* v = std::getenv("STRATA_TSUM"); return v && v[0] == '1'; }();
-    if (w_aux != nullptr) {   // S26 STRATA_LFUSE: + one aux row block
+    static const bool ts = [] { const char* v = std::getenv("CORTEX_TSUM"); return v && v[0] == '1'; }();
+    if (w_aux != nullptr) {   // S26 CORTEX_LFUSE: + one aux row block
 #define S26_AUX(TSV) \
         if (n_tok <= 4) bf16_f32_mmvf_rows_kernel<B, 4, RPB, TSV, true><<<nb + 1, B, 0, st>>>(x, ldx, w, y, ldy, n_in, n_out, n_tok, w_aux, y_aux, ldy_aux); \
         else bf16_f32_mmvf_rows_kernel<B, 8, RPB, TSV, true><<<nb + 1, B, 0, st>>>(x, ldx, w, y, ldy, n_in, n_out, n_tok, w_aux, y_aux, ldy_aux);
@@ -269,7 +269,7 @@ int mmvf_block_size(int64_t n_in) {
 bool bf16_gemv_fp32_mmvf_multi_aux(const float* x, int64_t ldx, const uint16_t* w, float* y, int64_t ldy,
                                    int64_t n_in, int64_t n_out, int n_tok, const uint16_t* w_aux, float* y_aux,
                                    int64_t ldy_aux, void* stream) {
-    static const bool rows = [] { const char* v = std::getenv("STRATA_MMVF_ROWS"); return v && v[0] == '1'; }();
+    static const bool rows = [] { const char* v = std::getenv("CORTEX_MMVF_ROWS"); return v && v[0] == '1'; }();
     // exactly the conditions under which both calls would take the rows / multi kernels at the same block size
     if (!rows || n_out < 64 || n_tok < 2 || n_tok > 8 || n_in <= 0 || (n_in & 1) != 0 || (ldx & 1) != 0 || x == nullptr ||
         w == nullptr || y == nullptr || w_aux == nullptr || y_aux == nullptr || (reinterpret_cast<uintptr_t>(x) & 7u) != 0)
@@ -299,7 +299,7 @@ void bf16_gemv_fp32_mmvf_multi(const float* x, int64_t ldx, const uint16_t* w, f
         w == nullptr || y == nullptr || (reinterpret_cast<uintptr_t>(x) & 7u) != 0)
         throw std::invalid_argument("bf16_gemv_fp32_mmvf_multi: 1..8 rows, even n_in/ldx, aligned pointers");
     const cudaStream_t st = (cudaStream_t) stream;
-    static const bool rows = [] { const char* v = std::getenv("STRATA_MMVF_ROWS"); return v && v[0] == '1'; }();
+    static const bool rows = [] { const char* v = std::getenv("CORTEX_MMVF_ROWS"); return v && v[0] == '1'; }();
     if (rows && n_out >= 64) {
         const int ni = (int) n_in, no = (int) n_out;
         switch (mmvf_block_size(n_in)) {
@@ -317,7 +317,7 @@ void bf16_gemv_fp32_mmvf_multi(const float* x, int64_t ldx, const uint16_t* w, f
             throw std::runtime_error(std::string("bf16_gemv_fp32_mmvf_multi launch: ") + cudaGetErrorString(result));
         return;
     }
-#define STRATA_MMVF_M(N) case N: \
+#define CORTEX_MMVF_M(N) case N: \
     switch (n_tok) { \
         case 1: launch_pdl(bf16_f32_mmvf_multi_kernel<N, 1, true>, dim3((unsigned) n_out), dim3(N), 0, st, x, ldx, w, y, ldy, (int) n_in, n_tok); break; \
         case 2: launch_pdl(bf16_f32_mmvf_multi_kernel<N, 2, true>, dim3((unsigned) n_out), dim3(N), 0, st, x, ldx, w, y, ldy, (int) n_in, n_tok); break; \
@@ -328,10 +328,10 @@ void bf16_gemv_fp32_mmvf_multi(const float* x, int64_t ldx, const uint16_t* w, f
         default: launch_pdl(bf16_f32_mmvf_multi_kernel<N, 8, false>, dim3((unsigned) n_out), dim3(N), 0, st, x, ldx, w, y, ldy, (int) n_in, n_tok); break; \
     } break
     switch (mmvf_block_size(n_in)) {
-        STRATA_MMVF_M(32); STRATA_MMVF_M(64); STRATA_MMVF_M(96); STRATA_MMVF_M(128);
-        STRATA_MMVF_M(160); STRATA_MMVF_M(192); STRATA_MMVF_M(224); STRATA_MMVF_M(256);
+        CORTEX_MMVF_M(32); CORTEX_MMVF_M(64); CORTEX_MMVF_M(96); CORTEX_MMVF_M(128);
+        CORTEX_MMVF_M(160); CORTEX_MMVF_M(192); CORTEX_MMVF_M(224); CORTEX_MMVF_M(256);
     }
-#undef STRATA_MMVF_M
+#undef CORTEX_MMVF_M
     const cudaError_t result = cudaGetLastError();
     if (result != cudaSuccess)
         throw std::runtime_error(std::string("bf16_gemv_fp32_mmvf_multi launch: ") + cudaGetErrorString(result));
@@ -348,19 +348,19 @@ void bf16_gemv_fp32_mmvf(const float* x, const uint16_t* w, float* y,
         (reinterpret_cast<uintptr_t>(y) & 3u) != 0)
         throw std::invalid_argument("bf16_gemv_fp32_mmvf: null or misaligned pointer");
     const cudaStream_t st = (cudaStream_t) stream;
-#define STRATA_MMVF_CASE(N) case N: \
+#define CORTEX_MMVF_CASE(N) case N: \
     bf16_f32_mmvf_kernel<N><<<(unsigned) n_out, N, 0, st>>>(x, w, y, (int) n_in); break
     switch (mmvf_block_size(n_in)) {
-        STRATA_MMVF_CASE(32);
-        STRATA_MMVF_CASE(64);
-        STRATA_MMVF_CASE(96);
-        STRATA_MMVF_CASE(128);
-        STRATA_MMVF_CASE(160);
-        STRATA_MMVF_CASE(192);
-        STRATA_MMVF_CASE(224);
-        STRATA_MMVF_CASE(256);
+        CORTEX_MMVF_CASE(32);
+        CORTEX_MMVF_CASE(64);
+        CORTEX_MMVF_CASE(96);
+        CORTEX_MMVF_CASE(128);
+        CORTEX_MMVF_CASE(160);
+        CORTEX_MMVF_CASE(192);
+        CORTEX_MMVF_CASE(224);
+        CORTEX_MMVF_CASE(256);
     }
-#undef STRATA_MMVF_CASE
+#undef CORTEX_MMVF_CASE
     const cudaError_t result = cudaGetLastError();
     if (result != cudaSuccess)
         throw std::runtime_error(std::string("bf16_gemv_fp32_mmvf launch: ") + cudaGetErrorString(result));
@@ -380,4 +380,4 @@ void bf16_gemv_fp32_mmvf_cols(const float* x, const uint16_t* w, float* y, int64
     }
 }
 
-}  // namespace strata::kernels
+}  // namespace cortex::kernels

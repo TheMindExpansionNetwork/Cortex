@@ -1,4 +1,4 @@
-// alias_scan: allocate device buffers of assorted sizes, keep them, and run strata::arena_alias_check on each: where does
+// alias_scan: allocate device buffers of assorted sizes, keep them, and run cortex::arena_alias_check on each: where does
 // the xe page table alias pages (a write to one 2 MiB page showing at another)?  Prints each buffer's address mod 1 GiB.
 //   alias_scan [n=40] [seed=1] [max_mib=6000]
 #include <sycl/sycl.hpp>
@@ -6,7 +6,7 @@
 #include <cstdlib>
 #include <random>
 #include <vector>
-#include "strata/sycl_queue.hpp"
+#include "cortex/sycl_queue.hpp"
 
 int main(int argc, char** argv) {
     const int n = argc > 1 ? std::atoi(argv[1]) : 40;
@@ -26,7 +26,7 @@ int main(int argc, char** argv) {
         keep.push_back(p);
         total += mib;
         size_t first = 0;
-        const uint64_t bad = strata::arena_alias_check(q, p, bytes, &first);
+        const uint64_t bad = cortex::arena_alias_check(q, p, bytes, &first);
         std::printf("#%02d %6zu MiB at %p (mod 1GiB %5zu MiB, mod 2MiB %zu): %s", i, mib, p, (size_t) (((uintptr_t) p & ((1u << 30) - 1)) >> 20),
                     (size_t) ((uintptr_t) p & ((2u << 20) - 1)), bad ? "ALIAS" : "ok");
         if (bad) { ++bad_bufs; std::printf(" %llu blocks, first at +%zu MiB", (unsigned long long) bad, first >> 20); }

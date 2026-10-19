@@ -1,8 +1,8 @@
 // tests/hip/prefill_gr_write_bench.cpp - the hyper-connection write-back (gr_write_norm_rs: R += bo * 2 sigmoid(inj / 4), then the next
 // half's norm row scale and BF16 image) timed at the prompt path's shapes, with the bytes it moves, and a checksum of its
-// outputs so a variant can be compared bit for bit (run twice with STRATA_GRW_V=0 / 1).
+// outputs so a variant can be compared bit for bit (run twice with CORTEX_GRW_V=0 / 1).
 //   gr_write_bench [T=16384] [reps=20]
-#include "strata/prefill/kernels.hpp"
+#include "cortex/prefill/kernels.hpp"
 
 #include <cuda_runtime.h>
 
@@ -51,7 +51,7 @@ int main(int argc, char** argv) {
     cudaStreamCreate(&s);
     // one reference pass for the checksum
     cudaMemcpy(dR, dR0, R0.size() * 4, cudaMemcpyDeviceToDevice);
-    strata::prefill::gr_write_norm_rs(dR, dbo, dinj, HC, dw, 1e-6f, drs, dx, T, s, nullptr, D, false);
+    cortex::prefill::gr_write_norm_rs(dR, dbo, dinj, HC, dw, 1e-6f, drs, dx, T, s, nullptr, D, false);
     cudaStreamSynchronize(s);
     std::vector<float> oR(R0.size()), ors((size_t) T * HC);
     std::vector<uint16_t> ox((size_t) T * D);
@@ -68,7 +68,7 @@ int main(int argc, char** argv) {
         cudaMemcpy(dR, dR0, R0.size() * 4, cudaMemcpyDeviceToDevice);
         cudaStreamSynchronize(s);
         cudaEventRecord(e0, s);
-        strata::prefill::gr_write_norm_rs(dR, dbo, dinj, HC, dw, 1e-6f, drs, dx, T, s, nullptr, D, false);
+        cortex::prefill::gr_write_norm_rs(dR, dbo, dinj, HC, dw, 1e-6f, drs, dx, T, s, nullptr, D, false);
         cudaEventRecord(e1, s);
         cudaEventSynchronize(e1);
         float ms = 0;

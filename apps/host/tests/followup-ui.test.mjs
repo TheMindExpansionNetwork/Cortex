@@ -70,7 +70,7 @@ test('shortcut overrides persist, clear, restore, and change the composer send c
   assert.equal(m.composerSends(enter), true);
   m.setBinding('chat:send', { key: 'enter', mod: true, shift: false, alt: false });
   assert.equal(m.composerSends(enter), false); assert.equal(m.composerSends({ ...enter, metaKey: true }), true);
-  assert.ok(memory.get('strata.shortcuts.v1').includes('chat:send'));
+  assert.ok(memory.get('cortex.shortcuts.v1').includes('chat:send'));
   m.setBinding('new', null); assert.equal(m.bindingFor('new', { key: 'n' }), null);
   m.resetBindings(); assert.equal(m.composerSends(enter), true); assert.equal(memory.size, 0);
   delete globalThis.localStorage;

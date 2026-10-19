@@ -1,5 +1,5 @@
 # Phase A verification matrix -- 2026-10-15T05:19:20Z
-# repo: 0a8bf4c235dfe4b5ad88ed7cd02a8cb82cf87976  branch: strata/rebuild-2026-10
+# repo: 0a8bf4c235dfe4b5ad88ed7cd02a8cb82cf87976  branch: cortex/rebuild-2026-10
 # host: Apple M4, 16 GiB unified memory, macOS 26.5.2, ~21 GiB free
 
 CHECK                                 RESULT                            EVIDENCE

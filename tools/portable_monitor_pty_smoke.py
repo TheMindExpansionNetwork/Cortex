@@ -57,7 +57,7 @@ def _case(bundle: Path, url: str, paths: list[str], key: bytes) -> dict:
                 output.extend(chunk)
                 if len(output) > 65536:
                     del output[:-65536]
-            if not sent and len(paths) > before_count and b"STRATA" in output:
+            if not sent and len(paths) > before_count and b"CORTEX" in output:
                 active = termios.tcgetattr(slave)
                 active_raw = not bool(active[3] & termios.ICANON) and not bool(active[3] & termios.ECHO)
                 if active_raw:

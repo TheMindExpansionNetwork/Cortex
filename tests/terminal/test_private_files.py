@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from strata_control import private_files as pf  # noqa: E402
+from cortex_control import private_files as pf  # noqa: E402
 
 
 class PrivateFileTests(unittest.TestCase):
@@ -139,8 +139,8 @@ class ElevatedRunLockoutTests(unittest.TestCase):
             self.lock_out(item)
         with self.assertRaises(PermissionError):
             (folder / "a.json").read_bytes()
-        os.environ["STRATA_HOME"] = str(self.root)
-        self.addCleanup(os.environ.pop, "STRATA_HOME", None)
+        os.environ["CORTEX_HOME"] = str(self.root)
+        self.addCleanup(os.environ.pop, "CORTEX_HOME", None)
         report = pf.repair_known_roots()
         self.assertGreaterEqual(report["repaired"], 1)
         self.assertEqual(report["failed"], 0)
@@ -167,12 +167,12 @@ class ElevatedRunLockoutTests(unittest.TestCase):
         self.assertFalse(pf.repair_access(os.environ.get("SystemRoot", "C:\Windows") + "\System32\drivers"))
 
     def test_a_profile_that_was_locked_loads(self):
-        from strata_control import profiles
-        os.environ["STRATA_PROFILE_DIR"] = str(self.root / "profiles")
-        self.addCleanup(os.environ.pop, "STRATA_PROFILE_DIR", None)
+        from cortex_control import profiles
+        os.environ["CORTEX_PROFILE_DIR"] = str(self.root / "profiles")
+        self.addCleanup(os.environ.pop, "CORTEX_PROFILE_DIR", None)
         directory = self.root / "profiles"
         directory.mkdir()
-        run_config = self.root / "strata-x.json"
+        run_config = self.root / "cortex-x.json"
         run_config.write_text("{}")
         (directory / "app-1.json").write_text(json.dumps({"schema": 1, "name": "app-1", "source_config": str(run_config)}))
         self.lock_out(directory / "app-1.json")

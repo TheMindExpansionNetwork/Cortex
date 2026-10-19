@@ -1,11 +1,11 @@
-// #835: the FP16-in / FP16-out prompt GEMMs (Gemm::set_f16_io, STRATA_HIP_PROMPT_F16=1) against a CPU reference.
+// #835: the FP16-in / FP16-out prompt GEMMs (Gemm::set_f16_io, CORTEX_HIP_PROMPT_F16=1) against a CPU reference.
 // f16() and bf16() (its weights BF16, its activations the FP16 image) write FP16 into Y's own rows and widen them in
 // place; the columns past N must stay untouched and a beta = 1 call must keep the ordinary FP32 path.  The tolerance
 // is FP16's: one rounding of each output.
 #include <hip/hip_runtime.h>
 #include <hip/hip_bfloat16.h>
 #include <hip/hip_fp16.h>
-#include "strata/prefill/gemm.hpp"
+#include "cortex/prefill/gemm.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -25,7 +25,7 @@ struct Buffer {
 };
 
 // bf16_w: the weights are BF16 (the bf16() entry); the activations are always the FP16 image on this path.
-bool run(strata::prefill::Gemm& gemm, hipStream_t stream, bool bf16_w, int t, int n, int k, int ldy, float beta) {
+bool run(cortex::prefill::Gemm& gemm, hipStream_t stream, bool bf16_w, int t, int n, int k, int ldy, float beta) {
     std::mt19937 rng(835 + t + n + (bf16_w ? 1 : 0));
     std::uniform_real_distribution<float> dist(-0.25f, 0.25f);
     std::vector<uint16_t> x((size_t) t * k), w((size_t) n * k);
@@ -96,7 +96,7 @@ int main() {
     CHECK(hipStreamCreateWithFlags(&stream, hipStreamNonBlocking));
     bool ok = true;
     {
-        strata::prefill::Gemm gemm;
+        cortex::prefill::Gemm gemm;
         std::string error;
         if (!gemm.init(stream, 2560 * 640, error)) { std::fprintf(stderr, "%s\n", error.c_str()); return 2; }
         gemm.set_f16_io(true);

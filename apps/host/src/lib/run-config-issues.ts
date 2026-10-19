@@ -11,11 +11,11 @@ export function issueText(issue: RunConfigIssue): string {
     switch (issue.code) {
       case 'json': return p.line ? tr('The settings file is not valid JSON; look near line {0}. Check for a missing comma between two entries, a comma after the last entry, or a missing quote.', [p.line]) : tr('The settings file is not valid JSON. Check for a missing comma between two entries, a comma after the last entry, or a missing quote.');
       case 'not-object': return tr('The settings file must hold one object, { … }, with the settings inside.');
-      case 'unknown-key-near': return tr('"{0}" is not a setting Strata reads, so it is ignored. Did you mean "{1}"?', [p.key, p.near]);
-      case 'unknown-key': return tr('"{0}" is not a setting Strata reads, so it is ignored.', [p.key]);
+      case 'unknown-key-near': return tr('"{0}" is not a setting Cortex reads, so it is ignored. Did you mean "{1}"?', [p.key, p.near]);
+      case 'unknown-key': return tr('"{0}" is not a setting Cortex reads, so it is ignored.', [p.key]);
       case 'args-type': return tr('"args" must be a list of quoted text entries, for example ["--ple-io", "mmap"]. Numbers need quotes too.');
-      case 'args-managed': return tr('Strata manages the network address, port and API key itself, so --host, --port and --api-key in "args" are not honoured.');
-      case 'env-type': return tr('"env" must be an object of STRATA_ names with quoted text values.');
+      case 'args-managed': return tr('Cortex manages the network address, port and API key itself, so --host, --port and --api-key in "args" are not honoured.');
+      case 'env-type': return tr('"env" must be an object of CORTEX_ names with quoted text values.');
       case 'env-value': return tr('"env" entry {0} must be quoted text, for example "1".', [p.name]);
       case 'sampling-type': return tr('"sampling" must be an object such as { "temperature": 0.7 }.');
       case 'bool': return tr('"{0}" must be true or false, not {1}.', [p.key, p.value ?? '']);

@@ -1,16 +1,16 @@
 // src/core/expert_cache.cpp - R4's slot storage and residency table.  Read the header first.
-#include "strata/core/expert_cache.hpp"
+#include "cortex/core/expert_cache.hpp"
 
 // #533's segmented cache uses CUDA's virtual memory management (cuMem*): not on HIP, neither the RDNA backend nor
-// the gfx906 compat build (PR #638), which compiles this file as HIP without STRATA_USE_HIP
-#if defined(STRATA_USE_HIP) || defined(STRATA_HIP_GFX906) || defined(STRATA_GPU_METAL)
-#define STRATA_EC_NO_VMM 1
+// the gfx906 compat build (PR #638), which compiles this file as HIP without CORTEX_USE_HIP
+#if defined(CORTEX_USE_HIP) || defined(CORTEX_HIP_GFX906) || defined(CORTEX_GPU_METAL)
+#define CORTEX_EC_NO_VMM 1
 #endif
 
 #include <thread>
 #include <mutex>
 #include <cuda_runtime.h>
-#if !defined(STRATA_EC_NO_VMM)
+#if !defined(CORTEX_EC_NO_VMM)
 #include <cuda.h>   // #533: the virtual memory management types (the functions come through the runtime's entry points)
 #endif
 
@@ -22,7 +22,7 @@
 #include <utility>
 #include <cstring>
 
-namespace strata::core {
+namespace cortex::core {
 
 // See the header.  NVIDIA's DGX Spark Porting Guide (section 5.5, "Memory reporting on UMA systems") recommends the same:
 // not to rely on cudaMemGetInfo alone but to count the memory the OS can reclaim.  Swap is not counted here (unlike
@@ -30,7 +30,7 @@ namespace strata::core {
 size_t device_free_bytes() {
     size_t free_b = 0, total_b = 0;
     cudaMemGetInfo(&free_b, &total_b);
-#if defined(__linux__) && !defined(STRATA_HIP_GFX906)   // (the gfx906 compat layer has no cudaDevAttrIntegrated; that GPU is discrete)
+#if defined(__linux__) && !defined(CORTEX_HIP_GFX906)   // (the gfx906 compat layer has no cudaDevAttrIntegrated; that GPU is discrete)
     // per device: a box can mix an integrated GPU (an APU) with a discrete one, and the answer is the CURRENT device's
     static std::atomic<int> uma_cache[64];   // 0 unknown, 1 integrated (unified memory), 2 discrete
     bool unified_memory = false;
@@ -52,14 +52,14 @@ size_t device_free_bytes() {
             while (std::fgets(line, sizeof line, m))
                 if (std::sscanf(line, "MemAvailable: %llu kB", &kb) == 1) break;
             std::fclose(m);
-            // STRATA_UMA_HEADROOM_GIB: a whole number of GiB, 0..1024; anything else keeps the default 6 (said once)
+            // CORTEX_UMA_HEADROOM_GIB: a whole number of GiB, 0..1024; anything else keeps the default 6 (said once)
             static const long gib = [] {
-                const char* h = std::getenv("STRATA_UMA_HEADROOM_GIB");
+                const char* h = std::getenv("CORTEX_UMA_HEADROOM_GIB");
                 if (h == nullptr) return 6L;
                 char* end = nullptr;
                 const long v = std::strtol(h, &end, 10);
                 if (end != h && *end == '\0' && v >= 0 && v <= 1024) return v;
-                std::fprintf(stderr, "strata: STRATA_UMA_HEADROOM_GIB=%s is not a whole number of GiB (0-1024): using 6\n", h);
+                std::fprintf(stderr, "cortex: CORTEX_UMA_HEADROOM_GIB=%s is not a whole number of GiB (0-1024): using 6\n", h);
                 return 6L;
             }();
             const unsigned long long head = (unsigned long long) gib << 30;
@@ -216,7 +216,7 @@ ExpertCache::~ExpertCache() { close(); }
 // ---- #533: the segmented arena (--vram-elastic).  The driver API's virtual memory functions, looked up through the
 // runtime (no link against the driver library): one address range for the whole arena, backed by physical segments,
 // and the tail's segments unmapped / mapped again later.  Nothing here runs unless a segment size was set.
-#if !defined(STRATA_EC_NO_VMM)
+#if !defined(CORTEX_EC_NO_VMM)
 namespace {
 struct Vmm {
     CUresult (CUDAAPI* device_get)(CUdevice*, int) = nullptr;
@@ -295,7 +295,7 @@ bool map_segment(const Vmm& v, int dev, CUdeviceptr va, size_t bytes, unsigned l
 #endif
 
 bool ExpertCache::open_segmented(uint64_t want, std::string& err) {
-#if defined(STRATA_EC_NO_VMM)
+#if defined(CORTEX_EC_NO_VMM)
     (void) want;
     err = "ExpertCache: --vram-elastic (a segmented expert cache) is CUDA-only for now";
     return false;
@@ -348,7 +348,7 @@ bool ExpertCache::open_segmented(uint64_t want, std::string& err) {
 }
 
 void ExpertCache::release_segmented() {
-#if !defined(STRATA_EC_NO_VMM)
+#if !defined(CORTEX_EC_NO_VMM)
     const Vmm& v = vmm();
     if (base_ != nullptr) cudaDeviceSynchronize();
     const CUdeviceptr va = reinterpret_cast<CUdeviceptr>(base_);
@@ -386,7 +386,7 @@ bool ExpertCache::shrink(int64_t keep_bytes, std::string& err) {
         err = "the expert cache is not segmented (the engine needs --vram-elastic)";
         return false;
     }
-#if defined(STRATA_EC_NO_VMM)
+#if defined(CORTEX_EC_NO_VMM)
     (void) keep_bytes;
     return false;
 #else
@@ -420,7 +420,7 @@ bool ExpertCache::grow(int64_t want_bytes, std::string& err) {
         err = "the expert cache is not segmented (the engine needs --vram-elastic)";
         return false;
     }
-#if defined(STRATA_EC_NO_VMM)
+#if defined(CORTEX_EC_NO_VMM)
     (void) want_bytes;
     return false;
 #else
@@ -446,7 +446,7 @@ bool ExpertCache::grow(int64_t want_bytes, std::string& err) {
 #endif
 }
 
-#if defined(STRATA_USE_HIP)
+#if defined(CORTEX_USE_HIP)
 bool ExpertCache::ensure_blocking_staging(std::size_t bytes, std::string& err) {
     if (bytes <= blocking_staging_bytes_) return true;
     void* next = nullptr;
@@ -540,7 +540,7 @@ bool ExpertCache::open(int64_t n_slots, int64_t n_layers, int64_t n_expert, int6
     n_layers_ = n_layers;
     n_expert_ = n_expert;
     blob_ = blob_bytes;
-#if defined(STRATA_USE_HIP)
+#if defined(CORTEX_USE_HIP)
     if (!ensure_blocking_staging((std::size_t) blob_, err)) {
         close();
         return false;
@@ -567,7 +567,7 @@ bool ExpertCache::open_sized(const std::vector<int64_t>& slot_bytes, int64_t n_l
     std::vector<uint64_t> off(slot_bytes.size() + 1, 0);
     for (size_t i = 0; i < slot_bytes.size(); ++i) {
         // 256-byte aligned slots, so every blob starts where the kernels' vector loads expect it (and the
-        // STRATA_MMQ_DIRECT guard after each blob, 0 by default)
+        // CORTEX_MMQ_DIRECT guard after each blob, 0 by default)
         off[i + 1] = off[i] + (uint64_t) slot_stride(slot_bytes[i], guard_req_);
         mx = slot_bytes[i] > mx ? slot_bytes[i] : mx;
     }
@@ -578,7 +578,7 @@ bool ExpertCache::open_sized(const std::vector<int64_t>& slot_bytes, int64_t n_l
     blob_ = mx;
     off_ = std::move(off);
     guard_ = guard_req_;
-#if defined(STRATA_USE_HIP)
+#if defined(CORTEX_USE_HIP)
     if (!ensure_blocking_staging((std::size_t) blob_, err)) {
         close();
         return false;
@@ -596,7 +596,7 @@ bool ExpertCache::open_sized(const std::vector<int64_t>& slot_bytes, int64_t n_l
 }
 
 void ExpertCache::close() {
-#if defined(STRATA_USE_HIP)
+#if defined(CORTEX_USE_HIP)
     if (blocking_staging_) (void) cudaFreeHost(blocking_staging_);
     blocking_staging_ = nullptr;
     blocking_staging_bytes_ = 0;
@@ -705,7 +705,7 @@ bool ExpertCache::fill_slot_blocking(int32_t slot, const uint8_t* host_blob, std
         err = "ExpertCache::fill_slot_blocking: the host blob is null";
         return false;
     }
-#if defined(STRATA_USE_HIP)
+#if defined(CORTEX_USE_HIP)
     // Bound HIP's pageable-source staging to one expert instead of repeatedly
     // registering regions of the mmap. The blocking copy completes before reuse.
     if (!blocking_staging_ || n > blocking_staging_bytes_) {
@@ -804,4 +804,4 @@ bool ExpertCache::verify_slot(int32_t slot, const uint8_t* host_blob, std::strin
     return true;
 }
 
-}  // namespace strata::core
+}  // namespace cortex::core

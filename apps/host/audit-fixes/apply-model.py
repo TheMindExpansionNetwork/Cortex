@@ -5,7 +5,7 @@ const DESIGN_VERSIONS = [
  ['Q2_K','Smallest',2.9], ['Q3_K_M','Compact',3.9], ['Q4_K_M','Balanced',4.9],
  ['Q5_K_M','High quality',5.7], ['Q6_K','Very high',6.6], ['Q8_0','Near-original',8.5], ['BF16','Original',16],
 ];
-export const VARIANTS = process.env.STRATA_REAL_ENGINE === '1' ? REAL_VARIANTS : DESIGN_VERSIONS.map(([quant,name,bits])=>{
+export const VARIANTS = process.env.CORTEX_REAL_ENGINE === '1' ? REAL_VARIANTS : DESIGN_VERSIONS.map(([quant,name,bits])=>{
  const diskGb=Math.round(30.5*bits/8*10)/10;
  return {id:`qwen38-${quant.toLowerCase()}`,name,family:'Qwen3.8-Flash-Next',quant,label:`Qwen3.8-Flash-Next · ${name} (${quant})`,params:'30.5B',
  blurb:'The same model at a different precision.',role:quant==='Q4_K_M'?'best-fit':'option',tier:quant==='Q2_K'?'starter':'balanced',

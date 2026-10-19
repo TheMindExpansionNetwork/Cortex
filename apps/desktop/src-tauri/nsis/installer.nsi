@@ -159,7 +159,7 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 !if "${UNINSTALLERICON}" != ""
   !define MUI_UNICON "${UNINSTALLERICON}"
 !else if "${INSTALLERICON}" != ""
-  ; Tauri leaves the uninstaller icon empty unless asked; use the Strata icon so the uninstaller is not the NSIS default
+  ; Tauri leaves the uninstaller icon empty unless asked; use the Cortex icon so the uninstaller is not the NSIS default
   !define MUI_UNICON "${INSTALLERICON}"
 !endif
 
@@ -168,18 +168,18 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 !define MUI_LANGDLL_REGISTRY_KEY "${MANUPRODUCTKEY}"
 !define MUI_LANGDLL_REGISTRY_VALUENAME "Installer Language"
 
-; Strata's look and words: the app's light surface and ink, short copy, no directory page, straight on to the progress.
+; Cortex's look and words: the app's light surface and ink, short copy, no directory page, straight on to the progress.
 !define MUI_BGCOLOR "F9FAFB"
 !define MUI_TEXTCOLOR "171B1E"
 !define MUI_INSTFILESPAGE_PROGRESSBAR "smooth"
 !define MUI_WELCOMEPAGE_TITLE "State of the art. At home."
-!define MUI_WELCOMEPAGE_TEXT "Strata runs AI on your own computer.$\r$\n$\r$\nThis takes about a minute and needs no administrator. You choose your first model inside Strata."
-!define MUI_FINISHPAGE_TITLE "Strata is ready."
-!define MUI_FINISHPAGE_TEXT "Open it to pick your first model. Strata downloads it for you and gets it ready."
-!define MUI_FINISHPAGE_RUN_TEXT "Open Strata"
-!define MUI_PAGE_HEADER_TEXT "Installing Strata"
+!define MUI_WELCOMEPAGE_TEXT "Cortex runs AI on your own computer.$\r$\n$\r$\nThis takes about a minute and needs no administrator. You choose your first model inside Cortex."
+!define MUI_FINISHPAGE_TITLE "Cortex is ready."
+!define MUI_FINISHPAGE_TEXT "Open it to pick your first model. Cortex downloads it for you and gets it ready."
+!define MUI_FINISHPAGE_RUN_TEXT "Open Cortex"
+!define MUI_PAGE_HEADER_TEXT "Installing Cortex"
 !define MUI_PAGE_HEADER_SUBTEXT "Copying the app. You can keep working meanwhile."
-BrandingText "Strata"
+BrandingText "Cortex"
 ShowInstDetails nevershow
 
 ; Installer pages, must be ordered as they appear
@@ -203,7 +203,7 @@ ShowInstDetails nevershow
 ;    only if a previous installation was detected
 Var ReinstallPageCheck
 ; 1 when this installer was started on an installed copy of the SAME version and the person chose Uninstall: after it ran the
-; uninstaller this installer ends. (Stock Tauri goes on to the install pages, so Uninstall reinstalled Strata at once; tester report 2026-10-17.)
+; uninstaller this installer ends. (Stock Tauri goes on to the install pages, so Uninstall reinstalled Cortex at once; tester report 2026-10-17.)
 Var UninstallOnly
 Page custom PageReinstall PageLeaveReinstall
 Function PageReinstall
@@ -415,7 +415,7 @@ Function PageLeaveReinstall
 
     ; Uninstall means uninstall: do not go on to the install pages.
     ${If} $UninstallOnly = 1
-      MessageBox MB_OK|MB_ICONINFORMATION "Strata was uninstalled."
+      MessageBox MB_OK|MB_ICONINFORMATION "Cortex was uninstalled."
       Quit
     ${EndIf}
   reinst_done:
@@ -464,7 +464,7 @@ Var DeleteAppDataCheckboxState
 !define MUI_PAGE_CUSTOMFUNCTION_PRE un.SkipIfPassive
 !insertmacro MUI_UNPAGE_CONFIRM
 
-; 2. "Also remove my Strata data": unticked by default, and it says exactly what it deletes. Skipped when updating or in passive mode
+; 2. "Also remove my Cortex data": unticked by default, and it says exactly what it deletes. Skipped when updating or in passive mode
 ;    (an update never deletes anything). Model folders the person chose themselves are never touched.
 UninstPage custom un.DataPage un.DataPageLeave
 Function un.DataPage
@@ -472,13 +472,13 @@ Function un.DataPage
   ${OrIf} $UpdateMode = 1
     Abort
   ${EndIf}
-  !insertmacro MUI_HEADER_TEXT "Remove your Strata data too?" "Your models, chats and settings stay on this PC unless you tick the box."
+  !insertmacro MUI_HEADER_TEXT "Remove your Cortex data too?" "Your models, chats and settings stay on this PC unless you tick the box."
   nsDialogs::Create 1018
   Pop $0
   ${IfThen} $(^RTL) = 1 ${|} nsDialogs::SetRTL $(^RTL) ${|}
-  ${NSD_CreateCheckBox} 0 0 100% 12u "Also remove my Strata data (models, chats, settings)"
+  ${NSD_CreateCheckBox} 0 0 100% 12u "Also remove my Cortex data (models, chats, settings)"
   Pop $DeleteAppDataCheckbox
-  ${NSD_CreateLabel} 12u 18u -12u 96u "If you tick it, these folders are deleted, and nothing else:$\r$\n$\r$\n$LOCALAPPDATA\Strata   (engine, installed copy, tunings)$\r$\n$APPDATA\Strata   (settings)$\r$\n$PROFILE\.strata   (your chats, app settings)$\r$\n$DOCUMENTS\Strata\Models   (models Strata downloaded into its own folder)$\r$\n$\r$\nA model folder you chose yourself is never deleted."
+  ${NSD_CreateLabel} 12u 18u -12u 96u "If you tick it, these folders are deleted, and nothing else:$\r$\n$\r$\n$LOCALAPPDATA\Cortex   (engine, installed copy, tunings)$\r$\n$APPDATA\Cortex   (settings)$\r$\n$PROFILE\.cortex   (your chats, app settings)$\r$\n$DOCUMENTS\Cortex\Models   (models Cortex downloaded into its own folder)$\r$\n$\r$\nA model folder you chose yourself is never deleted."
   Pop $0
   ${NSD_SetFocus} $DeleteAppDataCheckbox
   nsDialogs::Show
@@ -666,20 +666,20 @@ Section WebView2
   ${EndIf}
 SectionEnd
 
-; STRATA-MIGRATE-BEGIN
-; An earlier build installed the app into %LOCALAPPDATA%\Strata, the folder that also holds the user's data (components, install,
+; CORTEX-MIGRATE-BEGIN
+; An earlier build installed the app into %LOCALAPPDATA%\Cortex, the folder that also holds the user's data (components, install,
 ; procs, runtime, time-skip). Remove only the app files that build put there; everything else stays.
-!macro StrataMigrateOldInstall OLDDIR NEWDIR
+!macro CortexMigrateOldInstall OLDDIR NEWDIR
   StrCmp "${OLDDIR}" "${NEWDIR}" +8
-  IfFileExists "${OLDDIR}\strata-desktop.exe" 0 +7
-    Delete "${OLDDIR}\strata-desktop.exe"
+  IfFileExists "${OLDDIR}\cortex-desktop.exe" 0 +7
+    Delete "${OLDDIR}\cortex-desktop.exe"
     Delete "${OLDDIR}\uninstall.exe"
     RMDir /r "${OLDDIR}\host"
     RMDir /r "${OLDDIR}\node"
     RMDir /r "${OLDDIR}\control"
     RMDir "${OLDDIR}"
 !macroend
-; STRATA-MIGRATE-END
+; CORTEX-MIGRATE-END
 
 Section Install
   SetOutPath $INSTDIR
@@ -688,7 +688,7 @@ Section Install
     !insertmacro NSIS_HOOK_PREINSTALL
   !endif
 
-  !insertmacro StrataMigrateOldInstall "$LOCALAPPDATA\${PRODUCTNAME}" "$INSTDIR"
+  !insertmacro CortexMigrateOldInstall "$LOCALAPPDATA\${PRODUCTNAME}" "$INSTDIR"
 
   !insertmacro CheckIfAppIsRunning "$INSTDIR\${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
 
@@ -930,19 +930,19 @@ Section Uninstall
     RmDir /r "$APPDATA\${BUNDLEID}"
     RmDir /r "$LOCALAPPDATA\${BUNDLEID}"
 
-    ; Strata's own data, for a fresh start: the folders listed on the page, nothing else. Each path is checked first.
+    ; Cortex's own data, for a fresh start: the folders listed on the page, nothing else. Each path is checked first.
     ${If} "$LOCALAPPDATA" != ""
-      RmDir /r "$LOCALAPPDATA\Strata"
+      RmDir /r "$LOCALAPPDATA\Cortex"
     ${EndIf}
     ${If} "$APPDATA" != ""
-      RmDir /r "$APPDATA\Strata"
+      RmDir /r "$APPDATA\Cortex"
     ${EndIf}
     ${If} "$PROFILE" != ""
-      RmDir /r "$PROFILE\.strata"
+      RmDir /r "$PROFILE\.cortex"
     ${EndIf}
     ${If} "$DOCUMENTS" != ""
-      RmDir /r "$DOCUMENTS\Strata\Models"
-      RmDir "$DOCUMENTS\Strata"          ; only if it is empty now
+      RmDir /r "$DOCUMENTS\Cortex\Models"
+      RmDir "$DOCUMENTS\Cortex"          ; only if it is empty now
     ${EndIf}
   ${EndIf}
 
@@ -983,12 +983,12 @@ Function StrIsUnder
   Push $R9
 FunctionEnd
 
-; Strata: the install folder remembered in the registry is only reused when it is a real place for an app. A location under the
+; Cortex: the install folder remembered in the registry is only reused when it is a real place for an app. A location under the
 ; temp folders (a test install, a build machine's scratch run) is ignored and the default per-user folder is used instead.
 Function RestorePreviousInstallLocation
   ReadRegStr $4 SHCTX "${MANUPRODUCTKEY}" ""
   StrCmp $4 "" restore_done 0
-  ; %LOCALAPPDATA%\Strata holds the user's engines, model configs and tuning: never an app folder
+  ; %LOCALAPPDATA%\Cortex holds the user's engines, model configs and tuning: never an app folder
   StrCmp $4 "$LOCALAPPDATA\${PRODUCTNAME}" restore_done 0
   Push $4
   Push "$LOCALAPPDATA\Temp"

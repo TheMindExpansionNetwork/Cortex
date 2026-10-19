@@ -18,12 +18,12 @@ SH = shutil.which("sh")
 class Scripts(unittest.TestCase):
     @unittest.skipIf(SH is None, "needs sh")
     def test_shell_scripts_parse(self):
-        for name in ("entrypoint.sh", "strata-wrapper.sh", "healthcheck.sh", "build.sh", "smoke-test.sh"):
+        for name in ("entrypoint.sh", "cortex-wrapper.sh", "healthcheck.sh", "build.sh", "smoke-test.sh"):
             r = subprocess.run([SH, "-n", str(DOCKER / name)], capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, f"{name}: {r.stderr}")
 
     def test_scripts_use_unix_line_ends(self):
-        for name in ("entrypoint.sh", "strata-wrapper.sh", "healthcheck.sh", "build.sh"):
+        for name in ("entrypoint.sh", "cortex-wrapper.sh", "healthcheck.sh", "build.sh"):
             self.assertNotIn(b"\r", (DOCKER / name).read_bytes(), name)       # build.sh strips CR for a CRLF checkout, the files themselves stay LF
 
 
@@ -42,9 +42,9 @@ class Dockerfiles(unittest.TestCase):
             text = f.read_text(encoding="utf-8")
             self.assertIn("HEALTHCHECK", text, f.name)
             self.assertIn("STOPSIGNAL SIGTERM", text, f.name)
-            self.assertIn('ENTRYPOINT ["/usr/bin/tini", "--", "/opt/strata/entrypoint.sh"]', text, f.name)
+            self.assertIn('ENTRYPOINT ["/usr/bin/tini", "--", "/opt/cortex/entrypoint.sh"]', text, f.name)
             self.assertIn("VOLUME [\"/data\"]", text, f.name)
-            self.assertIn("STRATA_COMPONENTS_DIR=/opt/strata/components", text, f.name)
+            self.assertIn("CORTEX_COMPONENTS_DIR=/opt/cortex/components", text, f.name)
 
     def test_component_image_checks_the_package_before_use(self):
         text = (DOCKER / "Dockerfile").read_text(encoding="utf-8")
@@ -60,32 +60,32 @@ class Dockerfiles(unittest.TestCase):
 class Compose(unittest.TestCase):
     def load(self, name: str) -> dict:
         data = yaml.safe_load((DOCKER / "compose" / name).read_text(encoding="utf-8"))
-        self.assertIn("strata", data["services"], name)
+        self.assertIn("cortex", data["services"], name)
         return data
 
     def test_common_settings(self):
         for name in ("docker-compose.nvidia.yml", "docker-compose.amd.yml", "docker-compose.intel.yml"):
-            svc = self.load(name)["services"]["strata"]
-            self.assertIn("strata-data:/data", svc["volumes"], name)
+            svc = self.load(name)["services"]["cortex"]
+            self.assertIn("cortex-data:/data", svc["volumes"], name)
             self.assertEqual(svc["ulimits"]["memlock"], {"soft": -1, "hard": -1}, name)
             self.assertEqual(svc["shm_size"], "2gb", name)
             self.assertEqual(svc["stop_grace_period"], "2m", name)
-            self.assertTrue(svc["ports"][0].startswith("${STRATA_BIND:-127.0.0.1}:"), f"{name}: the port must default to this computer only")
+            self.assertTrue(svc["ports"][0].startswith("${CORTEX_BIND:-127.0.0.1}:"), f"{name}: the port must default to this computer only")
             for var in ("MODEL", "MODEL_PATH", "CONTEXT", "PARALLEL", "VISION", "TUNE", "API_KEY"):
                 self.assertIn(var, svc["environment"], f"{name}: {var}")
-            self.assertIn("strata-data", self.load(name)["volumes"], name)
+            self.assertIn("cortex-data", self.load(name)["volumes"], name)
 
     def test_gpu_access_per_vendor(self):
-        nv = self.load("docker-compose.nvidia.yml")["services"]["strata"]
+        nv = self.load("docker-compose.nvidia.yml")["services"]["cortex"]
         dev = nv["deploy"]["resources"]["reservations"]["devices"][0]
         self.assertEqual(dev["driver"], "nvidia")
         self.assertIn("gpu", dev["capabilities"])
-        amd = self.load("docker-compose.amd.yml")["services"]["strata"]
+        amd = self.load("docker-compose.amd.yml")["services"]["cortex"]
         self.assertIn("/dev/kfd:/dev/kfd", amd["devices"])
         self.assertIn("/dev/dri:/dev/dri", amd["devices"])
         self.assertIn("video", amd["group_add"])
         self.assertTrue(any("render" in str(g).lower() or "RENDER" in str(g) for g in amd["group_add"]))
-        intel = self.load("docker-compose.intel.yml")["services"]["strata"]
+        intel = self.load("docker-compose.intel.yml")["services"]["cortex"]
         self.assertIn("/dev/dri:/dev/dri", intel["devices"])
         self.assertNotIn("/dev/kfd:/dev/kfd", intel["devices"])
 
@@ -99,7 +99,7 @@ class Document(unittest.TestCase):
         for line in section.splitlines():
             if line.startswith("| `"):
                 names.update(re.findall(r"`([A-Z][A-Z_]+)`", line.split("|")[1]))
-        self.assertTrue({"MODEL", "CONTEXT", "API_KEY", "TUNE", "VISION", "MODEL_PATH", "STRATA_SET"} <= names, names)
+        self.assertTrue({"MODEL", "CONTEXT", "API_KEY", "TUNE", "VISION", "MODEL_PATH", "CORTEX_SET"} <= names, names)
         for name in sorted(names):
             self.assertIn(name, entry, f"docs/DOCKER.md lists {name} but docker/entrypoint.sh does not read it")
 

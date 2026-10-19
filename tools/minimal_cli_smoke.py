@@ -54,7 +54,7 @@ def smoke() -> dict:
     if extras != {"no_site": 1, "rich": False, "textual": False}:
         raise RuntimeError("optional terminal packages are visible in the test environment")
 
-    help_result = _run(str(ROOT / "strata.py"), "--help")
+    help_result = _run(str(ROOT / "cortex.py"), "--help")
     if (help_result.returncode or help_result.stderr.strip() or
             not all(word in help_result.stdout for word in ("serve", "monitor", "code"))):
         raise RuntimeError("source CLI help failed without optional packages")
@@ -64,8 +64,8 @@ def smoke() -> dict:
     thread.start()
     try:
         url = f"http://127.0.0.1:{server.server_address[1]}"
-        status = _record(_run(str(ROOT / "strata.py"), "status", "--url", url, "--json"), 0)
-        once = _record(_run(str(ROOT / "strata.py"), "monitor", "--url", url,
+        status = _record(_run(str(ROOT / "cortex.py"), "status", "--url", url, "--json"), 0)
+        once = _record(_run(str(ROOT / "cortex.py"), "monitor", "--url", url,
                             "--once", "--output", "json"), 0)
         for value in (status, once):
             if (value.get("ok") is not True or
@@ -79,18 +79,18 @@ def smoke() -> dict:
         server.server_close()
         thread.join(timeout=2)
 
-    with tempfile.TemporaryDirectory(prefix="strata-minimal-cli-") as directory:
+    with tempfile.TemporaryDirectory(prefix="cortex-minimal-cli-") as directory:
         missing = str(Path(directory) / "missing-config.json")
-        # serve needs the API server's packages; without them strata.py stops in its
+        # serve needs the API server's packages; without them cortex.py stops in its
         # preflight (exit 5, a plain message, nothing installed) before reading the config.
-        serve = _run(str(ROOT / "strata.py"), "serve", "--profile", missing,
+        serve = _run(str(ROOT / "cortex.py"), "serve", "--profile", missing,
                      "--offline", "--output", "jsonl")
         if (serve.returncode != 5 or serve.stdout.strip() or
                 "missing packages the API server needs" not in serve.stderr or
                 "never install anything" not in serve.stderr):
             raise RuntimeError(f"serve without server packages did not stop in the preflight: "
                                f"exit {serve.returncode}, stderr {serve.stderr.strip()!r}")
-        code = _record(_run(str(ROOT / "strata.py"), "code", "run", "--prompt-file",
+        code = _record(_run(str(ROOT / "cortex.py"), "code", "run", "--prompt-file",
                             str(Path(directory) / "missing-prompt.txt"), "--policy", "review",
                             "--output", "jsonl"), 5)
         if (code.get("ok") is not False or

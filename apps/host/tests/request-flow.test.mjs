@@ -40,9 +40,9 @@ test('skill instructions require both enabled state and a matching workspace', (
 });
 
 test('stream usage comes from the server, includes reasoning latency and preserves instructions', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'strata-stream-test-'));
-  process.env.STRATA_HOME = home;
-  process.env.STRATA_MODELS_DIR = join(home, 'models');
+  const home = await mkdtemp(join(tmpdir(), 'cortex-stream-test-'));
+  process.env.CORTEX_HOME = home;
+  process.env.CORTEX_MODELS_DIR = join(home, 'models');
   const { proxyCompletion } = await import('../server/inference.mjs');
   let request;
   const fixture = http.createServer(async (req, res) => {
@@ -78,12 +78,12 @@ test('a stream without usage never presents chunks as tokens', async () => {
 });
 
 test('Serving cancellation stops active and queued demo requests; test keys enforce access', { timeout: 90000 }, async () => {
-  const home = await mkdtemp(join(tmpdir(), 'strata-request-host-'));
+  const home = await mkdtemp(join(tmpdir(), 'cortex-request-host-'));
   await mkdir(join(home, 'data'));
   const id = 'qwen38-q4_k_m';
   await writeFile(join(home, 'data/state.json'), JSON.stringify({ installed: { [id]: { installedAt: new Date().toISOString(), bytes: 491400032, simulated:true } }, beginner:{priority:'balanced',contextLength:'32k',readImages:false,gpuIdle:'never'}, current: id, loaded: id }));
   const socket = http.createServer(); const port = await listen(socket); await close(socket);
-  const host = spawn(process.execPath, ['server/index.mjs'], { cwd: join(import.meta.dirname, '..'), env: { ...process.env, STRATA_HOME:home,STRATA_MODELS_DIR:join(home,'models'), STRATA_PORT: String(port), STRATA_REAL_ENGINE: '0' }, stdio: 'ignore' });
+  const host = spawn(process.execPath, ['server/index.mjs'], { cwd: join(import.meta.dirname, '..'), env: { ...process.env, CORTEX_HOME:home,CORTEX_MODELS_DIR:join(home,'models'), CORTEX_PORT: String(port), CORTEX_REAL_ENGINE: '0' }, stdio: 'ignore' });
   const base = `http://127.0.0.1:${port}`;
   const call = async (path, method = 'GET', body, key) => {
     const res = await fetch(base + path, { method, headers: { 'content-type': 'application/json', ...(key ? { authorization: `Bearer ${key}` } : {}) }, body: body ? JSON.stringify(body) : undefined });

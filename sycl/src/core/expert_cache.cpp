@@ -4,14 +4,14 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/sycl_queue.hpp"
-#include "strata/core/expert_cache.hpp"
+#include "cortex/sycl_queue.hpp"
+#include "cortex/core/expert_cache.hpp"
 
 // #533's segmented cache uses CUDA's virtual memory management (cuMem*): not on HIP, neither the RDNA backend nor
-// the gfx906 compat build (PR #638), which compiles this file as HIP without STRATA_USE_HIP
-#define STRATA_EC_NO_VMM 1   // SYCL port: no driver virtual memory management on Level Zero (--vram-elastic is CUDA-only, #533)
+// the gfx906 compat build (PR #638), which compiles this file as HIP without CORTEX_USE_HIP
+#define CORTEX_EC_NO_VMM 1   // SYCL port: no driver virtual memory management on Level Zero (--vram-elastic is CUDA-only, #533)
 
-#if !defined(STRATA_EC_NO_VMM)
+#if !defined(CORTEX_EC_NO_VMM)
    // #533: the virtual memory management types (the functions come through the
    // runtime's entry points)
 #endif
@@ -25,7 +25,7 @@
 #include <utility>
 #include <cstring>
 
-namespace strata::core {
+namespace cortex::core {
 
 // Local (card) memory this process holds, from the DRM clients' fdinfo (i915: drm-total-local0, xe: drm-total-vram0).
 // Level Zero's free-memory query reads the constant total on an Arc A750 (i915): the engine then sized its caches
@@ -83,7 +83,7 @@ size_t device_free_bytes() try {
         if (const unsigned long long own = own_drm_local_bytes(); own < total_b) {
             static std::atomic<bool> said{false};
             if (!said.exchange(true))
-                std::fprintf(stderr, "strata: the driver reports no free card memory (xe without ext_intel_free_memory); sizing from the DRM fdinfo (this process holds %.2f GiB)\n", (double) own / 1073741824.0);
+                std::fprintf(stderr, "cortex: the driver reports no free card memory (xe without ext_intel_free_memory); sizing from the DRM fdinfo (this process holds %.2f GiB)\n", (double) own / 1073741824.0);
             free_b = (size_t) (total_b - own);
         }
 #endif
@@ -95,10 +95,10 @@ size_t device_free_bytes() try {
         own > 0 && total_b > own && total_b - own < free_b) {
         static std::atomic<bool> said{false};
         if (free_b + (16ull << 20) >= total_b && !said.exchange(true))
-            std::fprintf(stderr, "strata: the driver reports the whole card as free although this process holds %.2f GiB of it (Arc A750/i915 does this); sizing from the DRM fdinfo instead\n", (double) own / 1073741824.0);
+            std::fprintf(stderr, "cortex: the driver reports the whole card as free although this process holds %.2f GiB of it (Arc A750/i915 does this); sizing from the DRM fdinfo instead\n", (double) own / 1073741824.0);
         free_b = (size_t) (total_b - own);
     }
-#if defined(__linux__) && !defined(STRATA_HIP_GFX906)   // (the gfx906 compat layer has no cudaDevAttrIntegrated; that GPU is discrete)
+#if defined(__linux__) && !defined(CORTEX_HIP_GFX906)   // (the gfx906 compat layer has no cudaDevAttrIntegrated; that GPU is discrete)
     // per device: a box can mix an integrated GPU (an APU) with a discrete one, and the answer is the CURRENT device's
     static std::atomic<int> uma_cache[64];   // 0 unknown, 1 integrated (unified memory), 2 discrete
     bool unified_memory = false;
@@ -125,14 +125,14 @@ size_t device_free_bytes() try {
             while (std::fgets(line, sizeof line, m))
                 if (std::sscanf(line, "MemAvailable: %llu kB", &kb) == 1) break;
             std::fclose(m);
-            // STRATA_UMA_HEADROOM_GIB: a whole number of GiB, 0..1024; anything else keeps the default 6 (said once)
+            // CORTEX_UMA_HEADROOM_GIB: a whole number of GiB, 0..1024; anything else keeps the default 6 (said once)
             static const long gib = [] {
-                const char* h = std::getenv("STRATA_UMA_HEADROOM_GIB");
+                const char* h = std::getenv("CORTEX_UMA_HEADROOM_GIB");
                 if (h == nullptr) return 6L;
                 char* end = nullptr;
                 const long v = std::strtol(h, &end, 10);
                 if (end != h && *end == '\0' && v >= 0 && v <= 1024) return v;
-                std::fprintf(stderr, "strata: STRATA_UMA_HEADROOM_GIB=%s is not a whole number of GiB (0-1024): using 6\n", h);
+                std::fprintf(stderr, "cortex: CORTEX_UMA_HEADROOM_GIB=%s is not a whole number of GiB (0-1024): using 6\n", h);
                 return 6L;
             }();
             const unsigned long long head = (unsigned long long) gib << 30;
@@ -283,7 +283,7 @@ ExpertCache::~ExpertCache() { close(); }
 // ---- #533: the segmented arena (--vram-elastic).  The driver API's virtual memory functions, looked up through the
 // runtime (no link against the driver library): one address range for the whole arena, backed by physical segments,
 // and the tail's segments unmapped / mapped again later.  Nothing here runs unless a segment size was set.
-#if !defined(STRATA_EC_NO_VMM)
+#if !defined(CORTEX_EC_NO_VMM)
 namespace {
 struct Vmm {
     int(CUDAAPI *device_get)(int *, int) = nullptr;
@@ -387,7 +387,7 @@ bool map_segment(const Vmm &v, int dev, dpct::device_ptr va, size_t bytes,
 #endif
 
 bool ExpertCache::open_segmented(uint64_t want, std::string &err) try {
-#if defined(STRATA_EC_NO_VMM)
+#if defined(CORTEX_EC_NO_VMM)
     (void) want;
     err = "ExpertCache: --vram-elastic (a segmented expert cache) is CUDA-only for now";
     return false;
@@ -445,7 +445,7 @@ bool ExpertCache::open_segmented(uint64_t want, std::string &err) try {
     }
     // the reserved VA, so device_offset_end can place a borrowed prompt buffer or a resident expert inside it (the GEMM
     // stages an operand that lies more than 4 GiB in; oneMKL misreads such an operand's last partial tile)
-    strata::device_alloc_register(base_, (size_t) reserved_);
+    cortex::device_alloc_register(base_, (size_t) reserved_);
     return true;
 #endif
 }
@@ -456,7 +456,7 @@ catch (sycl::exception const &exc) {
 }
 
 void ExpertCache::release_segmented() {
-#if !defined(STRATA_EC_NO_VMM)
+#if !defined(CORTEX_EC_NO_VMM)
     const Vmm& v = vmm();
     if (base_ != nullptr) dpct::get_current_device().queues_wait_and_throw();
     const dpct::device_ptr va = reinterpret_cast<dpct::device_ptr>(base_);
@@ -472,7 +472,7 @@ void ExpertCache::release_segmented() {
     seg_size_.clear();
     mapped_segs_ = 0;
     reserved_ = 0;
-    strata::device_alloc_unregister(base_);
+    cortex::device_alloc_unregister(base_);
     base_ = nullptr;
 }
 
@@ -496,7 +496,7 @@ bool ExpertCache::shrink(int64_t keep_bytes, std::string &err) try {
         err = "the expert cache is not segmented (the engine needs --vram-elastic)";
         return false;
     }
-#if defined(STRATA_EC_NO_VMM)
+#if defined(CORTEX_EC_NO_VMM)
     (void) keep_bytes;
     return false;
 #else
@@ -549,7 +549,7 @@ bool ExpertCache::grow(int64_t want_bytes, std::string& err) {
         err = "the expert cache is not segmented (the engine needs --vram-elastic)";
         return false;
     }
-#if defined(STRATA_EC_NO_VMM)
+#if defined(CORTEX_EC_NO_VMM)
     (void) want_bytes;
     return false;
 #else
@@ -581,7 +581,7 @@ bool ExpertCache::grow(int64_t want_bytes, std::string& err) {
 #endif
 }
 
-#if defined(STRATA_USE_HIP)
+#if defined(CORTEX_USE_HIP)
 bool ExpertCache::ensure_blocking_staging(std::size_t bytes, std::string& err) {
     if (bytes <= blocking_staging_bytes_) return true;
     void* next = nullptr;
@@ -660,7 +660,7 @@ bool ExpertCache::open(int64_t n_slots, int64_t n_layers, int64_t n_expert, int6
         base_ = r->base();
         vmm_ = std::move(r);
     } else if (DPCT_CHECK_ERROR(
-                   base_ = (uint8_t *)strata::malloc_device_guarded(
+                   base_ = (uint8_t *)cortex::malloc_device_guarded(
                        (size_t)want, dpct::get_in_order_queue(), "expert cache arena")) != 0 ||
                base_ == nullptr) {   // Level Zero answers a too-large allocation with null, not an exception
         // (an Arc A750 caps one allocation at 4 GiB unless UR_L0_ENABLE_RELAXED_ALLOCATION_LIMITS=1)
@@ -685,7 +685,7 @@ bool ExpertCache::open(int64_t n_slots, int64_t n_layers, int64_t n_expert, int6
     // Zeroed so a slot read before it is filled is a DETERMINISTIC wrong answer rather than whatever the
     // allocator handed back.  A stale block of a previous process's memory would still sum to finite floats.
     if (DPCT_CHECK_ERROR(
-            (strata::big_fill_zero(dpct::get_in_order_queue(), base_, (size_t)want), 0)) !=
+            (cortex::big_fill_zero(dpct::get_in_order_queue(), base_, (size_t)want), 0)) !=
         0) {
         err = "ExpertCache: cudaMemset of the slot arena failed";
         close();
@@ -698,7 +698,7 @@ bool ExpertCache::open(int64_t n_slots, int64_t n_layers, int64_t n_expert, int6
     n_layers_ = n_layers;
     n_expert_ = n_expert;
     blob_ = blob_bytes;
-#if defined(STRATA_USE_HIP)
+#if defined(CORTEX_USE_HIP)
     if (!ensure_blocking_staging((std::size_t) blob_, err)) {
         close();
         return false;
@@ -734,7 +734,7 @@ bool ExpertCache::open_sized(const std::vector<int64_t>& slot_bytes, int64_t n_l
     live_slots_ = slots_;
     blob_ = mx;
     off_ = std::move(off);
-#if defined(STRATA_USE_HIP)
+#if defined(CORTEX_USE_HIP)
     if (!ensure_blocking_staging((std::size_t) blob_, err)) {
         close();
         return false;
@@ -752,7 +752,7 @@ bool ExpertCache::open_sized(const std::vector<int64_t>& slot_bytes, int64_t n_l
 }
 
 void ExpertCache::close() {
-#if defined(STRATA_USE_HIP)
+#if defined(CORTEX_USE_HIP)
     if (blocking_staging_) (void) cudaFreeHost(blocking_staging_);
     blocking_staging_ = nullptr;
     blocking_staging_bytes_ = 0;
@@ -762,10 +762,10 @@ void ExpertCache::close() {
         release_segmented();
     } else if (vmm_) {
         vmm_.reset();   // unmaps and frees every chunk it still holds
-        strata::device_alloc_unregister(base_);
+        cortex::device_alloc_unregister(base_);
         base_ = nullptr;
     } else if (base_ != nullptr) {
-        strata::device_alloc_unregister(base_);
+        cortex::device_alloc_unregister(base_);
         sycl::free(base_, dpct::get_in_order_queue());
         base_ = nullptr;
     }
@@ -849,7 +849,7 @@ bool ExpertCache::fill_slot(int32_t slot, const uint8_t *host_blob,
     ensure synchronization behavior.
     */
     const dpct::err0 e =
-        DPCT_CHECK_ERROR(strata::q_of(stream)->memcpy(dst, host_blob, n));
+        DPCT_CHECK_ERROR(cortex::q_of(stream)->memcpy(dst, host_blob, n));
     /*
     DPCT1000: Error handling if-stmt was detected but could not be
     rewritten.
@@ -888,7 +888,7 @@ bool ExpertCache::fill_slot_blocking(int32_t slot, const uint8_t *host_blob,
         err = "ExpertCache::fill_slot_blocking: the host blob is null";
         return false;
     }
-#if defined(STRATA_USE_HIP)
+#if defined(CORTEX_USE_HIP)
     // Bound HIP's pageable-source staging to one expert instead of repeatedly
     // registering regions of the mmap. The blocking copy completes before reuse.
     if (!blocking_staging_ || n > blocking_staging_bytes_) {
@@ -1056,4 +1056,4 @@ catch (sycl::exception const &exc) {
   std::exit(1);
 }
 
-}  // namespace strata::core
+}  // namespace cortex::core

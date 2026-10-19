@@ -9,13 +9,13 @@
     TRANSFORMERS_OFFLINE   None
     PIP_NO_INDEX           None
     NO_PROXY               None
-    STRATA_OFFLINE         None
+    CORTEX_OFFLINE         None
   offline=True:
     HF_HUB_OFFLINE         '1'
     TRANSFORMERS_OFFLINE   '1'
     PIP_NO_INDEX           '1'
     NO_PROXY               '*'
-    STRATA_OFFLINE         '1'
+    CORTEX_OFFLINE         '1'
 
   A profile cannot remove the policy by naming the same variable:
     profile asked HF_HUB_OFFLINE=0 -> '1' (the policy is applied last)

@@ -1,10 +1,10 @@
-// pa_bench - the prompt path's sparse attention (qsa_prompt_attn_batch) on a recorded selection: a STRATA_QSA_DUMP
+// pa_bench - the prompt path's sparse attention (qsa_prompt_attn_batch) on a recorded selection: a CORTEX_QSA_DUMP
 // record of one QSA layer and chunk (int32 {layer, p0, T, cap}, T * cap cells, then T * kStepCount steps, written
-// with STRATA_QSA_DUMP_STEPS=1), random q and int8 K/V (the values do not change the work), one page per 4 cells.
+// with CORTEX_QSA_DUMP_STEPS=1), random q and int8 K/V (the values do not change the work), one page per 4 cells.
 // usage: pa_bench DUMP [reps]   - prints the median time and a hash of the output (for A/B of kernel variants)
-#include "strata/kernels/qsa.hpp"
-#include "strata/kernels/qsa_decode_attn.hpp"
-#include "strata/kernels/qsa_prompt_attn.hpp"
+#include "cortex/kernels/qsa.hpp"
+#include "cortex/kernels/qsa_decode_attn.hpp"
+#include "cortex/kernels/qsa_prompt_attn.hpp"
 
 #include <cuda_runtime.h>
 
@@ -27,13 +27,13 @@ int main(int argc, char** argv) {
     int32_t hdr[4];
     if (std::fread(hdr, 4, 4, f) != 4) return 1;
     const int64_t p0 = hdr[1], T = hdr[2], cap = hdr[3];
-    std::vector<int32_t> ids((size_t) (T * cap)), steps((size_t) (T * strata::kernels::kStepCount));
+    std::vector<int32_t> ids((size_t) (T * cap)), steps((size_t) (T * cortex::kernels::kStepCount));
     if (std::fread(ids.data(), 4, ids.size(), f) != ids.size() || std::fread(steps.data(), 4, steps.size(), f) != steps.size()) {
-        std::fprintf(stderr, "short dump (written without STRATA_QSA_DUMP_STEPS?)\n");
+        std::fprintf(stderr, "short dump (written without CORTEX_QSA_DUMP_STEPS?)\n");
         return 1;
     }
     std::fclose(f);
-    strata::kernels::QsaShapes s = strata::kernels::qsa_real_shapes();
+    cortex::kernels::QsaShapes s = cortex::kernels::qsa_real_shapes();
     const int64_t cells = p0 + T, HD = s.head_dim, KVH = s.n_head_kv, NH = s.n_head;
     const int64_t pages = (cells + s.page_size - 1) / s.page_size;
     std::printf("layer %d p0 %lld T %lld cap %lld, %lld cells, %lld heads / %lld KV heads x %lld\n", hdr[0], (long long) p0,
@@ -74,7 +74,7 @@ int main(int argc, char** argv) {
     CK(cudaMemcpy(dids, ids.data(), ids.size() * 4, cudaMemcpyHostToDevice));
     CK(cudaMemcpy(dsteps, steps.data(), steps.size() * 4, cudaMemcpyHostToDevice));
     CK(cudaMemcpy(dpt, pt.data(), pt.size() * 4, cudaMemcpyHostToDevice));
-    strata::kernels::QsaAttnPools pools;
+    cortex::kernels::QsaAttnPools pools;
     pools.k_q = dk; pools.v_q = dv; pools.k_scale = dks; pools.v_scale = dvs; pools.page_table = dpt;
     cudaStream_t st;
     CK(cudaStreamCreate(&st));
@@ -84,7 +84,7 @@ int main(int argc, char** argv) {
     std::vector<float> ms;
     for (int r = 0; r < reps + 1; ++r) {
         CK(cudaEventRecord(e0, st));
-        if (!strata::kernels::qsa_prompt_attn_batch(dq, pools, dids, dsteps, cap, s, dattn, T, st)) {
+        if (!cortex::kernels::qsa_prompt_attn_batch(dq, pools, dids, dsteps, cap, s, dattn, T, st)) {
             std::fprintf(stderr, "qsa_prompt_attn_batch declined\n");
             return 1;
         }

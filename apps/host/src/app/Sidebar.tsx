@@ -7,7 +7,7 @@ import { TaskTree } from './TaskTree';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { FloatingMenu } from '../components/FloatingMenu';
-import { QuitStrataDialog } from '../components/QuitStrata';
+import { QuitCortexDialog } from '../components/QuitCortex';
 import { useAppMode } from '../lib/app-mode';
 import { href, useLocation, type Route } from '../lib/router';
 import { cx, relTime } from '../lib/format';
@@ -72,7 +72,7 @@ export function Sidebar({ containerRef }: {
     function closeMenu() { setMenuId(null); menuTrigger.current?.focus(); }
     return <>
     <aside className="nav" ref={containerRef} aria-label={tr("Main navigation")} aria-modal={navOpen && compact ? true : undefined} role={navOpen && compact ? 'dialog' : undefined} tabIndex={-1}>
-      <div className="nav__top">{tr(!collapsed ? <a className="nav__brand" href={href('chat')} aria-label={tr("Strata — open chat")}><Brand variant="lockup" height={28} decorative className="nav__brand-lockup"/></a> : null)}<button type="button" className="nav__collapse" aria-label={tr(collapsed ? 'Show sidebar' : 'Hide sidebar')} title={tr(collapsed ? 'Show sidebar' : 'Hide sidebar')} onClick={() => compact ? setNavOpen(!navOpen) : toggleRail()}><Icon name="panel" size={20}/></button></div>
+      <div className="nav__top">{tr(!collapsed ? <a className="nav__brand" href={href('chat')} aria-label={tr("Cortex — open chat")}><Brand variant="lockup" height={28} decorative className="nav__brand-lockup"/></a> : null)}<button type="button" className="nav__collapse" aria-label={tr(collapsed ? 'Show sidebar' : 'Hide sidebar')} title={tr(collapsed ? 'Show sidebar' : 'Hide sidebar')} onClick={() => compact ? setNavOpen(!navOpen) : toggleRail()}><Icon name="panel" size={20}/></button></div>
       <div className="nav__scroll">
         <button className="st-btn st-btn--primary nav-new" aria-label={tr("New chat")} title={tr("New chat")} onClick={() => runCommand('new')}><Icon name="new-chat" size={18}/><span className="nav__rail-hide">{tr("New chat")}</span></button>
         <TaskTree collapsed={collapsed}/>
@@ -190,5 +190,5 @@ function MoreMenu({ current }: {
     const [quitOpen, setQuitOpen] = useState(false);
     const appMode = useAppMode();
     const ref = useRef<HTMLButtonElement>(null);
-    return <><button ref={ref} className="navitem nav__more" aria-label={tr("More — Serving and Settings")} aria-haspopup="menu" aria-expanded={open} data-active={['serving', 'settings'].includes(current) || undefined} onClick={() => setOpen(v => !v)}><Icon name="ellipsis"/><span className="navitem__text">{tr("More")}</span></button>{tr(open ? <FloatingMenu anchor={ref.current} title={tr("More")} onClose={() => { setOpen(false); ref.current?.focus(); }}>{tr(([{ route: 'serving', label: 'Serving', icon: 'link' }, { route: 'settings', label: 'Settings', icon: 'settings' }] as const).map(d => <a key={d.route} role="menuitem" className="menu__item" href={href(d.route)} onClick={() => setOpen(false)}><Icon name={d.icon}/>{tr(d.label)}</a>))}{appMode.canQuit ? <button type="button" role="menuitem" className="menu__item" onClick={() => { setOpen(false); setNavOpen(false); setQuitOpen(true); }}><Icon name="x"/>{tr("Quit Strata")}</button> : null}</FloatingMenu> : null)}<QuitStrataDialog open={quitOpen} onClose={() => setQuitOpen(false)}/></>;
+    return <><button ref={ref} className="navitem nav__more" aria-label={tr("More — Serving and Settings")} aria-haspopup="menu" aria-expanded={open} data-active={['serving', 'settings'].includes(current) || undefined} onClick={() => setOpen(v => !v)}><Icon name="ellipsis"/><span className="navitem__text">{tr("More")}</span></button>{tr(open ? <FloatingMenu anchor={ref.current} title={tr("More")} onClose={() => { setOpen(false); ref.current?.focus(); }}>{tr(([{ route: 'serving', label: 'Serving', icon: 'link' }, { route: 'settings', label: 'Settings', icon: 'settings' }] as const).map(d => <a key={d.route} role="menuitem" className="menu__item" href={href(d.route)} onClick={() => setOpen(false)}><Icon name={d.icon}/>{tr(d.label)}</a>))}{appMode.canQuit ? <button type="button" role="menuitem" className="menu__item" onClick={() => { setOpen(false); setNavOpen(false); setQuitOpen(true); }}><Icon name="x"/>{tr("Quit Cortex")}</button> : null}</FloatingMenu> : null)}<QuitCortexDialog open={quitOpen} onClose={() => setQuitOpen(false)}/></>;
 }

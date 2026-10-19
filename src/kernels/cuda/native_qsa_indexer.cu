@@ -18,9 +18,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "strata/kernels/native_qsa_indexer.hpp"
-#include "strata/core/geometry.hpp"
-#include "strata/kernels/mrope.hpp"
+#include "cortex/kernels/native_qsa_indexer.hpp"
+#include "cortex/core/geometry.hpp"
+#include "cortex/kernels/mrope.hpp"
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
 #include <atomic>
@@ -30,11 +30,11 @@
 #include <limits>
 #include <stdexcept>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 std::atomic<bool> enabled{false};
 constexpr int D = 128, R = 4, ROT = 64, THREADS = 256;
-static_assert(D == strata::core::kCompiledGeometry.idx_key_dim && R == strata::core::kCompiledGeometry.idx_block && ROT == strata::core::kCompiledGeometry.n_rot,
+static_assert(D == cortex::core::kCompiledGeometry.idx_key_dim && R == cortex::core::kCompiledGeometry.idx_block && ROT == cortex::core::kCompiledGeometry.n_rot,
               "native_qsa_indexer is compiled for core/geometry.hpp");
 __device__ float warp_sum(float x) {
 #pragma unroll
@@ -42,7 +42,7 @@ __device__ float warp_sum(float x) {
         x += __shfl_xor_sync(0xffffffffu, x, offset);
     return x;
 }
-// TAB (#280, STRATA_ROPE_TABLE=1): the angles from the session's float64 table.  The host launches <false> whenever
+// TAB (#280, CORTEX_ROPE_TABLE=1): the angles from the session's float64 table.  The host launches <false> whenever
 // no table applies - the default - so the default kernel is 0.1.31's code exactly (the table read is not in it;
 // with it merely skipped at run time, the compiled default path changed its results).
 template <bool TAB>
@@ -372,4 +372,4 @@ void native_qsa_indexer_append_batch(const float* raw, int64_t n, int64_t p0, in
     const auto error = cudaGetLastError();
     if (error != cudaSuccess) throw std::runtime_error(cudaGetErrorString(error));
 }
-} // namespace strata::kernels
+} // namespace cortex::kernels

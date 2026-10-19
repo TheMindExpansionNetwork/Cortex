@@ -21,7 +21,7 @@ import calibrate as CAL  # noqa: E402
 
 
 class FakeEngine:
-    """Speed = f(pcie_frac, spec_min_p, workers): the GEN line's tune keys arrive as `strata_tune`."""
+    """Speed = f(pcie_frac, spec_min_p, workers): the GEN line's tune keys arrive as `cortex_tune`."""
 
     def __init__(self, args, speed, info_workers=6, starts=None, adapt=None, read=None, reads=None):
         self.args = list(args)
@@ -37,7 +37,7 @@ class FakeEngine:
             starts.append(list(args))
 
     def generate(self, ids, max_new, sampling, cancel):
-        tune = sampling.get("strata_tune") or {}
+        tune = sampling.get("cortex_tune") or {}
         rate = self.speed(tune.get("pcie_frac", 0.55), tune.get("spec_min_p", self.info["spec_min_p"]), self.workers)
         rate *= self.adapt_bonus
         for _ in range(max_new):
@@ -278,8 +278,8 @@ class Calibrate(unittest.TestCase):
         self.assertIn(f"{CAL.SH_STREAM}=1", res["report"]["failed_starts"])
 
     def test_apply_env(self):
-        old = {"STRATA_ROCBLAS_TUNING": "tools/hip", CAL.SH_STREAM: "1"}
-        self.assertEqual(CAL.apply_env(old, {}), {"STRATA_ROCBLAS_TUNING": "tools/hip"})   # an older choice goes
+        old = {"CORTEX_ROCBLAS_TUNING": "tools/hip", CAL.SH_STREAM: "1"}
+        self.assertEqual(CAL.apply_env(old, {}), {"CORTEX_ROCBLAS_TUNING": "tools/hip"})   # an older choice goes
         self.assertEqual(CAL.apply_env({"X": "1"}, {CAL.SH_STREAM: "1"}), {"X": "1", CAL.SH_STREAM: "1"})
         self.assertEqual(CAL.apply_env(None, None), {})
 
@@ -318,7 +318,7 @@ class Calibrate(unittest.TestCase):
                 seen.append((args, hip)) or {})
             fake = type("ST", (), {"Tokenizer": lambda *a: type("T", (), {"encode": lambda s, t, **k: [0]})()})
             try:
-                with mock.patch.dict(sys.modules, {"strata_tokenizer": fake}):
+                with mock.patch.dict(sys.modules, {"cortex_tokenizer": fake}):
                     CAL.run({"tokenizer": d, "args": list(BASE), "gpu": [0]}, start_engine=lambda a: None)
                     CAL.run({"tokenizer": d, "args": list(BASE), "gpu": [0], "backend": "hip"}, start_engine=lambda a: None)
             finally:
@@ -327,13 +327,13 @@ class Calibrate(unittest.TestCase):
 
     def test_engine_error(self):
         with tempfile.TemporaryDirectory() as d:
-            log = Path(d) / "strata-x.log"
-            log.write_text("strata generate: an old error\n", encoding="utf-8")
+            log = Path(d) / "cortex-x.log"
+            log.write_text("cortex generate: an old error\n", encoding="utf-8")
             since = log.stat().st_size
             with open(log, "a", encoding="utf-8") as f:
-                f.write("loading ...\nstrata generate: --expert-cache-remote with a layer split needs a GPU that runs "
+                f.write("loading ...\ncortex generate: --expert-cache-remote with a layer split needs a GPU that runs "
                         "no stage (2 visible, 2 used by the split)\n\n")
-            self.assertEqual(CAL.engine_error(str(log), since), "strata generate: --expert-cache-remote with a layer "
+            self.assertEqual(CAL.engine_error(str(log), since), "cortex generate: --expert-cache-remote with a layer "
                              "split needs a GPU that runs no stage (2 visible, 2 used by the split)")
             with open(log, "a", encoding="utf-8") as f:
                 f.write("Segmentation fault\n")
@@ -380,7 +380,7 @@ class SetupIntegration(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_calibrate_config_writes_and_remembers(self):
-        cfg_path = Path(self.tmp.name) / "strata-q2_0.json"
+        cfg_path = Path(self.tmp.name) / "cortex-q2_0.json"
         cfg = {"exe": "x", "args": list(BASE), "model_name": "qwen3.8-flash-next-q2_0"}
         cfg_path.write_text(json.dumps(cfg))
         CAL.run = lambda c, say=print, start_engine=None: {"settings": {"--pcie-frac": "0.20"}, "report": {"tok_s": 61.2}}
@@ -398,20 +398,20 @@ class SetupIntegration(unittest.TestCase):
     def test_calibrate_config_writes_the_env_choice(self):
         # HIP: the measured engine variable goes into the config's "env" and the settings file; a re-run that finds it
         # no longer faster removes it again, and leaves the config's other variables alone
-        cfg_path = Path(self.tmp.name) / "strata-iq3_s.json"
-        cfg = {"exe": "x", "args": list(BASE), "model_name": "m", "backend": "hip", "env": {"STRATA_ROCBLAS_TUNING": "t"}}
+        cfg_path = Path(self.tmp.name) / "cortex-iq3_s.json"
+        cfg = {"exe": "x", "args": list(BASE), "model_name": "m", "backend": "hip", "env": {"CORTEX_ROCBLAS_TUNING": "t"}}
         cfg_path.write_text(json.dumps(cfg))
         CAL.run = lambda c, say=print, start_engine=None: {"settings": {}, "env": {CAL.SH_STREAM: "1"}, "report": {"tok_s": 70.1}}
         self.assertTrue(self.S.calibrate_config(cfg_path))
         written = json.loads(cfg_path.read_text())
-        self.assertEqual(written["env"], {"STRATA_ROCBLAS_TUNING": "t", CAL.SH_STREAM: "1"})
+        self.assertEqual(written["env"], {"CORTEX_ROCBLAS_TUNING": "t", CAL.SH_STREAM: "1"})
         self.assertEqual(self.S.saved_calibration(written)["env"], {CAL.SH_STREAM: "1"})
         CAL.run = lambda c, say=print, start_engine=None: {"settings": {}, "env": {}, "report": {"tok_s": 65.0}}
         self.assertTrue(self.S.calibrate_config(cfg_path))
-        self.assertEqual(json.loads(cfg_path.read_text())["env"], {"STRATA_ROCBLAS_TUNING": "t"})
+        self.assertEqual(json.loads(cfg_path.read_text())["env"], {"CORTEX_ROCBLAS_TUNING": "t"})
 
     def test_failed_calibration_keeps_defaults(self):
-        cfg_path = Path(self.tmp.name) / "strata-q2_0.json"
+        cfg_path = Path(self.tmp.name) / "cortex-q2_0.json"
         cfg_path.write_text(json.dumps({"exe": "x", "args": list(BASE), "model_name": "m"}))
 
         def boom(*a, **k):
@@ -425,20 +425,20 @@ class SetupIntegration(unittest.TestCase):
         # #447: the engine's last error line is printed, and the --calibrate run repeats the failure before it starts
         import contextlib
         import io
-        log = Path(self.tmp.name) / "strata-q2_0.log"
-        log.write_text("strata generate: an error of an earlier start\n", encoding="utf-8")
-        cfg_path = Path(self.tmp.name) / "strata-q2_0.json"
+        log = Path(self.tmp.name) / "cortex-q2_0.log"
+        log.write_text("cortex generate: an error of an earlier start\n", encoding="utf-8")
+        cfg_path = Path(self.tmp.name) / "cortex-q2_0.json"
         cfg_path.write_text(json.dumps({"exe": "x", "args": list(BASE), "model_name": "m", "log": str(log)}))
 
         def boom(*a, **k):
             with open(log, "a", encoding="utf-8") as f:
-                f.write("strata generate: --expert-cache-remote with a layer split needs a GPU that runs no stage\n")
+                f.write("cortex generate: --expert-cache-remote with a layer split needs a GPU that runs no stage\n")
             raise RuntimeError(f"the engine exited before it was ready (see {log})")
         CAL.run = boom
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             self.assertFalse(self.S.calibrate_config(cfg_path))
-        self.assertIn("the engine said: strata generate: --expert-cache-remote with a layer split", out.getvalue())
+        self.assertIn("the engine said: cortex generate: --expert-cache-remote with a layer split", out.getvalue())
         self.assertNotIn("an earlier start", out.getvalue())
         out = io.StringIO()
         with mock.patch.object(self.S, "ROOT", Path(self.tmp.name)), \

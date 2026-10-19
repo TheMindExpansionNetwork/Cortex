@@ -62,7 +62,7 @@ class Hardening(unittest.TestCase):
         self.assertEqual(code, 200, out)
 
     def test_oversized_content_length_is_413_unread(self):
-        with mock.patch.dict(os.environ, {"STRATA_MAX_BODY_MIB": "1"}):
+        with mock.patch.dict(os.environ, {"CORTEX_MAX_BODY_MIB": "1"}):
             self.assertEqual(body_limit(), 1 << 20)
             c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=20)
             c.putrequest("POST", "/v1/chat/completions")
@@ -71,7 +71,7 @@ class Hardening(unittest.TestCase):
             c.endheaders()
             r = c.getresponse()
             self.assertEqual(r.status, 413)
-            self.assertIn("STRATA_MAX_BODY_MIB", json.loads(r.read())["error"]["message"])
+            self.assertIn("CORTEX_MAX_BODY_MIB", json.loads(r.read())["error"]["message"])
             c.close()
 
     def test_negative_or_bad_content_length_is_400(self):
@@ -87,9 +87,9 @@ class Hardening(unittest.TestCase):
 
     def test_default_limit_is_generous(self):
         with mock.patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("STRATA_MAX_BODY_MIB", None)
+            os.environ.pop("CORTEX_MAX_BODY_MIB", None)
             self.assertEqual(body_limit(), 256 << 20)
-        with mock.patch.dict(os.environ, {"STRATA_MAX_BODY_MIB": "junk"}):
+        with mock.patch.dict(os.environ, {"CORTEX_MAX_BODY_MIB": "junk"}):
             self.assertEqual(body_limit(), 256 << 20)
 
     # A request whose sampling field has the wrong JSON type is a 400 that names the field, not a greedy reply.

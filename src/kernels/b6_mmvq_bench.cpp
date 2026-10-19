@@ -9,12 +9,12 @@
 // over enough copies to exceed the L2, as the decode reads each layer's weights cold.  Synthetic bytes with sane
 // block scales (as mmvq_multi_parity): the time does not depend on the values.
 //
-// Two layouts side by side: the default exact layout (A) and STRATA_B6_MMVQ_ROWS (B, native_mmvq_set_b6_rows).  For
+// Two layouts side by side: the default exact layout (A) and CORTEX_B6_MMVQ_ROWS (B, native_mmvq_set_b6_rows).  For
 // every case and ncols: B's output against A's, bit for bit (memcmp), and both against ncols single-column calls.
 // Exit code 1 if any comparison differs.  GPU time only: immune to the host and to any generated text.
-#include "strata/kernels/bf16_gemv.hpp"
-#include "strata/kernels/iq_kernels.hpp"
-#include "strata/kernels/native_mmvq.hpp"
+#include "cortex/kernels/bf16_gemv.hpp"
+#include "cortex/kernels/iq_kernels.hpp"
+#include "cortex/kernels/native_mmvq.hpp"
 
 #include <cuda_runtime.h>
 
@@ -27,7 +27,7 @@
 #include <random>
 #include <vector>
 
-namespace K = strata::kernels;
+namespace K = cortex::kernels;
 
 namespace {
 

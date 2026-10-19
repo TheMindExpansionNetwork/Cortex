@@ -12,9 +12,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from strata_cli.launch import cmd, settings as S
-from strata_cli.launch.runner import Result, Runner, derive_config
-from strata_control import tune_knobs
+from cortex_cli.launch import cmd, settings as S
+from cortex_cli.launch.runner import Result, Runner, derive_config
+from cortex_control import tune_knobs
 from tests.terminal.launch_support import Home, run_cli
 
 
@@ -47,7 +47,7 @@ class NoBrowserByItself(unittest.TestCase):
         opened.assert_called_once_with("http://127.0.0.1:8081")
 
     def test_the_screens_open_a_browser_only_for_open(self):
-        from strata_cli.launch import app as launch_app
+        from cortex_cli.launch import app as launch_app
         from tests.terminal.launch_support import HW_12, catalog
         for flag, calls in ((False, 0), (True, 1)):
             with mock.patch.object(launch_app.LaunchApp, "run", lambda self, **kw: served()), \
@@ -68,7 +68,7 @@ class StartMessage(unittest.TestCase):
         from serve import server
         d = tempfile.mkdtemp()
         log = Path(d) / "engine.log"
-        log.write_text("strata generate: expert arena: resident, 31.64 GiB\n", encoding="utf-8")
+        log.write_text("cortex generate: expert arena: resident, 31.64 GiB\n", encoding="utf-8")
         done, out = threading.Event(), io.StringIO()
         with mock.patch.object(server, "OPENS_BROWSER", opens), contextlib.redirect_stdout(out):
             t = threading.Thread(target=server.narrate_start, args=(str(log), 0, [], done))

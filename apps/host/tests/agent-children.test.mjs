@@ -1,7 +1,7 @@
 /**
  * Helper agents (the Harness's subagents) in the chat: rows, concurrency, one approval card, Stop, and /goal.
  *
- * Pure tests always run; the rest need a built Harness (STRATA_HARNESS_DIR) and skip loudly without it.
+ * Pure tests always run; the rest need a built Harness (CORTEX_HARNESS_DIR) and skip loudly without it.
  * The model is scripted; the Harness, its subagent runtime, its approval service, the gate and the bridge are real.
  */
 import test from 'node:test';
@@ -14,8 +14,8 @@ import { createAgentBridge, plainBlocker, goalEnding, plainGoalError } from '../
 import { resolveHarness } from '../server/agent/harness-runtime.mjs';
 import { ChildProjector, activityOf } from '../server/agent/children.mjs';
 
-const HARNESS = process.env.STRATA_HARNESS_DIR;
-const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'STRATA_HARNESS_DIR is not set to a built Harness' : false;
+const HARNESS = process.env.CORTEX_HARNESS_DIR;
+const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'CORTEX_HARNESS_DIR is not set to a built Harness' : false;
 const cleanup = dir => { try { rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch { /* best effort */ } };
 const fwd = p => p.replaceAll('\\', '/');
 
@@ -77,7 +77,7 @@ test('goal wording: plain, never a code', () => {
 
 async function rig(t, { slots = 4, serial = false, onGoal } = {}) {
   const worker = await startScriptedWorker({ serial });
-  const dir = mkdtempSync(join(tmpdir(), 'strata-kids-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-kids-'));
   const ws = join(dir, 'ws'); mkdirSync(ws, { recursive: true });
   const local = [{ id: 'inst-1', label: 'Scripted', baseUrl: worker.url, modelId: 'scripted-model', context: 32768, slots }];
   const bridge = createAgentBridge({ dataDir: dir, localInstances: () => local, connections: () => [], env: process.env, startTimeoutMs: 90_000, ...(onGoal ? { onGoal } : {}) });
@@ -266,7 +266,7 @@ test('mode change mid-run: Manual to Bypass settles the question already waiting
 });
 
 test('the gate stops a helper asking once the chat has left Manual', async () => {
-  const { apply, MANUAL_PRESET } = await import('../server/agent/plugins/strata-gate.mjs');
+  const { apply, MANUAL_PRESET } = await import('../server/agent/plugins/cortex-gate.mjs');
   let handler; const appended = [];
   const parent = { header: { origin: 'user' } };
   const child = { header: { origin: 'subagent', parentSession: 'p' }, append: (type, data) => appended.push([type, data.policy]) };
@@ -275,7 +275,7 @@ test('the gate stops a helper asking once the chat has left Manual', async () =>
   const exec = { name: 'write', agent: { session: child }, input: { file_path: 'x' } };
   await handler(exec, async () => ({ kind: 'allow' }));
   assert.deepEqual(appended, [], 'in Manual the helper keeps asking');
-  preset = 'strata-bypass-ish';
+  preset = 'cortex-bypass-ish';
   await handler(exec, async () => ({ kind: 'allow' }));
   assert.deepEqual(appended, [['approval/policy', 'never']], 'the first call after the switch un-pins the helper');
   override = 'never';

@@ -6,8 +6,8 @@
 //
 //     kq_cpu_bench [--pairs q4_K/q5_1,q5_K/q8_0,q6_K/q8_0,q8_0/q8_0,iq3_s/iq4_nl] [--threads 1,8,16,32] [--nt 1,2,4]
 //                  [--mb 4096] [--reps 3] [--ram-gbs N]
-#include "strata/kernels/cpu/expert_layout.hpp"
-#include "strata/kernels/cpu/native_expert.hpp"
+#include "cortex/kernels/cpu/expert_layout.hpp"
+#include "cortex/kernels/cpu/native_expert.hpp"
 
 #include "ggml.h"
 #include "ggml-cpu.h"
@@ -25,7 +25,7 @@
 #include <thread>
 #include <vector>
 
-namespace cpu = strata::kernels::cpu;
+namespace cpu = cortex::kernels::cpu;
 
 namespace {
 

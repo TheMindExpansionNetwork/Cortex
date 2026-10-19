@@ -1,7 +1,7 @@
 # Radeon 780M / 760M (Ryzen 7040 / 8040, gfx1103): build from source on Linux
 
-The Radeon 780M (Phoenix / Hawk Point, RDNA3, `gfx1103`) runs Strata through the same HIP backend as the Radeon
-cards in [AMD_HIP.md](AMD_HIP.md). **Status: experimental and opt-in** (`STRATA_EXPERIMENTAL_GFX1103=1`): the port
+The Radeon 780M (Phoenix / Hawk Point, RDNA3, `gfx1103`) runs Cortex through the same HIP backend as the Radeon
+cards in [AMD_HIP.md](AMD_HIP.md). **Status: experimental and opt-in** (`CORTEX_EXPERIMENTAL_GFX1103=1`): the port
 is measured on one machine (the numbers below), the maintainers have not run one, and the chip is not Strix Halo.
 Everything here was measured on a Ryzen 7 8745HS (8 cores, AVX-512), Radeon 780M (12 CUs), 60 GB DDR5, GTT at
 50 GiB, Ubuntu kernel 7.0.0-38, `cwsr_enable=0`, engine 0.1.43 built from this tree by hand, Qwen3.8-Flash-Next
@@ -19,7 +19,7 @@ GSQ-RCO Q2_0 with the MTP draft layer, 32K context, Int8 KV.
 - **A hipBLASLt table** for gfx1103 + hipBLASLt `100401`: `tools/hip/gfx1103-hipblaslt-100401.txt` (section 3).
 - **The gfx1103 exact speed switches** (section 4), written into the config's `env` by setup for the opt-in install
   (the engine keeps gfx1103 out of its arch defaults, as it does for gfx1150). Whether the chip leaves the
-  `STRATA_EXPERIMENTAL_GFX1103=1` opt-in is the maintainers' call; the numbers here are what they need to make it.
+  `CORTEX_EXPERIMENTAL_GFX1103=1` opt-in is the maintainers' call; the numbers here are what they need to make it.
 
 ## 2. Toolchain and build
 
@@ -32,7 +32,7 @@ By hand, the steps of [STRIX_HALO.md](STRIX_HALO.md) with the architecture and t
 
 ```sh
 cmake -S . -B build-780m -G Ninja -DCMAKE_BUILD_TYPE=Release \
-  -DSTRATA_ENABLE_HIP=ON -DSTRATA_ENABLE_CUDA=OFF -DSTRATA_PREFILL_MMQ=ON \
+  -DCORTEX_ENABLE_HIP=ON -DCORTEX_ENABLE_CUDA=OFF -DCORTEX_PREFILL_MMQ=ON \
   -DCMAKE_HIP_ARCHITECTURES=gfx1103 \
   -DCMAKE_HIP_COMPILER=/opt/rocm/lib/llvm/bin/clang++ -DCMAKE_HIP_COMPILER_ROCM_ROOT=/opt/rocm \
   -DCMAKE_PREFIX_PATH=/opt/rocm \
@@ -53,7 +53,7 @@ changes no host setting).
 ## 3. The hipBLASLt table
 
 ```sh
-export STRATA_HIPBLASLT_TUNING=$PWD/tools/hip/gfx1103-hipblaslt-100401.txt
+export CORTEX_HIPBLASLT_TUNING=$PWD/tools/hip/gfx1103-hipblaslt-100401.txt
 ```
 
 setup hands it over automatically when the installed hipBLASLt reports 1.4.1. It was calibrated with
@@ -65,19 +65,19 @@ skips because the table picks no 1176 / 1177 for the HC down GEMM (the gfx1150 t
 
 ## 4. The exact speed switches
 
-With `STRATA_EXPERIMENTAL_GFX1103=1` setup writes the 17 exact switches below into the config's `env`, the same way
+With `CORTEX_EXPERIMENTAL_GFX1103=1` setup writes the 17 exact switches below into the config's `env`, the same way
 it writes the hipBLASLt table; turning the opt-in off takes them out again. The engine keeps gfx1103 out of its
 arch defaults (`arch_default_env("gfx1103")` stays empty, checked by `arch_defaults_test`). Measured on the 780M:
 +13% to +15% prompt with the table (183-186 -> 211-212 tok/s at 4K) and +3.2% decode (16.63 -> 17.17 tok/s, 640
 greedy tokens, 3 of 3 pairs), with the greedy token ids unchanged. They are the gfx1151 table less
-`STRATA_HCD_EXACT` (which needs hipBLASLt solutions 1176 / 1177; the gfx1103 table picks others).
+`CORTEX_HCD_EXACT` (which needs hipBLASLt solutions 1176 / 1177; the gfx1103 table picks others).
 
 | Switch | What it does |
 |---|---|
-| `STRATA_GDN_HEAD`, `STRATA_GDN_PP=2`, `STRATA_GDN_CONVL2`, `STRATA_GDN_NOY`, `STRATA_CVEC_FUSE` | the prompt's gated-delta-net recurrence and the steered layer's fused write |
-| `STRATA_PF_PAD` | padded GEMM row strides (acts with `STRATA_PF_GEMM`; inert without it) |
-| `STRATA_Q8_PACKED`, `STRATA_Q6_PACKED`, `STRATA_MMVF_ROWS`, `STRATA_ATTN_LANECELL` | decode layouts and kernels (packed Q8_0 / Q6_K weights, 4-row BF16 GEMV, one-cell-per-thread attention scores) |
-| `STRATA_EXPERT_V2`, `STRATA_TSUM`, `STRATA_LFUSE`, `STRATA_GDN_SPLIT`, `STRATA_QFUSE`, `STRATA_PLE_BATCH`, `STRATA_SH_STREAM` | grouped decode experts, butterfly warp sums, fewer launches, the GDN step over four blocks per head, producer-written activation images, batched PLE projections, the shared expert on its own stream |
+| `CORTEX_GDN_HEAD`, `CORTEX_GDN_PP=2`, `CORTEX_GDN_CONVL2`, `CORTEX_GDN_NOY`, `CORTEX_CVEC_FUSE` | the prompt's gated-delta-net recurrence and the steered layer's fused write |
+| `CORTEX_PF_PAD` | padded GEMM row strides (acts with `CORTEX_PF_GEMM`; inert without it) |
+| `CORTEX_Q8_PACKED`, `CORTEX_Q6_PACKED`, `CORTEX_MMVF_ROWS`, `CORTEX_ATTN_LANECELL` | decode layouts and kernels (packed Q8_0 / Q6_K weights, 4-row BF16 GEMV, one-cell-per-thread attention scores) |
+| `CORTEX_EXPERT_V2`, `CORTEX_TSUM`, `CORTEX_LFUSE`, `CORTEX_GDN_SPLIT`, `CORTEX_QFUSE`, `CORTEX_PLE_BATCH`, `CORTEX_SH_STREAM` | grouped decode experts, butterfly warp sums, fewer launches, the GDN step over four blocks per head, producer-written activation images, batched PLE projections, the shared expert on its own stream |
 
 ## 5. Opt-in switches (they change bits)
 
@@ -85,12 +85,12 @@ Opt-in, and the measured wins are below. The prompt levers need the table to pay
 read 248 tok/s at 4K against 186 without it, and at 32K 272 against 178. No KL was measured on this chip.
 
 ```sh
-export STRATA_HIP_WMMA=1      # prompt attention on matrix cores
-export STRATA_PF_GEMM=1       # the prompt's FP16 projections on the WMMA GEMM
-export STRATA_PA_FAST=1       # prompt attention with single FP16 q and p
-export STRATA_SELECT_WMMA=1   # the block scorer on matrix cores
-export STRATA_PF_FUSED=1      # the prompt experts on matrix cores (neutral at 4K here: 246 vs 248)
-export STRATA_HC_UPMIX=1      # the hyper-connection up projection with its epilogue
+export CORTEX_HIP_WMMA=1      # prompt attention on matrix cores
+export CORTEX_PF_GEMM=1       # the prompt's FP16 projections on the WMMA GEMM
+export CORTEX_PA_FAST=1       # prompt attention with single FP16 q and p
+export CORTEX_SELECT_WMMA=1   # the block scorer on matrix cores
+export CORTEX_PF_FUSED=1      # the prompt experts on matrix cores (neutral at 4K here: 246 vs 248)
+export CORTEX_HC_UPMIX=1      # the hyper-connection up projection with its epilogue
 ```
 
 ## 6. Engine flags
@@ -127,6 +127,6 @@ context cost, not the drafter). Memory stays flat: 38.1 of 50 GiB GTT at 131K. R
 - The opt-in set beyond one round; KL of any bit-changing switch; other models; contexts past 131K.
 - CUDA and SYCL were not built here (no toolchains on this box); the added gfx1103 macros are undefined for them.
 - Reset stability looks good but is one machine: a 2 h 07 m soak (`tools/serve_load.py`, 924 requests) and the
-  reset-prone combination from 7.10 (partial expert cache + `STRATA_IO_PREFETCH=1` + the adaptive tier) both ran
+  reset-prone combination from 7.10 (partial expert cache + `CORTEX_IO_PREFETCH=1` + the adaptive tier) both ran
   with zero `amdgpu` resets in the kernel log. The known 780M issue ([DETAILS.md](DETAILS.md)) was seen on ROCm
   7.10; with `cwsr_enable=0` and this stack it did not reproduce.

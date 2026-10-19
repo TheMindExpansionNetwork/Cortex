@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""A stub engine for exercising `strata tune run` end to end, on every OS.
+"""A stub engine for exercising `cortex tune run` end to end, on every OS.
 
-Run it as ``[sys.executable, "stub_engine.py", "--serve", ...]`` (``strata_control.tuning.engine_command``
+Run it as ``[sys.executable, "stub_engine.py", "--serve", ...]`` (``cortex_control.tuning.engine_command``
 does that for any ``.py`` engine). It speaks the real serve protocol (READY / PP / T / DONE) and
 makes its decode speed depend on one flag, so a sweep has something real to find. It is NOT a model
 and its numbers mean nothing about any hardware -- it exists so the *sweep machinery* can be tested

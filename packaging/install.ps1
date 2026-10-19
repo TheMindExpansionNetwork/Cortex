@@ -1,46 +1,46 @@
-# Strata Terminal: one-line installer for Windows (PowerShell 5.1 or newer).
+# Cortex Terminal: one-line installer for Windows (PowerShell 5.1 or newer).
 #
 #     irm https://github.com/Niko1221/Strata/releases/latest/download/install.ps1 | iex
 #
 # What it does, in order (and nothing else):
 #   1. finds out which computer this is (Windows, processor, graphics card);
 #   2. downloads the Terminal archive named in the release folder's install-manifest.txt and checks its SHA-256 against it;
-#   3. unpacks it into  %LOCALAPPDATA%\Strata\terminal\<version>  (no administrator rights);
-#   4. checks the release's signed feed with the Terminal it just unpacked (`strata update --check`); if that fails it removes what it
+#   3. unpacks it into  %LOCALAPPDATA%\Cortex\terminal\<version>  (no administrator rights);
+#   4. checks the release's signed feed with the Terminal it just unpacked (`cortex update --check`); if that fails it removes what it
 #      unpacked and stops;
-#   5. adds  %LOCALAPPDATA%\Strata\terminal\current\bin  to your user PATH and prints:  Installed. Run: strata launch
+#   5. adds  %LOCALAPPDATA%\Cortex\terminal\current\bin  to your user PATH and prints:  Installed. Run: cortex launch
 #
-# The engine and the model are not part of this: `strata launch` fetches the engine for your graphics card the first time you choose
+# The engine and the model are not part of this: `cortex launch` fetches the engine for your graphics card the first time you choose
 # a model, from the same release folder, signed.
 #
 # <feed> is where the release folder is hosted: GitHub Releases of Niko1221/Strata (the "latest" release's files), built in as the default.
-# Set $env:STRATA_FEED to another folder (a URL) to use that instead, for example a local test feed:  $env:STRATA_FEED='http://127.0.0.1:8099'; irm http://127.0.0.1:8099/install.ps1 | iex
-# Optional: $env:STRATA_DATA_DIR (default %LOCALAPPDATA%\Strata), $env:STRATA_INSTALL_TEST_TRUST='1' (a test feed: trust only its
-# test-trust.json for step 4), $env:STRATA_NO_PATH='1' (do not change the user PATH).
+# Set $env:CORTEX_FEED to another folder (a URL) to use that instead, for example a local test feed:  $env:CORTEX_FEED='http://127.0.0.1:8099'; irm http://127.0.0.1:8099/install.ps1 | iex
+# Optional: $env:CORTEX_DATA_DIR (default %LOCALAPPDATA%\Cortex), $env:CORTEX_INSTALL_TEST_TRUST='1' (a test feed: trust only its
+# test-trust.json for step 4), $env:CORTEX_NO_PATH='1' (do not change the user PATH).
 & {   # a child scope: `irm | iex` runs in the caller's scope, and this script's variables must not overwrite the caller's
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
-function Die([string]$msg) { [Console]::Error.WriteLine("strata installer: $msg"); throw "strata installer stopped" }
+function Die([string]$msg) { [Console]::Error.WriteLine("cortex installer: $msg"); throw "cortex installer stopped" }
 
-$feed = if ($env:STRATA_FEED) { $env:STRATA_FEED } else { 'https://github.com/Niko1221/Strata/releases/latest/download' }
+$feed = if ($env:CORTEX_FEED) { $env:CORTEX_FEED } else { 'https://github.com/Niko1221/Strata/releases/latest/download' }
 $feed = $feed.TrimEnd('/')
 if (-not $feed) {
-    Die 'this installer does not know where the Strata release folder is. Set $env:STRATA_FEED to its address and run it again, for example: $env:STRATA_FEED=''https://example.org/strata'''
+    Die 'this installer does not know where the Cortex release folder is. Set $env:CORTEX_FEED to its address and run it again, for example: $env:CORTEX_FEED=''https://example.org/strata'''
 }
 if ([Environment]::OSVersion.Platform -ne 'Win32NT') { Die 'this is the Windows installer; on Linux or macOS use install.sh.' }
 $arch = $env:PROCESSOR_ARCHITEW6432; if (-not $arch) { $arch = $env:PROCESSOR_ARCHITECTURE }
-if ($arch -ne 'AMD64') { Die "this computer ($arch) has no Strata Terminal yet. Supported: Windows on x64." }
+if ($arch -ne 'AMD64') { Die "this computer ($arch) has no Cortex Terminal yet. Supported: Windows on x64." }
 $platform = 'windows-x86_64'
 $gpu = ''
 # a discrete card is named before a built-in one (a Ryzen's "AMD Radeon(TM) Graphics" is listed first on many PCs); this line is only for the person to read
 try { $cards = @(Get-CimInstance Win32_VideoController | Where-Object { $_.Name -notmatch 'Basic|Remote' }); $gpu = ($cards | Sort-Object @{ Expression = { if ($_.Name -match 'NVIDIA|GeForce|RTX|GTX|Quadro|Radeon (RX|PRO|AI)|Arc|Instinct') { 0 } else { 1 } } } | Select-Object -First 1 -ExpandProperty Name) } catch { }
-Write-Host 'Strata Terminal installer'
+Write-Host 'Cortex Terminal installer'
 Write-Host "  This computer: Windows $arch ($platform)$(if ($gpu) { ", graphics: $gpu" })"
 Write-Host "  Release folder: $feed"
 
-$data = if ($env:STRATA_DATA_DIR) { $env:STRATA_DATA_DIR } else { Join-Path $env:LOCALAPPDATA 'Strata' }
-$work = Join-Path ([IO.Path]::GetTempPath()) ("strata-install-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+$data = if ($env:CORTEX_DATA_DIR) { $env:CORTEX_DATA_DIR } else { Join-Path $env:LOCALAPPDATA 'Cortex' }
+$work = Join-Path ([IO.Path]::GetTempPath()) ("cortex-install-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Path $work | Out-Null
 try {
     try { Invoke-WebRequest -UseBasicParsing -Uri "$feed/install-manifest.txt" -OutFile (Join-Path $work 'manifest.txt') }
@@ -65,21 +65,21 @@ try {
     try { Expand-Archive -LiteralPath $zip -DestinationPath $incoming -Force }
     catch { Die 'the archive could not be unpacked (is the disk full?). Nothing was installed.' }
     # the archive of a release folder is rooted at the bundle itself (control package) or in one folder (terminal archive)
-    if (-not (Test-Path (Join-Path $incoming 'bin\strata.cmd'))) {
-        $inner = Get-ChildItem $incoming -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'bin\strata.cmd') } | Select-Object -First 1
-        if (-not $inner) { Remove-Item -Recurse -Force $incoming; Die 'the archive does not look like a Strata Terminal.' }
+    if (-not (Test-Path (Join-Path $incoming 'bin\cortex.cmd'))) {
+        $inner = Get-ChildItem $incoming -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'bin\cortex.cmd') } | Select-Object -First 1
+        if (-not $inner) { Remove-Item -Recurse -Force $incoming; Die 'the archive does not look like a Cortex Terminal.' }
         $moved = "$dest.moved"; Move-Item $inner.FullName $moved; Remove-Item -Recurse -Force $incoming; Move-Item $moved $incoming
     }
 
-    if ($env:STRATA_INSTALL_TEST_TRUST -eq '1') {
+    if ($env:CORTEX_INSTALL_TEST_TRUST -eq '1') {
         $trust = Join-Path $work 'test-trust.json'
         try { Invoke-WebRequest -UseBasicParsing -Uri "$feed/test-trust.json" -OutFile $trust } catch { Remove-Item -Recurse -Force $incoming; Die 'the test feed has no test-trust.json' }
-        $env:STRATA_UPDATE_TRUSTED_KEYS = $trust
+        $env:CORTEX_UPDATE_TRUSTED_KEYS = $trust
     }
     Write-Host "Checking the release's signature..."
-    $strata = Join-Path $incoming 'bin\strata.cmd'
+    $cortex = Join-Path $incoming 'bin\cortex.cmd'
     $prevEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'      # a native program's stderr note must not stop the script
-    $out = & $strata update --check --no-engine --feed $feed 2>&1 | Out-String
+    $out = & $cortex update --check --no-engine --feed $feed 2>&1 | Out-String
     $code = $LASTEXITCODE
     $ErrorActionPreference = $prevEap
     if ($code -ne 0) {
@@ -95,7 +95,7 @@ try {
     if (Test-Path $current) { cmd /c rmdir "$current" | Out-Null }
     cmd /c mklink /J "$current" "$dest" | Out-Null
     $bin = Join-Path $current 'bin'
-    if ($env:STRATA_NO_PATH -ne '1') {
+    if ($env:CORTEX_NO_PATH -ne '1') {
         $user = [Environment]::GetEnvironmentVariable('Path', 'User')
         if (-not $user) { $user = '' }
         if (($user -split ';') -notcontains $bin) {
@@ -103,8 +103,8 @@ try {
         }
         $env:Path = "$env:Path;$bin"
     }
-    Write-Host 'Installed. Run: strata launch'
-    if ($env:STRATA_NO_PATH -eq '1') { Write-Host "  (the program is $bin\strata.cmd)" }
+    Write-Host 'Installed. Run: cortex launch'
+    if ($env:CORTEX_NO_PATH -eq '1') { Write-Host "  (the program is $bin\cortex.cmd)" }
     else { Write-Host '  (open a new terminal window if the command is not found yet)' }
 }
 finally {

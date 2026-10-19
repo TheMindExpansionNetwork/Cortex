@@ -1,4 +1,4 @@
-"""#461: the DLLs the Windows HIP runtime needs beside strata.exe, from the PE import tables.
+"""#461: the DLLs the Windows HIP runtime needs beside cortex.exe, from the PE import tables.
 
     python tools/test_dll_closure.py          (the real-zip test skips when the 0.1.40.2 HIP zip is not here)
 
@@ -96,12 +96,12 @@ class Closure(unittest.TestCase):
             (d / "b.dll").write_bytes(fake_pe(["a.dll"]))
             self.assertEqual(dc.dll_closure(d, ["a.dll"]), ["a.dll", "b.dll"])
 
-    ZIP = ROOT.parent / "release" / "z04002" / "strata-windows-x64-hip.zip"
+    ZIP = ROOT.parent / "release" / "z04002" / "cortex-windows-x64-hip.zip"
 
     @unittest.skipUnless(ZIP.exists(), "the 0.1.40.2 HIP zip is not here")
     def test_real_zip(self):
         """The reporter's finding: amdhip64_7.dll needs rocm_kpack.dll and the MSVC runtime, which the 0.1.40.2 setup
-        did not put beside strata.exe."""
+        did not put beside cortex.exe."""
         with tempfile.TemporaryDirectory() as d, zipfile.ZipFile(self.ZIP) as z:
             for n in z.namelist():
                 if n.startswith("rocm/bin/") and n.endswith(".dll"):
@@ -109,7 +109,7 @@ class Closure(unittest.TestCase):
             got = dc.dll_closure(Path(d) / "rocm" / "bin", ["amdhip64_7.dll", "amd_comgr.dll"])
             self.assertEqual(sorted(got), ["amd_comgr.dll", "amdhip64_7.dll", "msvcp140.dll", "rocm_kpack.dll",
                                            "vcruntime140.dll", "vcruntime140_1.dll"])
-            self.assertNotIn("hipblas.dll", got)            # strata.exe loads that one from rocm/bin by PATH
+            self.assertNotIn("hipblas.dll", got)            # cortex.exe loads that one from rocm/bin by PATH
 
 
 class SetupCopy(unittest.TestCase):

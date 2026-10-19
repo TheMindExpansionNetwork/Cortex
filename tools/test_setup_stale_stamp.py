@@ -30,7 +30,7 @@ def binary(version: str | None) -> bytes:
 class StaleBinary(unittest.TestCase):
     def test_reads_the_compiled_in_version(self):
         with tempfile.TemporaryDirectory() as d, mock.patch.object(setup, "source_version", lambda: "0.1.43"):
-            exe = Path(d) / "strata"
+            exe = Path(d) / "cortex"
             exe.write_bytes(binary("0.1.42"))
             self.assertEqual(setup.binary_engine_version(exe), "0.1.42")
             self.assertTrue(setup.stale_binary(exe))
@@ -39,7 +39,7 @@ class StaleBinary(unittest.TestCase):
 
     def test_four_part_version_and_unknowns(self):
         with tempfile.TemporaryDirectory() as d, mock.patch.object(setup, "source_version", lambda: "0.1.43.1"):
-            exe = Path(d) / "strata"
+            exe = Path(d) / "cortex"
             exe.write_bytes(binary("0.1.43.1"))
             self.assertFalse(setup.stale_binary(exe))
             exe.write_bytes(binary("0.1.43"))
@@ -96,12 +96,12 @@ class BuildEngineStamp(unittest.TestCase):
         self.assertEqual((self.eng / setup.EXE).read_bytes(), self.built)
 
     def test_the_q6k_expert_kernels_are_pinned_on(self):
-        """PR #2515: a build/ folder first configured while STRATA_Q6K_EXPERTS defaulted to OFF keeps it in CMakeCache.txt;
+        """PR #2515: a build/ folder first configured while CORTEX_Q6K_EXPERTS defaulted to OFF keeps it in CMakeCache.txt;
         the configure line names it, so Qwen3.6 UD-Q4_K_XL (Q4_K gate/up, Q6_K down) still loads."""
         setup.build_engine(GPU, "none", True, Path("llama"), toolkit=13)
-        self.assertIn("-DSTRATA_Q6K_EXPERTS=ON", self.defs)
-        self.assertNotIn("-DSTRATA_Q6K_EXPERTS=OFF", self.defs)
-        self.assertIn("-DSTRATA_MMQ_KQUANTS=ON", self.defs)  # flipped OFF -> ON in the same commit (465cd61d)
+        self.assertIn("-DCORTEX_Q6K_EXPERTS=ON", self.defs)
+        self.assertNotIn("-DCORTEX_Q6K_EXPERTS=OFF", self.defs)
+        self.assertIn("-DCORTEX_MMQ_KQUANTS=ON", self.defs)  # flipped OFF -> ON in the same commit (465cd61d)
 
     def test_a_build_that_leaves_the_old_binary_is_not_stamped_or_installed(self):
         self.built = binary("0.1.42")                     # the build "succeeded" without producing the new engine

@@ -6,7 +6,7 @@
  * sandbox denies a change and offers an escalation, it retries the exact call once with `sandbox_permissions`.
  * Every test checks the file on disk, not only the frames, because the frames are what the Harness reports.
  *
- * Needs STRATA_HARNESS_DIR (a built Harness); without it these tests skip, loudly.
+ * Needs CORTEX_HARNESS_DIR (a built Harness); without it these tests skip, loudly.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,8 +19,8 @@ import { resolveHarness } from '../server/agent/harness-runtime.mjs';
 import { MODE_PRESETS, modeOf, buildProfile } from '../server/agent/profile.mjs';
 import { NOT_IN_MODE, TurnProjector } from '../server/agent/events.mjs';
 
-const HARNESS = process.env.STRATA_HARNESS_DIR;
-const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'STRATA_HARNESS_DIR is not set to a built Harness' : false;
+const HARNESS = process.env.CORTEX_HARNESS_DIR;
+const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'CORTEX_HARNESS_DIR is not set to a built Harness' : false;
 const cleanup = dir => { try { rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch { /* the Harness sandbox leaves access entries; best effort */ } };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const lines = file => readFileSync(file, 'utf8').split(/\r?\n/).filter(Boolean).length;
@@ -30,7 +30,7 @@ const text = frames => frames.filter(f => f.type === 'delta').map(f => f.text).j
 
 async function rig(t) {
   const worker = await startScriptedWorker({});
-  const dir = mkdtempSync(join(tmpdir(), 'strata-modes-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-modes-'));
   const ws = join(dir, 'ws'); mkdirSync(ws, { recursive: true });
   const local = [{ id: 'inst-1', label: 'Scripted', baseUrl: worker.url, modelId: 'scripted-model', context: 32768 }];
   const bridge = createAgentBridge({ dataDir: dir, localInstances: () => local, connections: () => [], env: process.env, startTimeoutMs: 90_000 });
@@ -58,7 +58,7 @@ async function rig(t) {
 
 test('mode mapping: three presets, Manual by default, unknown values fall back to Manual', () => {
   assert.deepEqual(Object.keys(MODE_PRESETS), ['manual', 'plan', 'bypass']);
-  // Manual leaves the sandbox open and asks BEFORE a change through the Strata gate (plugins/strata-gate.mjs).
+  // Manual leaves the sandbox open and asks BEFORE a change through the Cortex gate (plugins/cortex-gate.mjs).
   assert.deepEqual([MODE_PRESETS.manual.sandbox, MODE_PRESETS.manual.approval], ['danger-full-access', 'ask']);
   assert.deepEqual([MODE_PRESETS.plan.sandbox, MODE_PRESETS.plan.approval], ['read-only', 'never']);
   assert.deepEqual([MODE_PRESETS.bypass.sandbox, MODE_PRESETS.bypass.approval], ['danger-full-access', 'never']);
@@ -66,10 +66,10 @@ test('mode mapping: three presets, Manual by default, unknown values fall back t
   for (const v of [undefined, null, '', 'auto', 'accept-edits', 'danger-full-access', 'constructor']) assert.equal(modeOf(v), 'manual', String(v));
   // Only Bypass gives full access WITHOUT asking, and the profile names our three and nothing else.
   const entry = JSON.parse(buildProfile({ local: [] }).patch.split('\n').slice(1).join('\n')).find(e => e.id === 'permission');
-  assert.deepEqual(Object.keys(entry.config.presets), ['strata-manual', 'strata-plan', 'strata-bypass']);
-  assert.equal(entry.config.defaultPreset, 'strata-manual');
-  assert.deepEqual(Object.entries(entry.config.presets).filter(([, p]) => p.sandbox === 'danger-full-access' && p.approval === 'never').map(([k]) => k), ['strata-bypass']);
-  assert.deepEqual(Object.entries(entry.config.presets).filter(([, p]) => p.sandbox !== 'danger-full-access').map(([k]) => k), ['strata-plan']);
+  assert.deepEqual(Object.keys(entry.config.presets), ['cortex-manual', 'cortex-plan', 'cortex-bypass']);
+  assert.equal(entry.config.defaultPreset, 'cortex-manual');
+  assert.deepEqual(Object.entries(entry.config.presets).filter(([, p]) => p.sandbox === 'danger-full-access' && p.approval === 'never').map(([k]) => k), ['cortex-bypass']);
+  assert.deepEqual(Object.entries(entry.config.presets).filter(([, p]) => p.sandbox !== 'danger-full-access').map(([k]) => k), ['cortex-plan']);
 });
 
 test('projection: under "never" no card ever offers Approve; "ask" marks the approved card', () => {

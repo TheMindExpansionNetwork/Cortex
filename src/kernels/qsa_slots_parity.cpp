@@ -1,15 +1,15 @@
-// src/kernels/qsa_slots_parity.cpp - STRATA_QSA_SLOTS: a batch window's block scores, top-k and attention as one
+// src/kernels/qsa_slots_parity.cpp - CORTEX_QSA_SLOTS: a batch window's block scores, top-k and attention as one
 // launch over rows of different slots (qsa_block_scores_slots, qsa_block_topk over the rows, qsa_decode_attn_slots)
 // against one call per row, as verify.cpp makes them without the switch.  Every slot has its own indexer keys, page
 // table and K/V pools (fp16, int8, q4_0 and int8-K/q4_0-V) and its own context length; scores, selected ids and the
 // attention output must be bitwise identical.  Synthetic data, no model.  Run it once more with
-// STRATA_ATTN_LANECELL=1 for the lane-cell kernels.  Where a launcher declines by design (STRATA_SCORES_MULTI=0, the
+// CORTEX_ATTN_LANECELL=1 for the lane-cell kernels.  Where a launcher declines by design (CORTEX_SCORES_MULTI=0, the
 // pre-sm_75 attention, the gfx906 query swizzle) the engine keeps its per-row calls and the test skips (77).
-#include "strata/kernels/kv_q4.hpp"
-#include "strata/kernels/kv_q8.hpp"
-#include "strata/kernels/qsa.hpp"
-#include "strata/kernels/qsa_decode_attn.hpp"
-#include "strata/kernels/qsa_select.hpp"
+#include "cortex/kernels/kv_q4.hpp"
+#include "cortex/kernels/kv_q8.hpp"
+#include "cortex/kernels/qsa.hpp"
+#include "cortex/kernels/qsa_decode_attn.hpp"
+#include "cortex/kernels/qsa_select.hpp"
 
 #include <cuda_runtime.h>
 
@@ -22,7 +22,7 @@
 #include <random>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 namespace {
 
 void ck(cudaError_t e) {
@@ -154,11 +154,11 @@ Result check(int fmt, int m, const int64_t* ctx, uint32_t seed) {
     const float* dead[k::kQsaAttnMaxSlots];
     k::QsaAttnSlotPools px;
     for (int t = 0; t < m; ++t) { pooled[t] = slots[t].pooled; dead[t] = slots[t].dead; px.p[t] = slots[t].pools; }
-    // a declined launch is no failure: the engine runs the per-row calls there (STRATA_SCORES_MULTI=0, the pre-sm_75
+    // a declined launch is no failure: the engine runs the per-row calls there (CORTEX_SCORES_MULTI=0, the pre-sm_75
     // attention, the gfx906 query swizzle)
     Result res = kPass;
     if (!k::qsa_block_scores_slots(pooled, dead, d_qidx, d_steps, m, max_blocks, s, sc[1], nullptr)) {
-        std::puts("SKIP: qsa_block_scores_slots declined (STRATA_SCORES_MULTI=0); the engine keeps the per-row calls");
+        std::puts("SKIP: qsa_block_scores_slots declined (CORTEX_SCORES_MULTI=0); the engine keeps the per-row calls");
         res = kSkip;
     } else {
         k::qsa_block_topk(sc[1], d_steps, m, max_blocks, cap, s, sel[1], nullptr);
@@ -204,8 +204,8 @@ int main() {
         std::puts("SKIP: no CUDA device");
         return 77;
     }
-    if (const char* v = std::getenv("STRATA_SCORES_MULTI"); v && std::atoi(v) == 0) {
-        std::puts("SKIP: STRATA_SCORES_MULTI=0 (the slots launch is off; the engine keeps the per-row calls)");
+    if (const char* v = std::getenv("CORTEX_SCORES_MULTI"); v && std::atoi(v) == 0) {
+        std::puts("SKIP: CORTEX_SCORES_MULTI=0 (the slots launch is off; the engine keeps the per-row calls)");
         return 77;
     }
     // contexts per row: under and over the selection width (2048 cells), partial and complete indexer blocks
@@ -220,6 +220,6 @@ int main() {
     if (cases == 0) return 77;
     std::printf("PASS: %d cases (4 KV formats x 1/2/4/8 rows of different slots%s, %d declined): scores, ids and "
                 "attention bitwise identical to one call per row\n", cases,
-                std::getenv("STRATA_ATTN_LANECELL") ? ", lane-cell" : "", skipped);
+                std::getenv("CORTEX_ATTN_LANECELL") ? ", lane-cell" : "", skipped);
     return 0;
 }

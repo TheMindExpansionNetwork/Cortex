@@ -111,8 +111,8 @@ export function chooseParallel({ config = {}, values = {}, hardware = null, requ
   let slots = requested;
   if (PARALLEL_POLICY === 'fit') while (slots > 1 && slots * slot > CACHE_LOSS_SHARE * soloCache) slots -= 1;
   const note = slots >= requested ? null
-    : slots > 1 ? `Your graphics card has room for ${slots} requests at once with this context size, so Strata set that. A smaller context size leaves room for more.`
-      : 'Strata set this model to one request at a time: your graphics card is best used that way, because more at once would make every answer slower. Helper agents and a second chat take their turn instead. A smaller context size leaves room for more at once.';
+    : slots > 1 ? `Your graphics card has room for ${slots} requests at once with this context size, so Cortex set that. A smaller context size leaves room for more.`
+      : 'Cortex set this model to one request at a time: your graphics card is best used that way, because more at once would make every answer slower. Helper agents and a second chat take their turn instead. A smaller context size leaves room for more at once.';
   const wish = values.batchMtp ?? config.batchMtp;   // Expert mode: true adds it by hand, false keeps it off
   const roomLeft = soloCache - slots * (slot + BATCH_MTP_DRAFTER_GB);
   const auto = BATCH_MTP_POLICY === 'auto' && oneCard && cards[0] >= BATCH_MTP_MIN_VRAM_GB && roomLeft >= BATCH_MTP_MARGIN_GB;
@@ -144,4 +144,4 @@ export function withoutParallel(cfg) {
 }
 
 /** What to say when the second try worked. */
-export const FALLBACK_NOTE = 'The model could not start with several requests at once on this PC, so Strata loaded it for one request at a time. Everything still works; helper agents and a second chat wait their turn.';
+export const FALLBACK_NOTE = 'The model could not start with several requests at once on this PC, so Cortex loaded it for one request at a time. Everything still works; helper agents and a second chat wait their turn.';

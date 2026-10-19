@@ -1,6 +1,6 @@
 """serve/server.py for an Intel Arc: the same server, with the Intel pieces added from outside.
 
-    python sycl/serve/server_intel.py --engine strata --config strata-<model>.json --port 8080 [...]
+    python sycl/serve/server_intel.py --engine cortex --config cortex-<model>.json --port 8080 [...]
 
 Every argument is serve/server.py's.  Nothing in serve/ is edited (the SYCL port keeps out of the shared files so
 upstream merges stay clean); this wrapper adds, at run time:
@@ -49,7 +49,7 @@ def install_xe_reader():
 
 def install_shared_embeddings():
     """Pictures: the engine runs in a container, and a request's image embeddings reach it as a file named on its GENI line.
-    serve/server.py writes that file to /dev/shm when that has room, and strata-sycl.sh shares the host's /dev/shm with the
+    serve/server.py writes that file to /dev/shm when that has room, and cortex-sycl.sh shares the host's /dev/shm with the
     container, so the path means the same on both sides.  Anywhere else (a full /dev/shm) the container cannot see the file:
     said once, in the log, in plain words."""
     orig = S.combined_embeddings_path
@@ -59,7 +59,7 @@ def install_shared_embeddings():
         p = orig(vision_dir, nbytes)
         if not str(p).startswith("/dev/shm/") and not said:
             said.append(1)
-            print("[strata] /dev/shm has no room for this picture: the engine runs in a container that sees only the host's /dev/shm, so it "
+            print("[cortex] /dev/shm has no room for this picture: the engine runs in a container that sees only the host's /dev/shm, so it "
                   "cannot read the picture. Free /dev/shm (or enlarge it: mount -o remount,size=4G /dev/shm) and send it again.", flush=True)
         return p
     S.combined_embeddings_path = path
@@ -151,9 +151,9 @@ def install_switcher(argv):
 
 def install_logprobs():
     """`LP` lines next to their tokens, the request's `logprobs` to the engine, OpenAI's `logprobs` in the reply."""
-    Eng = S.StrataEngine
+    Eng = S.CortexEngine
 
-    def _pump(self):   # serve/server.py's StrataEngine._pump, plus: an LP line goes beside its token, not in the queue
+    def _pump(self):   # serve/server.py's CortexEngine._pump, plus: an LP line goes beside its token, not in the queue
         proc, lines = self.proc, self.lines
         slot_q = self.slot_q
         lp = self.__dict__.setdefault("lp_lines", collections.deque())
@@ -282,7 +282,7 @@ def install_narrator():
                 last = time.time()
                 print(text, flush=True)
 
-        say("weights", "[strata] starting the engine: reading the model's weights ...")
+        say("weights", "[cortex] starting the engine: reading the model's weights ...")
         pos = offset
         while not done.wait(0.5):
             try:
@@ -296,19 +296,19 @@ def install_narrator():
                 pos += cut
                 for line in chunk[:cut].decode("utf-8", "replace").splitlines():
                     if "PLE on" in line or "expert arena:" in line:
-                        say("arena", "[strata] streaming the experts from the model files into the GPU's memory "
+                        say("arena", "[cortex] streaming the experts from the model files into the GPU's memory "
                                      "(and a pinned RAM mirror for what does not fit); the first start takes a few minutes ...")
                     elif " loaded " in line and "GiB at" in line:
-                        say("loaded", "[strata] experts loaded: " + line.split(" loaded ", 1)[1].strip() +
+                        say("loaded", "[cortex] experts loaded: " + line.split(" loaded ", 1)[1].strip() +
                             f" ({time.time() - t0:.0f} s so far)")
                     elif "expert cache " in line and " slots, " in line and "auto" not in line:
                         n = line.split("expert cache ", 1)[1].split(";")[0].replace(" slots,", " experts,").strip()
-                        say("cache", f"[strata] filling the GPU's expert cache ({n}) ...")
+                        say("cache", f"[cortex] filling the GPU's expert cache ({n}) ...")
                     elif "session is up" in line:
-                        say("up", "[strata] almost ready ...")
+                        say("up", "[cortex] almost ready ...")
             if time.time() - last > heartbeat:
                 last = time.time()
-                print(f"[strata] still starting ({time.time() - t0:.0f} s) - please wait ...", flush=True)
+                print(f"[cortex] still starting ({time.time() - t0:.0f} s) - please wait ...", flush=True)
     S.narrate_start = narrate_start
 
 

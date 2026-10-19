@@ -1,7 +1,7 @@
 /**
  * The three slash commands through the real app on a real model, with screenshots (playwright-core + installed Chrome).
  *
- *   STRATA_URL=http://127.0.0.1:8899 SHOTS=./shots WORKDIR=<the host's workspace> MODEL='Qwen test' node scripts/agent2-flow.mjs
+ *   CORTEX_URL=http://127.0.0.1:8899 SHOTS=./shots WORKDIR=<the host's workspace> MODEL='Qwen test' node scripts/agent2-flow.mjs
  *
  * Steps (each prints ok/FAIL):
  *   1. typing "/" lists /time-skip, /goal and /loop with plain descriptions;
@@ -9,15 +9,15 @@
  *   3. /goal <objective>: the assistant works until the goal is complete (Manual mode: Approve cards are clicked), /goal shows it;
  *   4. /time-skip <request>: a job runs on a copy, the sidebar lists the changed file, Keep the update changes the file in WORKDIR,
  *      Put the original back restores it.
- * Environment: STRATA_URL (required), SHOTS, WORKDIR, MODEL (picker text), CHROME, SKIP (comma list of steps to skip: menu,loop,goal,timeskip),
+ * Environment: CORTEX_URL (required), SHOTS, WORKDIR, MODEL (picker text), CHROME, SKIP (comma list of steps to skip: menu,loop,goal,timeskip),
  * LOOP_WAIT_MS (how long to wait for the second loop run, default 150000).
  */
 import { chromium } from 'playwright-core';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-const BASE = process.env.STRATA_URL;
-if (!BASE) { console.error('STRATA_URL is required'); process.exit(2); }
+const BASE = process.env.CORTEX_URL;
+if (!BASE) { console.error('CORTEX_URL is required'); process.exit(2); }
 const SHOTS = resolve(process.env.SHOTS ?? 'agent2-shots');
 mkdirSync(SHOTS, { recursive: true });
 const WORKDIR = process.env.WORKDIR;

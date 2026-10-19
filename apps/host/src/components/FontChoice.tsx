@@ -10,7 +10,7 @@ export function FontChoice() {
     }>('/api/fonts').then(result => { if (active)
         setFonts(result.fonts); }).catch(() => { }).finally(() => { if (active)
         setLoading(false); }); return () => { active = false; }; }, []);
-    return <div className="font-choice"><Select disabled={loading} translateLabels={false} ariaLabel={tr("Font family")} value={manual ? 'manual' : value} options={[{ value: '', label: tr('Strata font') }, ...([...new Set([...fonts, ...(value ? [value] : [])])].map(name => ({ value: name, label: name }))), { value: 'manual', label: tr('Use a font from your computer') }]} onChange={name => { if (name === 'manual') {
+    return <div className="font-choice"><Select disabled={loading} translateLabels={false} ariaLabel={tr("Font family")} value={manual ? 'manual' : value} options={[{ value: '', label: tr('Cortex font') }, ...([...new Set([...fonts, ...(value ? [value] : [])])].map(name => ({ value: name, label: name }))), { value: 'manual', label: tr('Use a font from your computer') }]} onChange={name => { if (name === 'manual') {
         setDraft(value);
         setManual(true);
     }

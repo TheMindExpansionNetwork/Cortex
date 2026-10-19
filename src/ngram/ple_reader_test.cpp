@@ -6,9 +6,9 @@
 //
 // Every row the synthetic table holds encodes its own index, so a wrong offset, a straddle mishandled or a
 // dedup slot mixed up shows as a mismatch rather than as plausible data.
-#include "strata/kernels/ngram.hpp"
-#include "strata/ngram/ple_reader.hpp"
-#include "strata/platform/direct_file.hpp"
+#include "cortex/kernels/ngram.hpp"
+#include "cortex/ngram/ple_reader.hpp"
+#include "cortex/platform/direct_file.hpp"
 
 #include <chrono>
 #include <cstdio>
@@ -22,9 +22,9 @@
 #include <thread>
 #include <vector>
 
-namespace ng = strata::ngram;
-namespace k = strata::kernels;
-using strata::platform::now_us;
+namespace ng = cortex::ngram;
+namespace k = cortex::kernels;
+using cortex::platform::now_us;
 
 namespace {
 
@@ -124,13 +124,13 @@ std::string write_format_table(const std::string& dir, const k::PleFormatInfo& f
     const auto str = [&](const char* s) { return le((uint64_t) std::strlen(s), 8) + std::string(s); };
     const uint64_t n_kv = f.needs_scale ? 3 : 1;
     std::string head = "GGUF" + le(3u, 4) + le(1ull, 8) + le(n_kv, 8);
-    head += str("general.architecture") + le(8u, 4) + str("strata-ple");
+    head += str("general.architecture") + le(8u, 4) + str("cortex-ple");
     if (f.needs_scale) {
         const float scale = 0.75f;
         uint32_t sb;
         std::memcpy(&sb, &scale, 4);
-        head += str("strata.ple.format") + le(8u, 4) + str(f.id == k::PleFormat::NVFP4 ? "nvfp4x16" : "f8_e4m3");
-        head += str("strata.ple.scale") + le(6u, 4) + le(sb, 4);       // 6 = FLOAT32
+        head += str("cortex.ple.format") + le(8u, 4) + str(f.id == k::PleFormat::NVFP4 ? "nvfp4x16" : "f8_e4m3");
+        head += str("cortex.ple.scale") + le(6u, 4) + le(sb, 4);       // 6 = FLOAT32
     }
     head += str("per_layer_token_embd.weight") + le(2u, 4);
     head += le(f.id == k::PleFormat::NVFP4 ? (uint64_t) f.row_bytes : (uint64_t) k::PLE_HEAD_DIM, 8) + le(claimed_rows != 0 ? claimed_rows : (uint64_t) rows, 8);
@@ -329,7 +329,7 @@ void all_formats_round_trip(const std::string& dir) {
     for (int i = 0; i < k::ple_format_count(); ++i) {
         const k::PleFormatInfo& f = k::ple_formats()[i];
         CHECK((int) f.id == i, "%s: the table is not in PleFormat order", f.name);
-        // NVFP4 and F8_E4M3 are both I8 bytes: the type finds the FP8 entry, `strata.ple.format` picks NVFP4 in PleTable::open
+        // NVFP4 and F8_E4M3 are both I8 bytes: the type finds the FP8 entry, `cortex.ple.format` picks NVFP4 in PleTable::open
         const k::PleFormatInfo* want = f.id == k::PleFormat::NVFP4 ? &k::ple_format_info(k::PleFormat::F8_E4M3) : &f;
         CHECK(k::ple_format_for_type(f.gguf_type) == want, "%s: type lookup", f.name);
         format_round_trip(dir, f, 2000);

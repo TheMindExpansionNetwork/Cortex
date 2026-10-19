@@ -1,4 +1,4 @@
-#include "strata/core/exchange_storage.hpp"
+#include "cortex/core/exchange_storage.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -9,7 +9,7 @@
 #include <stdexcept>
 #include <vector>
 
-using strata::core::detail::ExchangeStorage;
+using cortex::core::detail::ExchangeStorage;
 constexpr uint64_t absent = ~uint64_t{0};
 void require(bool ok, const char* why) { if (!ok) throw std::runtime_error(why); }
 

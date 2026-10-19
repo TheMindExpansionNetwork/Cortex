@@ -13,10 +13,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
-from strata_cli.cli import main
-from strata_cli import connections
-from strata_cli.client import ClientError, Endpoint, server_url
-from strata_cli.render import render_view
+from cortex_cli.cli import main
+from cortex_cli import connections
+from cortex_cli.client import ClientError, Endpoint, server_url
+from cortex_cli.render import render_view
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,10 +24,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class ConnectionTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="strata-connections-")
+        self.temp = tempfile.TemporaryDirectory(prefix="cortex-connections-")
         self.addCleanup(self.temp.cleanup)
         self.directory = Path(self.temp.name) / "connections"
-        env = mock.patch.dict(os.environ, {"STRATA_CONNECTION_DIR": str(self.directory)}, clear=False)
+        env = mock.patch.dict(os.environ, {"CORTEX_CONNECTION_DIR": str(self.directory)}, clear=False)
         env.start()
         self.addCleanup(env.stop)
 
@@ -39,11 +39,11 @@ class ConnectionTests(unittest.TestCase):
 
     def test_create_edit_precedence_and_private_storage(self):
         code, created = self._cli("connection", "create", "edge", "--url", "https://Example.COM:443",
-                                  "--prefix", "/proxy/strata", "--credential-env", "STRATA_READ_KEY",
+                                  "--prefix", "/proxy/cortex", "--credential-env", "CORTEX_READ_KEY",
                                   "--output", "json")
         self.assertEqual(code, 0)
         self.assertEqual(created["connection"]["url"], "https://example.com:443")
-        self.assertEqual(created["connection"]["prefix"], "/proxy/strata")
+        self.assertEqual(created["connection"]["prefix"], "/proxy/cortex")
         saved = self.directory / "edge.json"
         if os.name == "posix":
             self.assertEqual(self.directory.stat().st_mode & 0o077, 0)
@@ -63,8 +63,8 @@ class ConnectionTests(unittest.TestCase):
                                  "--if-revision", revision, "--output", "json")
         self.assertEqual((code, stale["error"]["code"]), (6, 6))
         self.assertEqual(connections.load("edge")[0]["prefix"], "/new")
-        with mock.patch.dict(os.environ, {"STRATA_CONNECTION": "edge", "STRATA_URL": "https://ignored.example",
-                                       "STRATA_READ_KEY": "test-secret"}):
+        with mock.patch.dict(os.environ, {"CORTEX_CONNECTION": "edge", "CORTEX_URL": "https://ignored.example",
+                                       "CORTEX_READ_KEY": "test-secret"}):
             code, effective = self._cli("config", "show", "--effective", "--output", "json")
             self.assertEqual(code, 0)
             self.assertEqual(effective["effective"]["url"], "https://example.com:443")
@@ -101,13 +101,13 @@ class ConnectionTests(unittest.TestCase):
     def test_interactive_monitor_rejects_json_output_before_connecting(self):
         for output_flag in (("--output", "json"), ("--json",)):
             with self.subTest(output_flag=output_flag), mock.patch(
-                    "strata_cli.monitor_commands.Endpoint") as endpoint:
+                    "cortex_cli.monitor_commands.Endpoint") as endpoint:
                 code, response = self._cli("monitor", "--url", "http://127.0.0.1:1",
                                            *output_flag)
                 self.assertEqual((code, response["error"]["code"]), (2, 2))
                 self.assertIn("requires --once", response["error"]["message"])
                 endpoint.assert_not_called()
-        bundle = Path(self.temp.name) / "strata-monitor.pyz"
+        bundle = Path(self.temp.name) / "cortex-monitor.pyz"
         subprocess.run([sys.executable, str(ROOT / "packaging/monitor_bundle.py"),
                         "build", str(bundle)], capture_output=True, text=True, check=True)
         portable = subprocess.run([sys.executable, "-S", str(bundle), "monitor", "--url",
@@ -125,7 +125,7 @@ class ConnectionTests(unittest.TestCase):
         code, listed = self._cli("connection", "list", "--quiet", "--json")
         self.assertEqual(code, 0)
         self.assertEqual(listed["connections"], [])
-        with mock.patch("strata_cli.monitor_commands.Endpoint") as endpoint:
+        with mock.patch("cortex_cli.monitor_commands.Endpoint") as endpoint:
             endpoint.return_value.snapshot.return_value = {"schema_version": 1}
             output = io.StringIO()
             with redirect_stdout(output):
@@ -186,12 +186,12 @@ class ConnectionTests(unittest.TestCase):
         thread.start()
         try:
             root = f"http://127.0.0.1:{server.server_port}"
-            connections.create("proxied", root, prefix="/proxy", credential_env="STRATA_READ_KEY")
-            with mock.patch.dict(os.environ, {"STRATA_READ_KEY": "test-secret"}):
+            connections.create("proxied", root, prefix="/proxy", credential_env="CORTEX_READ_KEY")
+            with mock.patch.dict(os.environ, {"CORTEX_READ_KEY": "test-secret"}):
                 code, source = self._cli("status", "--connection", "proxied", "--json")
                 self.assertEqual(code, 0)
                 self.assertEqual(source["snapshot"]["work"]["active"], 3)
-                bundle = Path(self.temp.name) / "strata-monitor.pyz"
+                bundle = Path(self.temp.name) / "cortex-monitor.pyz"
                 subprocess.run([sys.executable, str(ROOT / "packaging/monitor_bundle.py"),
                                 "build", str(bundle)], capture_output=True, text=True, check=True)
                 portable = subprocess.run([sys.executable, "-S", str(bundle), "status", "--connection",
@@ -258,7 +258,7 @@ class ConnectionTests(unittest.TestCase):
     def test_status_only_fallback_labels_missing_telemetry_without_inventing_work(self):
         paths = []
         metrics_status = [404]
-        status = {"service": "strata", "model": "loaded-model", "loaded": True,
+        status = {"service": "cortex", "model": "loaded-model", "loaded": True,
                   "started": 1_790_000_000, "concurrency": {"serving": 8}}
 
         class Handler(BaseHTTPRequestHandler):

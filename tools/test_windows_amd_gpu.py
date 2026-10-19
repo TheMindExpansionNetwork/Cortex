@@ -1,5 +1,5 @@
 """#1587: a Windows PC with only an AMD card - the server's hardware_static names the card from the registry's display
-class, and strata_bench no longer labels the run "CPU only".  No GPU, no registry needed (a fake winreg).
+class, and cortex_bench no longer labels the run "CPU only".  No GPU, no registry needed (a fake winreg).
 
     python -m unittest tools.test_windows_amd_gpu
 """
@@ -86,7 +86,7 @@ class Adapters(unittest.TestCase):
         self.assertEqual(t.static["gpu_vram_total_mib"], 16384)
 
     def test_bench_labels_the_card(self):
-        import strata_bench as B
+        import cortex_bench as B
         cards = [{"name": "AMD Radeon RX 6900 XT", "provider": "AMD", "driver": "32.0.21001.9024", "vram_bytes": 16 * GB}]
         with mock.patch.object(B, "run_cmd", return_value=""), mock.patch.object(B.os, "name", "nt"), \
                 mock.patch.object(T, "windows_amd_cards", return_value=cards):

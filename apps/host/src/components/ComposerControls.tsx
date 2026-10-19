@@ -83,7 +83,7 @@ export function ComposerControls({ session, onPreview, onAttach, onError, onSlas
         try {
             for (const file of selected.slice(0, 64)) {
                 const path = file.webkitRelativePath || file.name;
-                if (directory && /(^|\/)(node_modules|\.git|\.strata)(\/|$)/.test(path)) {
+                if (directory && /(^|\/)(node_modules|\.git|\.cortex)(\/|$)/.test(path)) {
                     skipped++;
                     continue;
                 }
@@ -134,11 +134,11 @@ export function ComposerControls({ session, onPreview, onAttach, onError, onSlas
         const website = () => { setUrlOpen(true); setError(''); };
         const preview = () => previewFile.current?.click();
         const dropped = (e: Event) => { if (!streaming && !reading) void addFilesLatest.current((e as CustomEvent<File[]>).detail ?? []); };
-        window.addEventListener('strata:drop-files', dropped);
+        window.addEventListener('cortex:drop-files', dropped);
         window.addEventListener('keydown', key);
-        window.addEventListener('strata:open-website', website);
-        window.addEventListener('strata:open-preview', preview);
-        return () => { window.removeEventListener('strata:drop-files', dropped); window.removeEventListener('keydown', key); window.removeEventListener('strata:open-website', website); window.removeEventListener('strata:open-preview', preview); };
+        window.addEventListener('cortex:open-website', website);
+        window.addEventListener('cortex:open-preview', preview);
+        return () => { window.removeEventListener('cortex:drop-files', dropped); window.removeEventListener('keydown', key); window.removeEventListener('cortex:open-website', website); window.removeEventListener('cortex:open-preview', preview); };
     }, [streaming, reading]);
     useEffect(() => {
         if (preferences !== 'mode')

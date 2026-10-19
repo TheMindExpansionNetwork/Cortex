@@ -1,8 +1,8 @@
 # Engine tuning: the plan for this machine's real Metal engine
 # repo: 3044521c760a860df74f36304bb936a80a041fbd
-# command: strata tune plan --engine build-metal/strata --backend metal --model qwen3.8-flash-next
+# command: cortex tune plan --engine build-metal/cortex --backend metal --model qwen3.8-flash-next
 
-engine    /Users/nikoveit/Documents/deepseek-harness/strata-work/strata-rebuild/build-metal/strata
+engine    /Users/nikoveit/Documents/deepseek-harness/cortex-work/cortex-rebuild/build-metal/cortex
 flags     read from the binary
 backend   metal   objective generation   repeats 3
 bounds    at most 16 trials, 1800s total
@@ -23,7 +23,7 @@ excluded:
 Applying a result is a separate step; a sweep never writes the active profile.
 
 # The same command for a CUDA backend, showing the NVIDIA-only dimensions it may search:
-engine    /Users/nikoveit/Documents/deepseek-harness/strata-work/strata-rebuild/build-metal/strata
+engine    /Users/nikoveit/Documents/deepseek-harness/cortex-work/cortex-rebuild/build-metal/cortex
 flags     read from the binary
 backend   cuda   objective generation   repeats 3
 bounds    at most 16 trials, 1800s total

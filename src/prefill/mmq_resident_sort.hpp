@@ -8,29 +8,29 @@
 #include <cstring>
 #include <vector>
 
-namespace strata::prefill::detail {
+namespace cortex::prefill::detail {
 
 inline bool mmq_resident_sort_flag(const char* value) {
     return value != nullptr && std::strcmp(value, "1") == 0;
 }
 
 inline bool mmq_resident_sort_requested() {
-    static const bool on = mmq_resident_sort_flag(std::getenv("STRATA_MMQ_RESIDENT_SORT_NE"));
+    static const bool on = mmq_resident_sort_flag(std::getenv("CORTEX_MMQ_RESIDENT_SORT_NE"));
     return on;
 }
 
-// STRATA_MMQ_GROUP_SORT=1: the same row-count order for the full 16-expert groups only; the last, partial group keeps
+// CORTEX_MMQ_GROUP_SORT=1: the same row-count order for the full 16-expert groups only; the last, partial group keeps
 // its experts in ID order. A full group's launch has 160 * ntx (gate/up) or 320 * ntx (down) tiles, at or above the
 // 90 % tile efficiency on the cards' SM counts, so it runs one block per tile with no stream-k K split whatever its tile
 // width: each expert's rows get the same bits in any full group. The partial group can take the stream-k split, whose
 // K boundaries depend on the group's tile count - leaving it unchanged keeps the prompt's bits.
 inline bool mmq_group_sort_requested() {
-    static const bool on = mmq_resident_sort_flag(std::getenv("STRATA_MMQ_GROUP_SORT"));
+    static const bool on = mmq_resident_sort_flag(std::getenv("CORTEX_MMQ_GROUP_SORT"));
     return on;
 }
 
-// How many of `n` ordered experts the sort may move: all of them (STRATA_MMQ_RESIDENT_SORT_NE), or the full groups
-// of `group` experts (STRATA_MMQ_GROUP_SORT).
+// How many of `n` ordered experts the sort may move: all of them (CORTEX_MMQ_RESIDENT_SORT_NE), or the full groups
+// of `group` experts (CORTEX_MMQ_GROUP_SORT).
 inline size_t mmq_resident_sort_span(size_t n, size_t group, bool keep_tail) {
     return keep_tail && group > 0 ? n - n % group : n;
 }
@@ -78,4 +78,4 @@ inline void mmq_resident_sort_rows(const int32_t* ids, int64_t routes, int32_t k
     }
 }
 
-}  // namespace strata::prefill::detail
+}  // namespace cortex::prefill::detail

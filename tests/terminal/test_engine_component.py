@@ -15,12 +15,12 @@ import urllib.request
 from pathlib import Path
 from unittest import mock
 
-from strata_cli import cli
-from strata_control import acquisition, components, engine_component as ec
+from cortex_cli import cli
+from cortex_control import acquisition, components, engine_component as ec
 
 WINDOWS = os.name == "nt"
 HERE = components.host_platform()
-EXE = "strata.exe" if WINDOWS else "strata"
+EXE = "cortex.exe" if WINDOWS else "cortex"
 
 
 def make_package(root: Path, *, version="0.1.45", platform=None, backend="cuda", archs=(), min_runtime=None,
@@ -39,7 +39,7 @@ def make_package(root: Path, *, version="0.1.45", platform=None, backend="cuda",
         files.append({"path": name, "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)})
     if not WINDOWS:
         (folder / entry).chmod(0o755)
-    manifest = {"schema_version": 1, "id": "strata-engine", "version": version, "platform": platform,
+    manifest = {"schema_version": 1, "id": "cortex-engine", "version": version, "platform": platform,
                 "backend": backend, "entrypoint": entry, "files": files}
     if archs:
         manifest["cuda_archs"] = list(archs)
@@ -100,7 +100,7 @@ class Resolution(unittest.TestCase):
                 ec.resolve(self.root, backend="cuda")
         text = str(caught.exception)
         self.assertIn("never downloads an engine", text)
-        self.assertIn("strata install", text)
+        self.assertIn("cortex install", text)
         self.assertIsInstance(caught.exception, acquisition.AcquisitionRefused)
         self.assertEqual(caught.exception.exit_code, 5)
         self.assertFalse((self.root / "engine").exists(), "looking must not create the folder")
@@ -223,17 +223,17 @@ class Integrity(unittest.TestCase):
 
 class Where(unittest.TestCase):
     def test_environment_wins_then_the_per_user_folder(self):
-        self.assertEqual(ec.components_dir({"STRATA_COMPONENTS_DIR": "/x/y"}), Path("/x/y"))
+        self.assertEqual(ec.components_dir({"CORTEX_COMPONENTS_DIR": "/x/y"}), Path("/x/y"))
         win = ec.components_dir({"LOCALAPPDATA": "C:\\L"}, windows=True)
         self.assertEqual(win.name, "components")
-        self.assertEqual(win.parent.name, "Strata")
+        self.assertEqual(win.parent.name, "Cortex")
         posix = ec.components_dir({"XDG_DATA_HOME": "/d"}, windows=False)
-        self.assertEqual(posix.as_posix(), "/d/strata/components")
+        self.assertEqual(posix.as_posix(), "/d/cortex/components")
 
     def test_backend_override_is_validated(self):
-        self.assertEqual(ec.detect_backend({"STRATA_ENGINE_BACKEND": "HIP"}), ("hip", "environment"))
+        self.assertEqual(ec.detect_backend({"CORTEX_ENGINE_BACKEND": "HIP"}), ("hip", "environment"))
         with self.assertRaises(ec.ComponentProblem):
-            ec.detect_backend({"STRATA_ENGINE_BACKEND": "vulkan"})
+            ec.detect_backend({"CORTEX_ENGINE_BACKEND": "vulkan"})
 
     def test_detection_runs_only_read_only_tools(self):
         calls = []
@@ -284,11 +284,11 @@ class WindowsAmd(unittest.TestCase):
 
     def test_the_arch_table_is_the_one_setup_uses(self):
         sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-        import setup as strata_setup
-        self.assertEqual({k: v for k, v in strata_setup._WIN_AMD_DID.items() if k not in strata_setup.AMD_IGPU_PCI},
+        import setup as cortex_setup
+        self.assertEqual({k: v for k, v in cortex_setup._WIN_AMD_DID.items() if k not in cortex_setup.AMD_IGPU_PCI},
                          ec.WIN_AMD_DEVICE_ARCH)
-        self.assertEqual({k: v for k, v in strata_setup.AMD_IGPU_PCI.items() if v == strata_setup.STRIX_HALO_ARCH}, ec.WIN_AMD_UMA_IDS)
-        for device in strata_setup.AMD_IGPU_PCI:
+        self.assertEqual({k: v for k, v in cortex_setup.AMD_IGPU_PCI.items() if v == cortex_setup.STRIX_HALO_ARCH}, ec.WIN_AMD_UMA_IDS)
+        for device in cortex_setup.AMD_IGPU_PCI:
             if device not in ec.WIN_AMD_UMA_IDS:
                 self.assertIn(device, ec.WIN_AMD_IGPU_IDS)
 
@@ -307,7 +307,7 @@ class WrongCardFamily(unittest.TestCase):
             with self.assertRaises(ec.EngineMissing) as caught:
                 ec.resolve(self.root, backend="hip", runtime="1")
             note = ec.status(self.root, backend="hip")["notice"]
-        self.assertTrue(str(caught.exception).startswith("This build of Strata is for AMD RX 9000 cards."), str(caught.exception))
+        self.assertTrue(str(caught.exception).startswith("This build of Cortex is for AMD RX 9000 cards."), str(caught.exception))
         self.assertIn("Ask for the RX 7000 build.", note)
         self.assertIn("(gfx1100)", note)
         self.assertNotIn("component", note)
@@ -333,7 +333,7 @@ class NeverAcquires(unittest.TestCase):
 
     def test_status_and_cli_with_the_network_down(self):
         make_package(self.root)
-        with NoNetwork(), mock.patch.dict(os.environ, {"STRATA_NO_ACQUIRE": "1"}):
+        with NoNetwork(), mock.patch.dict(os.environ, {"CORTEX_NO_ACQUIRE": "1"}):
             report = ec.status(self.root, backend="cuda")
             code, out, _ = self.run_cli("components", "engine", "--components-dir", str(self.root),
                                         "--backend", "cuda", "--output", "json")
@@ -369,7 +369,7 @@ class NeverAcquires(unittest.TestCase):
         folder.mkdir(parents=True)
         for item in a.iterdir():
             (folder / item.name).write_bytes(item.read_bytes())
-        (folder / "strata").chmod(0o755) if not WINDOWS else None
+        (folder / "cortex").chmod(0o755) if not WINDOWS else None
         rewrite(folder, min_driver={"nvidia": "575.51"})
         with mock.patch.object(ec, "nvidia_driver_version", return_value="550.120"):
             self.assertIn("driver 575 or newer", ec.status(self.root, backend="cuda")["notice"])
@@ -391,7 +391,7 @@ class NeverAcquires(unittest.TestCase):
         store = components.ComponentStore(self.root / "store")
         artifact = components.Artifact(name="engine.tar.gz", url="https://example.invalid/e.tgz",
                                        sha256="0" * 64, bytes=10)
-        with NoNetwork(), mock.patch.dict(os.environ, {"STRATA_NO_ACQUIRE": "1"}):
+        with NoNetwork(), mock.patch.dict(os.environ, {"CORTEX_NO_ACQUIRE": "1"}):
             with self.assertRaises(acquisition.AcquisitionRefused):
                 store._fetch(artifact)
 

@@ -1,11 +1,11 @@
-strata agent bridge — end to end
-  profile : /Users/nikoveit/Documents/deepseek-harness/strata-work/strata-rebuild/integrations/harness/profile/cordis.patch.yml
+cortex agent bridge — end to end
+  profile : /Users/nikoveit/Documents/deepseek-harness/cortex-work/cortex-rebuild/integrations/harness/profile/cordis.patch.yml
   dsh     : /Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh
-  temp    : /var/folders/jr/5sbp8w_97bgdkv1n_tr64_840000gn/T/strata-bridge-e2e-jbt_ts2f
+  temp    : /var/folders/jr/5sbp8w_97bgdkv1n_tr64_840000gn/T/cortex-bridge-e2e-jbt_ts2f
 
-[1/5] Strata API worker
+[1/5] Cortex API worker
   ready: model=qwen3.8-flash-next context=32768
-[2/5] DeepSeek Harness with the Strata profile
+[2/5] DeepSeek Harness with the Cortex profile
   ready on 127.0.0.1:50100
 [3/5] Operator session with approval answering enabled
   authenticated as owner with interactions=answer
@@ -16,6 +16,6 @@ strata agent bridge — end to end
 
 PASS
   turn            : completed
-  provider/model  : strata-local / qwen3.8-flash-next
+  provider/model  : cortex-local / qwen3.8-flash-next
   worker requests : 2
   turn statements : turn/start, turn/end

@@ -3,8 +3,8 @@
 // borrowed experts from RAM instead of reading the model files through page faults.  Runs on a CPU-only
 // PC: the device calls are wrapped at the link (`--wrap` in CMakeLists.txt, conversation_transfer_test's
 // pattern), the memory is ordinary memory, and `pin = false` keeps the copy pageable.
-#include "strata/core/expert_source.hpp"
-#include "strata/kernels/cpu/expert_layout.hpp"
+#include "cortex/core/expert_source.hpp"
+#include "cortex/kernels/cpu/expert_layout.hpp"
 
 #include <cuda_runtime.h>
 
@@ -68,7 +68,7 @@ struct TempDirectory {
 
     explicit TempDirectory(const fs::path& base = fs::temp_directory_path()) {
         const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
-        path = base / ("strata-split-lend-test-" + std::to_string(stamp));
+        path = base / ("cortex-split-lend-test-" + std::to_string(stamp));
         fs::create_directories(path);
     }
 
@@ -88,14 +88,14 @@ const uint8_t truth_byte(int64_t l, int64_t e, size_t i) {
 struct Rig {
     std::vector<std::vector<uint8_t>> truth;   // [layer * kExperts + expert]
     TempDirectory dir;
-    strata::core::FileExpertSource src;
-    strata::core::ExpertCache stage0, stage1;   // the two split stages' caches
+    cortex::core::FileExpertSource src;
+    cortex::core::ExpertCache stage0, stage1;   // the two split stages' caches
     size_t blob = 0;
 
     explicit Rig(const char* tag) {
         std::string err;
-        require(strata::kernels::cpu::expert_layout_load(dir.path.string(), kLayers, kExperts, err), err);
-        blob = (size_t) strata::kernels::cpu::BLOB;
+        require(cortex::kernels::cpu::expert_layout_load(dir.path.string(), kLayers, kExperts, err), err);
+        blob = (size_t) cortex::kernels::cpu::BLOB;
         truth.resize((size_t) kLayers * kExperts);
         {
             std::ofstream out(dir.path / "experts.bin", std::ios::binary);

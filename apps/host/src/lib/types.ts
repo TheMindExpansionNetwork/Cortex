@@ -1,4 +1,4 @@
-/** Shared shapes for the Strata host API. Mirrors server/types.d.ts. */
+/** Shared shapes for the Cortex host API. Mirrors server/types.d.ts. */
 
 export type CheckState = 'pass' | 'warn' | 'fail';
 export interface SoftwareUpdate {
@@ -9,7 +9,7 @@ export interface SoftwareUpdate {
   canInstall: boolean;
   message: string;
 }
-export interface UpdateCheckResult { checkedAt: string; strata: SoftwareUpdate; engine: SoftwareUpdate }
+export interface UpdateCheckResult { checkedAt: string; cortex: SoftwareUpdate; engine: SoftwareUpdate }
 
 export interface HardwareCheck {
   id: 'gpu' | 'memory' | 'cpu' | 'storage';

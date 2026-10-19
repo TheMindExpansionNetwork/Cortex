@@ -52,7 +52,7 @@ export function createCloudflare({ origin, originUrl, hasKey, changed = () => {}
   }
   async function start(body) {
     if (busy || ['starting', 'connected', 'stopping'].includes(value.status)) throw new Error('Stop the current tunnel before starting another.');
-    if (!hasKey()) throw new Error('Create a Strata API key before connecting Cloudflare.');
+    if (!hasKey()) throw new Error('Create a Cortex API key before connecting Cloudflare.');
     if (!['quick', 'domain'].includes(body.mode)) throw new Error('Choose a temporary URL or your own domain.');
     const hostname = body.mode === 'domain' ? tunnelHostname(body.hostname) : null;
     const token = body.mode === 'domain' ? String(body.token ?? '').trim() : '';
@@ -63,7 +63,7 @@ export function createCloudflare({ origin, originUrl, hasKey, changed = () => {}
       binary = await locate();
       if (!binary && prepareConnector) binary = await prepareConnector();
       if (!binary) throw new Error('The connector could not be prepared automatically. Retry connector setup.');
-      // Strata's own tunnel (same port or same token) is never doubled up. Other cloudflared processes serve other tunnels and are left alone.
+      // Cortex's own tunnel (same port or same token) is never doubled up. Other cloudflared processes serve other tunnels and are left alone.
       if ((await lookForOther())?.running) { const { own } = classifyRunning(other, { originUrl, token }); if (own.length) throw new Error(ownTunnelMessage(own)); }
       await origin.start();
       // Tokens never appear in command arguments, logs, saved settings, or API responses.

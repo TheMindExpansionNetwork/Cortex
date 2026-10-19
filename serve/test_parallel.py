@@ -1,7 +1,7 @@
 """#465: "parallel": N - several requests decode together in the engine's batch slots (--batch N).
 
 A fake engine (a Python script speaking the engine's GEN / BGEN / BT / BDONE / BADM / BSTOP lines) runs behind the
-real StrataEngine and Service, so the server's side is tested without a GPU: requests up to N run at once, more
+real CortexEngine and Service, so the server's side is tested without a GPU: requests up to N run at once, more
 wait for a slot, /metrics shows the slots, each request's history row is its own, and a conversation's next turn
 goes back to the slot that holds it."""
 import json
@@ -16,9 +16,9 @@ from pathlib import Path
 from unittest import mock
 
 from serve.frontend import ChatTemplate
-from serve.server import ByteTokenizer, Service, StrataEngine, engine_args, parallel_args, serve
-from strata_cli import bench
-from strata_cli.client import Endpoint
+from serve.server import ByteTokenizer, Service, CortexEngine, engine_args, parallel_args, serve
+from cortex_cli import bench
+from cortex_cli.client import Endpoint
 
 # The fake engine: one token every STEP seconds per active slot (a "window" serves every active slot at once);
 # GEN (solo) streams T lines; BGEN reads the prompt (one T line, DONE), answers BADM and continues in the slot.
@@ -44,7 +44,7 @@ threading.Thread(target=reader, daemon=True).start()
 print("INFO engine=0.1.39" + (f" batch_slots={fit}" if fit >= 2 else "") +
       (" slot_cache=1" if "--slotcache" in args else "") + (f" batch_groups={groups}" if groups > 1 else ""), flush=True)
 if "--fake-stage-plan" in args:
-    print("strata serve: layer split: layers 0-11 (CUDA0), 12-23 (CUDA1), 24-35 (CUDA2), "
+    print("cortex serve: layer split: layers 0-11 (CUDA0), 12-23 (CUDA1), 24-35 (CUDA2), "
           "36-47 (CUDA3), one hand-off per window", file=sys.stderr, flush=True)
 print("READY 4096 stop", flush=True)
 LONG = list(b"LONGREPLY")
@@ -213,19 +213,19 @@ class ParallelArgs(unittest.TestCase):
         import contextlib, io, os
         def said(args, env):
             buf = io.StringIO()
-            old = os.environ.get("STRATA_BATCH_MTP")
+            old = os.environ.get("CORTEX_BATCH_MTP")
             if env is None:
-                os.environ.pop("STRATA_BATCH_MTP", None)
+                os.environ.pop("CORTEX_BATCH_MTP", None)
             else:
-                os.environ["STRATA_BATCH_MTP"] = env
+                os.environ["CORTEX_BATCH_MTP"] = env
             try:
                 with contextlib.redirect_stdout(buf):
                     r = parallel_args({"parallel": 12}, args)
             finally:
                 if old is None:
-                    os.environ.pop("STRATA_BATCH_MTP", None)
+                    os.environ.pop("CORTEX_BATCH_MTP", None)
                 else:
-                    os.environ["STRATA_BATCH_MTP"] = old
+                    os.environ["CORTEX_BATCH_MTP"] = old
             self.assertEqual(r, ["--batch", "12"])
             return "at most" in buf.getvalue()
         self.assertTrue(said([], None))                  # 0.1.39: the window holds 8 rows
@@ -239,7 +239,7 @@ class ParallelArgs(unittest.TestCase):
 
 class PickSlot(unittest.TestCase):
     def engine(self, n):
-        e = StrataEngine("missing-executable", [], lazy=True)
+        e = CortexEngine("missing-executable", [], lazy=True)
         e.batch = n
         e.slot_order = list(range(n))
         e.slot_busy = [False] * n
@@ -268,7 +268,7 @@ class PickSlot(unittest.TestCase):
         # assistant header, so the held stream (prompt + reply) is no start of it.  The engine's turn checkpoint sits at
         # the last <|im_start|> of the old prompt: the prompt that agrees up to there belongs to that slot.  Before, both
         # went to the least recently used slot in turn, and the first one overwrote the other chat's cache.
-        T = StrataEngine.TURN_ID
+        T = CortexEngine.TURN_ID
         hist_a, hist_b = list(range(1000, 1600)), list(range(2000, 2600))
         held_a = hist_a + [T, 7, 8, 9] + [50, 51, 52]                  # prompt (ends with the assistant header) + reply
         held_b = hist_b + [T, 7, 8, 9] + [60, 61]
@@ -318,13 +318,13 @@ class PickSlot(unittest.TestCase):
 
 
 class ParallelService(unittest.TestCase):
-    """The real StrataEngine and Service over HTTP, the fake engine behind them."""
+    """The real CortexEngine and Service over HTTP, the fake engine behind them."""
 
     def start(self, slots, fit=None, slot_cache=False, fail=False, reuse=False, says_groups=0,
               more=(), stage_plan=False, batch_sample=False, stage_sample=False):
         import serve.server as server
         self.tmp = tempfile.TemporaryDirectory()
-        script = Path(self.tmp.name) / "fake_strata.py"
+        script = Path(self.tmp.name) / "fake_cortex.py"
         script.write_text(FAKE_BATCH, encoding="utf-8")
         self.log = Path(self.tmp.name) / "requests.log"
         real = server.subprocess.Popen
@@ -339,7 +339,7 @@ class ParallelService(unittest.TestCase):
         extra += list(more)
         with mock.patch.object(server.subprocess, "Popen",
                                lambda cmd, **kw: real([sys.executable, str(script), *cmd[1:]], **kw)):
-            self.engine = StrataEngine("strata", extra, log=str(Path(self.tmp.name) / "engine.log") if stage_plan else None)
+            self.engine = CortexEngine("cortex", extra, log=str(Path(self.tmp.name) / "engine.log") if stage_plan else None)
         tok = ByteTokenizer()
         self.svc = Service(self.engine, tok, ChatTemplate(Path(__file__).parent / "chat_template.jinja"))
         self.httpd = serve(self.svc, port=0)
@@ -696,7 +696,7 @@ class ParallelService(unittest.TestCase):
 
     def test_a_burst_of_connections_is_not_reset(self):
         """30-40 clients at once got "connection reset by peer" with the listen backlog of 5 (4 x R9700 burst): the
-        server listens with a deep backlog (STRATA_HTTP_BACKLOG, 256), so 60 simultaneous requests all get answers."""
+        server listens with a deep backlog (CORTEX_HTTP_BACKLOG, 256), so 60 simultaneous requests all get answers."""
         import serve.server as server
         self.assertGreaterEqual(server.Server.request_queue_size, 64)
         self.start(2)
@@ -1136,7 +1136,7 @@ class ParallelService(unittest.TestCase):
         finally:
             self.svc.fifo.release()
         import serve.server as server
-        script, real = Path(self.tmp.name) / "fake_strata.py", server.subprocess.Popen
+        script, real = Path(self.tmp.name) / "fake_cortex.py", server.subprocess.Popen
         patch = mock.patch.object(server.subprocess, "Popen",      # the reload starts the fake again
                                   lambda cmd, **kw: real([sys.executable, str(script), *cmd[1:]], **kw))
         patch.start()

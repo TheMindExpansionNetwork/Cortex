@@ -6,8 +6,8 @@ import { useNative } from '../lib/native';
 
 /**
  * Which saved tuning a start will use, in plain words, and a way to switch it off (back to the standard settings) or on again.
- * Shown on the Models screen so nobody has to guess what runs after an unload or a restart. The tuning is applied by Strata at every
- * start (see strata_control/presets.py); this only reads it and flips it. Layout is the UI worker's: it is one line of text and one button.
+ * Shown on the Models screen so nobody has to guess what runs after an unload or a restart. The tuning is applied by Cortex at every
+ * start (see cortex_control/presets.py); this only reads it and flips it. Layout is the UI worker's: it is one line of text and one button.
  */
 export function NativeTuneBadge({ model, resourceProfile, vision }: { model: string; resourceProfile: 'work' | 'performance'; vision: string }) {
     const native = useNative();

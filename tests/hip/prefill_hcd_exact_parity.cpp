@@ -1,16 +1,16 @@
-// STRATA_HCD_EXACT's kernel against hipBLASLt, bit for bit.  Gemm::bf16_hcd_exact (the hyper-connection read's down
+// CORTEX_HCD_EXACT's kernel against hipBLASLt, bit for bit.  Gemm::bf16_hcd_exact (the hyper-connection read's down
 // projection, N 320 x K 10240, BF16 in, FP32 out) reproduces hipBLASLt solutions 1176 / 1177's k order, StaggerU
 // included; it launches only when the tuning table makes hipBLASLt take one of them for the shape.  This test runs both
 // for several chunk sizes T on the same random inputs (the activations at the token stride the engine uses, K + 64) and
 // requires every output to be equal: a hipBLASLt update that renumbers its solutions or changes their order shows up
 // here as a mismatch (or as the kernel declining, which is reported).
 //
-// Needs STRATA_HIPBLASLT_TUNING (the gfx1151 table in tools/hip) on a gfx11 card: exit 77 (SKIP) otherwise, or when no
+// Needs CORTEX_HIPBLASLT_TUNING (the gfx1151 table in tools/hip) on a gfx11 card: exit 77 (SKIP) otherwise, or when no
 // T is taken by the kernel at all.
 #include <cuda_runtime.h>
 
-#include "strata/kernels/bf16_bits.hpp"
-#include "strata/prefill/gemm.hpp"
+#include "cortex/kernels/bf16_bits.hpp"
+#include "cortex/prefill/gemm.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -29,8 +29,8 @@
 } while (0)
 
 int main() {
-    if (std::getenv("STRATA_HIPBLASLT_TUNING") == nullptr) {
-        std::printf("SKIP: STRATA_HIPBLASLT_TUNING is not set (the kernel runs only where the table picks solution 1176 / 1177)\n");
+    if (std::getenv("CORTEX_HIPBLASLT_TUNING") == nullptr) {
+        std::printf("SKIP: CORTEX_HIPBLASLT_TUNING is not set (the kernel runs only where the table picks solution 1176 / 1177)\n");
         return 77;
     }
     hipDeviceProp_t prop{};
@@ -45,7 +45,7 @@ int main() {
     const int64_t Ts[] = {64, 1000, 2047, 2048, 3333, 4096, 6000, 8191, 16384};
     hipStream_t stream;
     HIP_CHECK(hipStreamCreate(&stream));
-    strata::prefill::Gemm gemm;
+    cortex::prefill::Gemm gemm;
     std::string err;
     if (!gemm.init(stream, 1 << 20, err)) {
         std::fprintf(stderr, "Gemm::init: %s\n", err.c_str());
@@ -54,7 +54,7 @@ int main() {
     std::mt19937 rng(12345);
     std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
     std::vector<uint16_t> w((size_t) N * K);
-    for (auto& v : w) v = strata::kernels::bf16_from_f32(0.05f * dist(rng));
+    for (auto& v : w) v = cortex::kernels::bf16_from_f32(0.05f * dist(rng));
     uint16_t* dw = nullptr;
     HIP_CHECK(hipMalloc((void**) &dw, w.size() * 2));
     HIP_CHECK(hipMemcpy(dw, w.data(), w.size() * 2, hipMemcpyHostToDevice));
@@ -62,7 +62,7 @@ int main() {
     for (const int64_t T : Ts) {
         std::vector<uint16_t> x((size_t) T * LDX, 0);
         for (int64_t t = 0; t < T; ++t)
-            for (int64_t k = 0; k < K; ++k) x[(size_t) t * LDX + k] = strata::kernels::bf16_from_f32(dist(rng));
+            for (int64_t k = 0; k < K; ++k) x[(size_t) t * LDX + k] = cortex::kernels::bf16_from_f32(dist(rng));
         uint16_t* dx = nullptr;
         float *dy_ref = nullptr, *dy = nullptr;
         HIP_CHECK(hipMalloc((void**) &dx, x.size() * 2));

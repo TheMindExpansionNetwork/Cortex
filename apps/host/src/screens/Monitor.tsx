@@ -1,7 +1,7 @@
 import {localeTag} from '../lib/i18n';
 import { tr } from '../lib/i18n';
 import { scopedMonitor, instanceLabel, deviceLabel } from '../lib/runtime-models';
-/** The original Strata dashboard, adapted to the current shell and device inventory. */
+/** The original Cortex dashboard, adapted to the current shell and device inventory. */
 import { useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { SnapshotDialog } from '../components/SnapshotDialog';

@@ -8,22 +8,22 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from strata_control import updater
+from cortex_control import updater
 
 
 def make_engine(folder: Path, body_posix: str, body_nt: str) -> Path:
     if os.name == "nt":
-        path = folder / "strata.cmd"
+        path = folder / "cortex.cmd"
         path.write_text("@echo off\r\n" + body_nt, encoding="utf-8")
     else:
-        path = folder / "strata"
+        path = folder / "cortex"
         path.write_text("#!/bin/sh\n" + body_posix, encoding="utf-8")
         path.chmod(path.stat().st_mode | stat.S_IXUSR)
     return path
 
 
-USAGE_POSIX = "echo 'strata generate [options]' >&2\nfor f in a b c d e f; do echo \"  --opt-$f N   something\" >&2; done\nexit 2\n"
-USAGE_NT = "echo strata generate [options] 1>&2\r\n" + "".join(f"echo   --opt-{c} N   something 1>&2\r\n" for c in "abcdef") + "exit /b 2\r\n"
+USAGE_POSIX = "echo 'cortex generate [options]' >&2\nfor f in a b c d e f; do echo \"  --opt-$f N   something\" >&2; done\nexit 2\n"
+USAGE_NT = "echo cortex generate [options] 1>&2\r\n" + "".join(f"echo   --opt-{c} N   something 1>&2\r\n" for c in "abcdef") + "exit /b 2\r\n"
 
 
 class BinarySmoke(unittest.TestCase):
@@ -41,7 +41,7 @@ class BinarySmoke(unittest.TestCase):
     def test_an_engine_that_answers_version_passes_as_before(self):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
-            res = updater.binary_smoke(self.component(folder, make_engine(folder, "echo strata 0.1.45\nexit 0\n", "echo strata 0.1.45\r\nexit /b 0\r\n")))
+            res = updater.binary_smoke(self.component(folder, make_engine(folder, "echo cortex 0.1.45\nexit 0\n", "echo cortex 0.1.45\r\nexit /b 0\r\n")))
             self.assertIn("--version only", res["detail"])
 
     def test_a_real_failure_still_fails(self):

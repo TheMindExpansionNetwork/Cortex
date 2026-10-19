@@ -1,9 +1,9 @@
-// src/spec/suffix_drafter.cpp - see include/strata/spec/suffix_drafter.hpp.
-#include "strata/spec/suffix_drafter.hpp"
+// src/spec/suffix_drafter.cpp - see include/cortex/spec/suffix_drafter.hpp.
+#include "cortex/spec/suffix_drafter.hpp"
 
 #include <algorithm>
 
-namespace strata::spec {
+namespace cortex::spec {
 
 namespace {
 uint64_t mix(uint64_t x) {
@@ -95,4 +95,4 @@ int SuffixDrafter::propose_after(const int32_t* extra, int n_extra, int max_k, i
     return k;
 }
 
-}  // namespace strata::spec
+}  // namespace cortex::spec

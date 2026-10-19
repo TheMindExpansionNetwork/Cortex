@@ -1,7 +1,7 @@
 /**
  * Headless check of the approval card, light and dark, against a real host, the real Harness and a scripted model:
  *
- *   STRATA_HARNESS_DIR=... node scripts/approval-flow.mjs [shots-dir]
+ *   CORTEX_HARNESS_DIR=... node scripts/approval-flow.mjs [shots-dir]
  *
  * For each command the scripted model asks to run in Manual mode it checks that the card asks in plain words, says nothing of
  * tool names or JSON in its headline, and keeps the exact command under Details; then it approves and checks the row that remains.
@@ -25,10 +25,10 @@ let failed = false;
 const check = (ok, label, extra = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${label}${extra ? '  ' + extra : ''}`); if (!ok) failed = true; };
 
 const worker = await startScriptedWorker({ model: 'cloud-model' });
-const home = mkdtempSync(join(tmpdir(), 'strata-appr-'));
+const home = mkdtempSync(join(tmpdir(), 'cortex-appr-'));
 const ws = join(home, 'workspace'); mkdirSync(ws, { recursive: true });
 const port = await freePort();
-const env = { ...process.env, STRATA_HOME: home, STRATA_PORT: String(port), STRATA_WORKSPACE: ws, STRATA_REAL_ENGINE: '0', STRATA_COMPONENTS_DIR: join(home, 'components') };
+const env = { ...process.env, CORTEX_HOME: home, CORTEX_PORT: String(port), CORTEX_WORKSPACE: ws, CORTEX_REAL_ENGINE: '0', CORTEX_COMPONENTS_DIR: join(home, 'components') };
 const child = spawn(process.execPath, [join(HOST_DIR, 'server', 'index.mjs')], { cwd: HOST_DIR, env, stdio: 'ignore', windowsHide: true });
 const base = `http://127.0.0.1:${port}`;
 for (let i = 0; i < 100; i++) { try { if ((await fetch(`${base}/api/agent/status`)).ok) break; } catch { /* starting */ } await sleep(200); }

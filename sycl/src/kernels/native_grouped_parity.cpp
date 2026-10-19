@@ -15,7 +15,7 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/kernels/iq_kernels.hpp"
+#include "cortex/kernels/iq_kernels.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -27,12 +27,12 @@
 #include <string>
 #include <vector>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 // SYCL port only (iq_kernels.dp.cpp): the K-quant / Q5_1 / Q8_0 lane kernels with (true, the default) or without the
-// multi-entry split; STRATA_KQ_SPLIT=0 at startup is false
+// multi-entry split; CORTEX_KQ_SPLIT=0 at startup is false
 void native_expert_set_kq_split(bool on);
 }
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 
@@ -616,10 +616,10 @@ void bench(dpct::queue_ptr s, std::mt19937 &rng) {
 // expert bytes it reads per microsecond.  NL layers (default 16), each with its own experts, so the weights stream from
 // DRAM; a call reads each of its groups' whole blobs (gate + up + down) once.  Shapes: one token (10 groups of 1), a
 // window of 2 tokens (16 groups, 20 entries) and of 4 (28 groups, 40 entries; native_grouped_parity's --bench).
-// STRATA_GU_LANES / STRATA_DOWN_LANES pick the lane split as in the engine.
+// CORTEX_GU_LANES / CORTEX_DOWN_LANES pick the lane split as in the engine.
 void kq_bench(dpct::queue_ptr s, std::mt19937& rng, int nl, bool host) {
     const int pairs[][2] = {{21, 20}, {23, 20}, {18, 42}, {12, 7}, {12, 8}, {13, 8},
-#ifdef STRATA_Q6K_EXPERTS
+#ifdef CORTEX_Q6K_EXPERTS
                             {14, 8},
 #endif
                             {8, 8}};
@@ -697,11 +697,11 @@ int main(int argc, char** argv) {
         return g_fail ? 1 : 0;
     }
     for (int gu : {16, 17, 18, 21, 22, 23, 29, 42, 12, 13,
-#ifdef STRATA_Q6K_EXPERTS
+#ifdef CORTEX_Q6K_EXPERTS
                    14,
 #endif
-                   8})        // STRATA_GU_FMTS
-        for (int dt : {20, 23, 42, 7, 8}) check(gu, dt, 512, 256, s, rng);   // STRATA_D_FMTS; IQ4_XS: n_ff % 256
+                   8})        // CORTEX_GU_FMTS
+        for (int dt : {20, 23, 42, 7, 8}) check(gu, dt, 512, 256, s, rng);   // CORTEX_D_FMTS; IQ4_XS: n_ff % 256
     check(21, 20, 2560, 640, s, rng);                                   // a model's shapes
     check(21, 23, 2560, 768, s, rng);
     if (do_bench) bench(s, rng);

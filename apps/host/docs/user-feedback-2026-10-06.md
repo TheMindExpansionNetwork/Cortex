@@ -1,6 +1,6 @@
 # UI annotations — 6 October 2026
 
-Implemented in the Strata design iteration. Preview: http://localhost:5199/.
+Implemented in the Cortex design iteration. Preview: http://localhost:5199/.
 
 ## Annotation checklist
 
@@ -35,7 +35,7 @@ Use **+ → Try preview examples** in Chat. The demo chat also responds to “Sh
 
 ## Runtime boundaries
 
-The current development server uses the **Strata demo engine**, with a llama.cpp/OpenAI-compatible adapter available in the code. There is **no DeepSeek harness integration**. Composer access and thinking menus save per-chat preferences; the adapter does not yet enforce those access modes or adjustable reasoning budgets. Their menus identify this limitation.
+The current development server uses the **Cortex demo engine**, with a llama.cpp/OpenAI-compatible adapter available in the code. There is **no DeepSeek harness integration**. Composer access and thinking menus save per-chat preferences; the adapter does not yet enforce those access modes or adjustable reasoning budgets. Their menus identify this limitation.
 
 Tasks are real host-owned schedules for text prompts using the loaded model. They run while the host is open, skip missed runs, prevent overlapping runs of the same task and preserve results. The demo model returns labelled sample answers. File, shell, web, email and calendar tools are not connected to task execution.
 

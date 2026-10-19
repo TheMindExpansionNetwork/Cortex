@@ -81,11 +81,11 @@ export function LocalModelImport({ open, directory, onClose, onChoose }: {
    <dl className="local-model-facts"><div><dt>{tr("Architecture")}</dt><dd>{tr(preview.variant.local!.architecture)}</dd></div><div><dt>{tr("Quantization")}</dt><dd>{tr(preview.variant.quant)}</dd></div><div><dt>{tr("Size")}</dt><dd>{tr(fileSize(preview.variant.local!.files.reduce((n, f) => n + f.bytes, 0)))}</dd></div><div><dt>{tr("Context limit")}</dt><dd>{tr(Math.floor(preview.variant.local!.contextLength / 1024).toLocaleString(localeTag()))}{tr("K tokens")}</dd></div></dl>
    <label className="local-model-name">{tr("Display name")}<input className="st-input" value={name} maxLength={160} onChange={e => setName(e.target.value)} disabled={pending}/></label>
    <details className="local-model-files"><summary>{tr(preview.variant.local!.shards === 1 ? 'File location' : 'Model files')}</summary><code>{preview.variant.local!.path}</code>{tr(preview.files.length > 1 ? <ul>{tr(preview.files.map(file => <li key={file}>{tr(file)}</li>))}</ul> : null)}</details>
-   <p className="small muted">{tr("Strata uses these files in place. You can load the model after adding it.")}</p>
+   <p className="small muted">{tr("Cortex uses these files in place. You can load the model after adding it.")}</p>
    <p className="local-model-compatibility small"><Icon name="info" size={16}/><span>{tr("Custom model \u00B7 engine compatibility is checked when loading. Memory estimates use the file\u2019s metadata.")}</span></p>
    {tr(!preview.variant.local!.hasChatTemplate ? <p className="small muted">{tr("No chat template is declared; response formatting depends on the engine.")}</p> : null)}
   </div> : <div className="local-model-browser">
-   <p className="small muted">{tr("Choose the model’s .gguf file. For a split model, choose any shard; Strata finds the first and checks the full set.")}</p>
+   <p className="small muted">{tr("Choose the model’s .gguf file. For a split model, choose any shard; Cortex finds the first and checks the full set.")}</p>
    <form className="local-model-browser__path" onSubmit={e => {
                 e.preventDefault();
                 if (!pending)

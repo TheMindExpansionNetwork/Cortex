@@ -107,9 +107,9 @@ const BROWSER_VERBS = {
   browser_close: ['Closing the browser page', 'Closed the browser page', "Couldn't close the browser page"],
 };
 const BROWSER_GENERIC = ['Using the browser', 'Used the browser', 'The browser step failed'];
-const BROWSER_PREFIX = 'mcp__browser__', INSTRUCTIONS_PREFIX = 'mcp__strata-instructions__', COMMANDS_PREFIX = 'mcp__strata-commands__';
+const BROWSER_PREFIX = 'mcp__browser__', INSTRUCTIONS_PREFIX = 'mcp__cortex-instructions__', COMMANDS_PREFIX = 'mcp__cortex-commands__';
 /** The person's own tool's name as they wrote it (spaces for underscores). */
-const ownToolName = name => name.replace(/^mcp__strata-(?:instructions|commands)__/, '').replace(/_/g, ' ');
+const ownToolName = name => name.replace(/^mcp__cortex-(?:instructions|commands)__/, '').replace(/_/g, ' ');
 /** The three sentences (running, worked, failed) for a tool, and whether this is one the app knows by name. */
 function verbsFor(name) {
   if (VERBS[name]) return { verbs: VERBS[name], known: true };

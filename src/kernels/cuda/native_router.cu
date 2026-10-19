@@ -20,7 +20,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
-#include "strata/kernels/native_router.hpp"
+#include "cortex/kernels/native_router.hpp"
 #include <cuda_runtime.h>
 #include <atomic>
 #include <cfloat>
@@ -28,7 +28,7 @@
 #include <cstdint>
 #include <stdexcept>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 std::atomic<bool> enabled{false};
 __device__ __forceinline__ float warp_sum(float value) {
@@ -250,7 +250,7 @@ void native_router_topk(const float* logits, int32_t* ids, float* weights, int n
     if (error != cudaSuccess) throw std::runtime_error(cudaGetErrorString(error));
 }
 
-// STRATA_ROUTE_RESIDENT (EXPERIMENTAL, opt-in, changes the output): residency-biased routing for 512 x 10.
+// CORTEX_ROUTE_RESIDENT (EXPERIMENTAL, opt-in, changes the output): residency-biased routing for 512 x 10.
 // After the top-10: for the ranks lo..hi a non-resident expert is replaced by the best resident expert not already
 // picked when its logit is within `margin` of the replaced one; the weights are then the softmax of the selected
 // logits (the router's renormalisation).  Tokens without a swap keep the router's exact bits.

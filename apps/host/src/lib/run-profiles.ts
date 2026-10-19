@@ -17,7 +17,7 @@ export interface RunProfiles {
   profiles: RunProfile[];
   defaults: Record<string, string>;
 }
-export const RUN_PROFILES_KEY = 'strata.run-profiles.v1';
+export const RUN_PROFILES_KEY = 'cortex.run-profiles.v1';
 export const emptyProfiles = (): RunProfiles => ({ schema: 1, profiles: [], defaults: {} });
 
 export function computerIdentity(hardware: Hardware) {
@@ -39,7 +39,7 @@ export function readProfiles(text: string | null): RunProfiles {
   if (!text) return emptyProfiles();
   const parsed = JSON.parse(text);
   if (parsed?.schema !== 1 || !Array.isArray(parsed.profiles) || !parsed.defaults || typeof parsed.defaults !== 'object' || Array.isArray(parsed.defaults)) throw new Error('Saved run profiles could not be read.');
-  const profiles = parsed.profiles.filter((p: RunProfile) => p && typeof p.id === 'string' && typeof p.name === 'string' && typeof p.variantId === 'string' && typeof p.hardware === 'string' && typeof p.engineVersion === 'string' && p.config?.schema === 'strata.engine/1' && p.config.beginner && p.config.expert && !Array.isArray(p.config.expert)).map((p: RunProfile) => ({ ...p, imageModel: ['off','q4','q5','q6','q8'].includes(p.imageModel ?? '') ? p.imageModel : 'off' }));
+  const profiles = parsed.profiles.filter((p: RunProfile) => p && typeof p.id === 'string' && typeof p.name === 'string' && typeof p.variantId === 'string' && typeof p.hardware === 'string' && typeof p.engineVersion === 'string' && p.config?.schema === 'cortex.engine/1' && p.config.beginner && p.config.expert && !Array.isArray(p.config.expert)).map((p: RunProfile) => ({ ...p, imageModel: ['off','q4','q5','q6','q8'].includes(p.imageModel ?? '') ? p.imageModel : 'off' }));
   const defaults = Object.fromEntries(Object.entries(parsed.defaults).filter(([, id]) => typeof id === 'string' && profiles.some((p: RunProfile) => p.id === id))) as Record<string, string>;
   return { schema: 1, profiles, defaults };
 }
@@ -60,7 +60,7 @@ export function resourceConfig(config: ConfigDocument, use: ComputerUse, hardwar
 }
 export function recommendedConfig(engine: EngineConfig, hardware: Hardware, context = 'recommended', use: ComputerUse = 'shared'): ConfigDocument {
   return resourceConfig({
-    schema: 'strata.engine/1', batchAutomatic: true,
+    schema: 'cortex.engine/1', batchAutomatic: true,
     beginner: { priority: 'balanced', contextLength: context as ConfigDocument['beginner']['contextLength'], readImages: false, gpuIdle: 'never' },
     expert: { ...Object.fromEntries(engine.expert.map(p => [p.id, p.recommended])), 'ctx.length': context === 'recommended' ? '128K' : context.toUpperCase() },
   }, use, hardware);

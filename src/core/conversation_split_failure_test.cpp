@@ -1,4 +1,4 @@
-#include "strata/core/conversation_cache.hpp"
+#include "cortex/core/conversation_cache.hpp"
 #include <cstdlib>
 #include <cstdio>
 #include <new>
@@ -11,7 +11,7 @@ void* operator new(std::size_t n) {
 }
 void operator delete(void* p) noexcept { std::free(p); }
 void operator delete(void* p,std::size_t) noexcept { std::free(p); }
-using strata::core::ConversationCheckpoint;
+using cortex::core::ConversationCheckpoint;
 bool equal(const ConversationCheckpoint& a,const ConversationCheckpoint& b) {
     if(a.ids!=b.ids || a.imgs!=b.imgs || a.gdn!=b.gdn || a.ple!=b.ple || a.tails!=b.tails || a.dead!=b.dead || a.block_pos!=b.block_pos || a.used!=b.used || a.stage_parts.size()!=b.stage_parts.size()) return false;
     for(size_t i=0;i<a.stage_parts.size();++i) if(!equal(a.stage_parts[i],b.stage_parts[i])) return false;
@@ -34,9 +34,9 @@ int main() {
             const auto backup=checks;
             fail_after=n;
             try {
-                auto split=strata::core::conversation_checkpoints_split(std::move(checks),stages);
+                auto split=cortex::core::conversation_checkpoints_split(std::move(checks),stages);
                 fail_after=0; // Merge-back after a successful split must not allocate.
-                if(!strata::core::conversation_checkpoints_merge(std::move(split),checks)) return 2;
+                if(!cortex::core::conversation_checkpoints_merge(std::move(split),checks)) return 2;
                 fail_after=-1;
                 if(checks.size()!=backup.size()) return 6;
                 finished=true;   // the split went through: the merge gives the running state back, in order

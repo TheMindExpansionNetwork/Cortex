@@ -1,8 +1,8 @@
-# Gyro (agentionai rotor quants) on Strata
+# Gyro (agentionai rotor quants) on Cortex
 
 Gyro-S and Gyro-M are Qwen3.8-Flash-Next quantizations by agentionai
 ([agentionai/Qwen3.8-Flash-Next-Gyro-GGUF](https://huggingface.co/agentionai/Qwen3.8-Flash-Next-Gyro-GGUF)): the routed
-experts are stored as trellis-coded blocks (ggml types TQ2_T, TQK6, TQK7) in a Hadamard-rotated basis. Strata reads the
+experts are stored as trellis-coded blocks (ggml types TQ2_T, TQK6, TQK7) in a Hadamard-rotated basis. Cortex reads the
 published files unchanged. **Setup lists them as a model family of their own** ("Qwen3.8-Flash-Next (Gyro)"); neither
 is anybody's default.
 
@@ -32,7 +32,7 @@ trellis family (types 147-149) that the engine does not have.
 ```
 
 Setup downloads the pinned revision of the file (size and SHA-256 checked), prepares the pack (`tools/iq_pack.py
---compat-bf16`: the Hadamard table and the dense weights, 1.5 GB), the draft head (Strata's own MTP head, prepared from
+--compat-bf16`: the Hadamard table and the dense weights, 1.5 GB), the draft head (Cortex's own MTP head, prepared from
 the original model as for every Qwen3.8-Flash-Next file) and the start script. Needs engine 0.1.45.1 or newer: the pack is native_experts.txt v5 (Hadamard-folded), which the engine reads since the
 APR port, and the released 0.1.45 stops at v4. A ready-made engine that is older is replaced by one compiled from this source
 (setup), or the app says the model needs a newer engine and offers Update engine.
@@ -54,18 +54,18 @@ rows use the full-warp kernel, and the identity gate (10 prompts, 4K and 20K pro
 kernel off. If Gyro misbehaves on an RTX 50 card, update the engine.
 
 **Prompt speed and the ggml build.** The trellis prompt kernels (MMQ) are agentionai's, from their llama.cpp fork (MIT).
-Strata builds against upstream ggml, which does not have them, so it adds them itself at configure time:
-`cmake/strata_ggml_tq_overlay.cmake` writes a copy of the pinned ggml-cuda headers into the build folder with the three
-trellis types routed like IQ2_XS (the tile loader is the fork's, `third_party/ggml-tq/`); only Strata's own MMQ library sees
+Cortex builds against upstream ggml, which does not have them, so it adds them itself at configure time:
+`cmake/cortex_ggml_tq_overlay.cmake` writes a copy of the pinned ggml-cuda headers into the build folder with the three
+trellis types routed like IQ2_XS (the tile loader is the fork's, `third_party/ggml-tq/`); only Cortex's own MMQ library sees
 the copy, every other type is compiled from the untouched files (identity gate below). The ready-made engines read Gyro
 prompts through it as fast as rc2 does, and bit for bit the same. If the pinned ggml changes and an anchor of the script
 no longer matches, the overlay switches itself off with a message and prompts take the slower FP16 path. A build against the
-fork (`-DSTRATA_GGML_DIR=<agentionai/llama.cpp>`, as rc2 does) uses the fork's own instances instead.
+fork (`-DCORTEX_GGML_DIR=<agentionai/llama.cpp>`, as rc2 does) uses the fork's own instances instead.
 
 ## Credit and licenses
 
 The trellis types, the Hadamard rotation, the CPU and GPU kernels and the pack step were written by Laurent Zuijdwijk
-(agentionai) in agentionai/Strata `rc2` (9ff02c9, MIT, Strata v0.1.40.3 plus Gyro) and ported here commit by commit with
+(agentionai) in agentionai/Cortex `rc2` (9ff02c9, MIT, Cortex v0.1.40.3 plus Gyro) and ported here commit by commit with
 his authorship kept; `third_party/ggml/ggml-common-tq.h` and the MMQ instances come from agentionai/llama.cpp (MIT, the
 ggml authors). The weights are agentionai's quantization of Qwen3.8-Flash-Next under the Qwen Community License 1.0
 (<https://huggingface.co/agentionai/Qwen3.8-Flash-Next-Gyro-GGUF/blob/main/LICENSE>).
@@ -73,21 +73,21 @@ ggml authors). The weights are agentionai's quantization of Qwen3.8-Flash-Next u
 ## How it runs (by hand)
 
 The rest of this page is the authors' own guide for a manual install and their measurements on their machines (RTX 5090,
-3090, 4090 and a Strix Halo, with Strata rc2). The numbers are theirs; ours are in the next section.
+3090, 4090 and a Strix Halo, with Cortex rc2). The numbers are theirs; ours are in the next section.
 
 ## 1. Build
 
-Setup does these steps for you; by hand, from this checkout. For the fast prompt path Strata's GGML dependency is the agentionai llama.cpp fork, which has the trellis types:
+Setup does these steps for you; by hand, from this checkout. For the fast prompt path Cortex's GGML dependency is the agentionai llama.cpp fork, which has the trellis types:
 
 ```sh
 git clone --depth 1 https://github.com/agentionai/llama.cpp ../agention-llama.cpp
 # NVIDIA. RTX 50 series: use CUDA 13 (CUDA 12.8 crashes the prompt path on sm_120: issues #220, #224)
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTRATA_ENABLE_CUDA=ON \
-  -DCMAKE_CUDA_ARCHITECTURES=120 -DSTRATA_GGML_DIR=$PWD/../agention-llama.cpp
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCORTEX_ENABLE_CUDA=ON \
+  -DCMAKE_CUDA_ARCHITECTURES=120 -DCORTEX_GGML_DIR=$PWD/../agention-llama.cpp
 # AMD (experimental: kernel parity and an end-to-end run validated on gfx1151; in a non-root container add
 # --group-add $(getent group render | cut -d: -f3), otherwise HIP finds no device)
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTRATA_ENABLE_HIP=ON -DSTRATA_PREFILL_MMQ=ON \
-  -DCMAKE_HIP_ARCHITECTURES=gfx1201 -DSTRATA_GGML_DIR=$PWD/../agention-llama.cpp
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCORTEX_ENABLE_HIP=ON -DCORTEX_PREFILL_MMQ=ON \
+  -DCMAKE_HIP_ARCHITECTURES=gfx1201 -DCORTEX_GGML_DIR=$PWD/../agention-llama.cpp
 cmake --build build -j
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ```
@@ -118,11 +118,11 @@ cp data/draft_vocab.bin mtp/rt/draft_vocab.bin
 
 ## 4. Serve
 
-Save as `strata-gyro-s.json` at the repository root:
+Save as `cortex-gyro-s.json` at the repository root:
 
 ```json
 {
-  "exe": "build/strata",
+  "exe": "build/cortex",
   "args": [
     "--pack", "packs/gyro-s",
     "--native", "models/Qwen3.8-Flash-Next-Gyro-S-TQ1_0.gguf",
@@ -132,15 +132,15 @@ Save as `strata-gyro-s.json` at the repository root:
   ],
   "cwd": ".",
   "tokenizer": "packs/gyro-s/tokenizer",
-  "model_name": "gyro-s-strata",
-  "log": "strata-gyro-s.log",
+  "model_name": "gyro-s-cortex",
+  "log": "cortex-gyro-s.log",
   "host": "127.0.0.1",
   "port": 8080
 }
 ```
 
 ```sh
-.venv/bin/python -m serve.server --engine strata --config strata-gyro-s.json --port 8080
+.venv/bin/python -m serve.server --engine cortex --config cortex-gyro-s.json --port 8080
 ```
 
 The web interface is at `http://127.0.0.1:8080`; API clients use `http://127.0.0.1:8080/v1` (OpenAI) or
@@ -152,7 +152,7 @@ from RAM; nothing else changes.
 
 One AMD Radeon AI PRO R9700 (gfx1201, ROCm 7), one card of four, exclusive box lock, `--prefill auto --spec 4 --spec-min-p 0.5
 --mtp --kv int8`, 22K context, interleaved pairs (the arm that goes first alternates), medians, the files of the first
-Gyro release (2026-10-07). A = agentionai/Strata rc2 9ff02c9, B = this port.
+Gyro release (2026-10-07). A = agentionai/Cortex rc2 9ff02c9, B = this port.
 
 | B, ggml of | file | decode tok/s A / B (B/A) | pairs B faster | prompt 4K ms A / B | prompt 20K ms A / B |
 | --- | --- | ---: | --- | ---: | ---: |
@@ -162,7 +162,7 @@ Gyro release (2026-10-07). A = agentionai/Strata rc2 9ff02c9, B = this port.
 | upstream + overlay | Gyro-M | 72.6 / 82.6 (1.138) | 5/5 | 5682 / 5524 (0.97) | 15005 / 14160 (0.94) |
 | upstream, no overlay (FP16 prompt path) | Gyro-S | 85.3 / 89.6 (1.050) | 5/5 | 5425 / 6939 (1.28) | 14364 / 21677 (1.51) |
 
-Decode is faster than rc2's because the port sits on the newer Strata (0.1.45); the same engine change makes IQ3_XXS 7% faster
+Decode is faster than rc2's because the port sits on the newer Cortex (0.1.45); the same engine change makes IQ3_XXS 7% faster
 (rc2 86.9, port 93.1 tok/s, 2 pairs). Prompts of the ISTA files gained 11-16% from it too (IQ3_XXS 4K 6184 to 5480 ms, 20K
 16587 to 13864 ms). Gyro-M's first run against rc2 showed its prompts 5-7% slower; in the second rc2's own Gyro-M prompts
 took 15.0 s instead of 13.4 s (the 92 GB file's page-cache state), the port's stayed at 14.2 s, and Gyro-M's prompts are 3-6%
@@ -189,14 +189,14 @@ Decode tokens/s, single prompts of 34-177 tokens, 384 new tokens, `--max-context
 
 | | prose | JSON | code |
 |---|---:|---:|---:|
-| Strata | 139.9 | 221.3 | 209.0 |
+| Cortex | 139.9 | 221.3 | 209.0 |
 
 Server, rc2's `gyro_setup.sh` config (128k context, 23,463 experts cached), thinking off, temperature 0.7,
 top-k 20, top-p 0.95, min-p 0.05, 512 new tokens, 3 repetitions:
 
 | | prose | JSON | code | copy |
 |---|---:|---:|---:|---:|
-| Strata | 131.7 | 200.1 | 195.2 | 201.8 |
+| Cortex | 131.7 | 200.1 | 195.2 | 201.8 |
 | llama.cpp, MTP draft | 116.8 | 213.0 | 179.0 | 220.7 |
 | llama.cpp, no draft | 121.8 | 123.2 | 122.5 | 121.2 |
 
@@ -222,11 +222,11 @@ On a 24 GB card, cache misses run on the CPU, so the CPU matters: this box had a
 The llama.cpp row is the build before the CUDA trellis fixes; those added about 3 % at 24 GB, where the CPU layers
 dominate.
 
-The Strata rows predate Strata's own CPU kernels for the trellis types (`src/kernels/cpu/tq_*.cpp`, AVX2 and
+The Cortex rows predate Cortex's own CPU kernels for the trellis types (`src/kernels/cpu/tq_*.cpp`, AVX2 and
 AVX-512, picked at run time). Before them a cache miss ran ggml-cpu's `vec_dot`, one token at a time; the new kernels
 take about 45 % of its time per expert on AVX2 and decode a block once for all the tokens of a verify window
-(`build/tq_cpu_parity --bench` measures them on your CPU). `STRATA_NO_TQ_KERNELS=1` goes back to ggml-cpu;
-`STRATA_TQ_ISA=avx2` or `scalar` caps the instruction set (for comparisons).
+(`build/tq_cpu_parity --bench` measures them on your CPU). `CORTEX_NO_TQ_KERNELS=1` goes back to ggml-cpu;
+`CORTEX_TQ_ISA=avx2` or `scalar` caps the instruction set (for comparisons).
 
 ### Smaller caches (RTX 5090, 2026-10-02, before the int8 decode kernels)
 
@@ -244,17 +244,17 @@ checked. A real chat at 128k context worked through the web interface.
 
 ### Two GPUs (2026-10-04, 2× RTX 4090, no NVLink/P2P)
 
-- **Layer split** (Strata splits the layers across both cards automatically) works with Gyro, including the
-  idle-card prompt helper (`STRATA_PREFILL_HELP=1`). Repeated runs give identical output.
+- **Layer split** (Cortex splits the layers across both cards automatically) works with Gyro, including the
+  idle-card prompt helper (`CORTEX_PREFILL_HELP=1`). Repeated runs give identical output.
 - **Decode with a second card** (`--peer-device 1` or `--expert-cache-device1 auto`) works and matches single-GPU output.
-- **Prompt processing on the peer card** needs GPU-to-GPU access (NVLink or data-centre GPUs); without it Strata keeps
+- **Prompt processing on the peer card** needs GPU-to-GPU access (NVLink or data-centre GPUs); without it Cortex keeps
   the prompt on the first GPU and logs `no P2P`.
 
 Single RTX 4090 smoke run (Gyro-S, MTP draft, greedy): code 107.5, prose 84.3, JSON 76.3 tokens/s.
 
 ## Numerics
 
-- **Decode** (Strata's own expert kernels) reads the trellis weights through an int8 copy of the codebook with one
+- **Decode** (Cortex's own expert kernels) reads the trellis weights through an int8 copy of the codebook with one
   global scale (`tq_lut_i8`, relative RMS error 0.85 % of the codebook's standard deviation, far below the
   quantization error itself), against q8_1 activations.
 - **Prompt processing** decodes them otherwise: the FP16 path through the fp16 codebook (`tq_lut_f16`, what GGML's
@@ -262,7 +262,7 @@ Single RTX 4090 smoke run (Gyro-S, MTP draft, greedy): code 107.5, prose 84.3, J
   on the fork's current `main`.
 - So decode and prompt results agree within tolerance, not bit for bit. `native_expert_parity` checks one expert
   on the decode kernels against GGML's float dequantizer and a float SwiGLU: relative L1 error below 3e-2, the
-  bound every expert type gets there. Its "bitwise equal" lines compare Strata's decode-once and per-entry decode
+  bound every expert type gets there. Its "bitwise equal" lines compare Cortex's decode-once and per-entry decode
   kernels with each other, not with a float reference.
 
 ## Known limits
@@ -274,10 +274,10 @@ Single RTX 4090 smoke run (Gyro-S, MTP draft, greedy): code 107.5, prose 84.3, J
   engine builds and refuses the file at load (`native_expert_supported`).
 
 - **Not measured yet:** token parity against llama.cpp.
-- **Benchmark mode only:** `strata --tokens-file ... --max-new N` decodes N tokens past the end of the answer;
+- **Benchmark mode only:** `cortex --tokens-file ... --max-new N` decodes N tokens past the end of the answer;
   compare speeds only up to the answer's end.
 - **AMD:** the trellis kernels pass parity on gfx1151 (ROCm 7.2.1) and a short end-to-end run there generated
   correctly (~28-31 tokens/s); no speed tuning or RDNA4 run yet.
 - **Gyro-M:** 29.9 GiB of experts do not all fit a 32 GB card next to the KV cache; `auto` streams the rest.
-- **Not validated end to end yet** (Strata runs them and logs a warning): an AMD GPU other than gfx1151, and
+- **Not validated end to end yet** (Cortex runs them and logs a warning): an AMD GPU other than gfx1151, and
   prompt processing on a peer GPU over P2P.

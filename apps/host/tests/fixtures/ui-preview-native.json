@@ -1,7 +1,7 @@
 {
   "available": true,
   "version": "v0.1.38",
-  "repo": "/Applications/Strata/engine",
+  "repo": "/Applications/Cortex/engine",
   "summary": "UI preview — simulated model state",
   "error": null,
   "catalog": {

@@ -10,13 +10,13 @@
 // token of a group costs ~10% less than on AVX2.  ggml-cpu's AVX-512 decode for these types - all states from two
 // VPERMB and the table rows by VPGATHERQQ - was 20-30% slower here: Zen gathers are slow, and so are Intel ones
 // under the Gather Data Sampling microcode mitigation.
-#include "strata/kernels/cpu/tq_cpu.hpp"
+#include "cortex/kernels/cpu/tq_cpu.hpp"
 
 #include "tq_states.hpp"
 
 #include <immintrin.h>
 
-namespace strata::kernels::cpu::tq_detail {
+namespace cortex::kernels::cpu::tq_detail {
 namespace {
 
 // four ZMM of 16 int32 partial sums -> [S0, S1, S2, S3] (exact integer adds)
@@ -92,4 +92,4 @@ void tq_rows_avx512(int kb, const uint8_t* w, size_t row_bytes, int n, const TqA
     else rows_t<7>(w, row_bytes, n, a, nt, out, r0, r1);
 }
 
-}  // namespace strata::kernels::cpu::tq_detail
+}  // namespace cortex::kernels::cpu::tq_detail

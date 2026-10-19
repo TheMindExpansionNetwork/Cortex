@@ -1,6 +1,6 @@
 /**
- * The run config of a model (strata-<model>.json in the installation folder) is the text file a power user can edit by hand:
- * every engine option goes in "args", every STRATA_* environment flag in "env", the rest are named keys. Changes apply the next
+ * The run config of a model (cortex-<model>.json in the installation folder) is the text file a power user can edit by hand:
+ * every engine option goes in "args", every CORTEX_* environment flag in "env", the rest are named keys. Changes apply the next
  * time the model starts. This checks the file BEFORE the model starts and says what is wrong in plain words, with the line, so a
  * typo is never a start that just fails.
  *
@@ -83,15 +83,15 @@ export function checkRunConfig(text, { known = KNOWN_KEYS } = {}) {
   for (const [key, value] of Object.entries(config)) {
     if (!known.has(key) && !key.startsWith('ui_')) {   // ui_* are the app's own notes in the file (resource profile, picture device)
       const near = nearestKey(key, known);
-      add('warning', near ? 'unknown-key-near' : 'unknown-key', key, { key, near: near ?? '' }, `"${key}" is not a setting Strata reads, so it is ignored.${near ? ` Did you mean "${near}"?` : ''}`);
+      add('warning', near ? 'unknown-key-near' : 'unknown-key', key, { key, near: near ?? '' }, `"${key}" is not a setting Cortex reads, so it is ignored.${near ? ` Did you mean "${near}"?` : ''}`);
       continue;
     }
     if (value === null) continue;
     if (key === 'args') {
       if (!Array.isArray(value) || value.some(v => typeof v !== 'string')) add('error', 'args-type', key, {}, '"args" must be a list of quoted text entries, for example ["--ple-io", "mmap"]. Numbers need quotes too.');
-      else if (value.some(v => ['--host', '--port', '--api-key'].includes(v))) add('warning', 'args-managed', key, {}, 'Strata manages the network address, port and API key itself, so --host, --port and --api-key in "args" are not honoured.');
+      else if (value.some(v => ['--host', '--port', '--api-key'].includes(v))) add('warning', 'args-managed', key, {}, 'Cortex manages the network address, port and API key itself, so --host, --port and --api-key in "args" are not honoured.');
     } else if (key === 'env') {
-      if (!value || typeof value !== 'object' || Array.isArray(value)) add('error', 'env-type', key, {}, '"env" must be an object of names with quoted text values, for example { "STRATA_X": "1" }.');
+      if (!value || typeof value !== 'object' || Array.isArray(value)) add('error', 'env-type', key, {}, '"env" must be an object of names with quoted text values, for example { "CORTEX_X": "1" }.');
       else for (const [name, v] of Object.entries(value)) {
         if (typeof v !== 'string') add('error', 'env-value', key, { name }, `"env" entry ${name} must be quoted text, for example "1", not ${show(v)}.`);
       }
@@ -100,7 +100,7 @@ export function checkRunConfig(text, { known = KNOWN_KEYS } = {}) {
       else for (const [name, n] of Object.entries(value)) {
         if (n === null) continue;
         if (name === 'experimental_speed_projection') { if (typeof n !== 'boolean') add('error', 'bool', key, { key: `sampling.${name}` }, `"sampling.${name}" must be true or false.`); continue; }
-        if (!SAMPLING[name]) { add('warning', 'unknown-key', key, { key: `sampling.${name}`, near: '' }, `"sampling.${name}" is not a setting Strata reads, so it is ignored.`); continue; }
+        if (!SAMPLING[name]) { add('warning', 'unknown-key', key, { key: `sampling.${name}`, near: '' }, `"sampling.${name}" is not a setting Cortex reads, so it is ignored.`); continue; }
         const [lo, hi] = SAMPLING[name];
         if (typeof n !== 'number' || !Number.isFinite(n) || n < lo || n > hi || (WHOLE.has(name) && !Number.isInteger(n))) add('error', WHOLE.has(name) ? 'whole-range' : 'number-range', key, { key: `sampling.${name}`, min: lo, max: hi, value: show(n) }, `"sampling.${name}" must be ${WHOLE.has(name) ? 'a whole ' : 'a '}number from ${lo} to ${hi}, not ${show(n)}.`);
       }

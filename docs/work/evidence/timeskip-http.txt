@@ -1,6 +1,6 @@
 # Time-skip through the App Host HTTP API
 # repo: bac3f829e92ace1ddd080e502d1f1191d3374c41
-# The job is Strata Control's (strata_control/time_skip.py); the Host only starts, follows
+# The job is Cortex Control's (cortex_control/time_skip.py); the Host only starts, follows
 # and applies it, and never computes a status of its own.
 
 GET /api/timeskip                     -> run list

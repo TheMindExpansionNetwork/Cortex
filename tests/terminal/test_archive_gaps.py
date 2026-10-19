@@ -14,8 +14,8 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from strata_control import calibration, tune_apply, tuning  # noqa: E402
-from strata_control.profiles import ProfileError  # noqa: E402
+from cortex_control import calibration, tune_apply, tuning  # noqa: E402
+from cortex_control.profiles import ProfileError  # noqa: E402
 
 
 class BooleanFlags(unittest.TestCase):
@@ -32,7 +32,7 @@ class BooleanFlags(unittest.TestCase):
         self.assertEqual(tune_apply.args_to_argv({"--kv-grow": "1"}), ["--kv-grow"])
 
     def test_the_harness_argv_follows_the_same_rule(self):
-        from strata_control import tune_engine
+        from cortex_control import tune_engine
         harness = tune_engine.EngineHarness(Path("engine"), {"--kv-grow": "0", "--pool-workers": "0", "--host-core": "first"})
         argv = harness._argv()
         self.assertNotIn("--kv-grow", argv)
@@ -45,40 +45,40 @@ class EnginePackageEnv(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             folder = Path(d)
             (folder / "engine-component.json").write_text("{}", encoding="utf-8")
-            (folder / "strata").write_text("x", encoding="utf-8")
+            (folder / "cortex").write_text("x", encoding="utf-8")
             with mock.patch.dict(os.environ, {"LD_LIBRARY_PATH": "/old", "PATH": "/old"}):
-                env = tuning.engine_env(folder / "strata")
+                env = tuning.engine_env(folder / "cortex")
             var = "PATH" if os.name == "nt" else "LD_LIBRARY_PATH"
             self.assertTrue(env[var].startswith(str(folder.resolve())))
             self.assertTrue(env[var].endswith("/old") or env[var].endswith("old"))
 
     def test_a_plain_engine_keeps_the_callers_environment(self):
         with tempfile.TemporaryDirectory() as d:
-            (Path(d) / "strata").write_text("x", encoding="utf-8")
-            self.assertIsNone(tuning.engine_env(Path(d) / "strata"))
+            (Path(d) / "cortex").write_text("x", encoding="utf-8")
+            self.assertIsNone(tuning.engine_env(Path(d) / "cortex"))
 
 
 class CalibrateWithoutAFullFolder(unittest.TestCase):
     def test_missing_setup_is_a_refusal_in_words_not_a_traceback(self):
         with mock.patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("STRATA_INSTALL_DIR", None)
+            os.environ.pop("CORTEX_INSTALL_DIR", None)
             with mock.patch("importlib.import_module", side_effect=ImportError("no module")):
                 with self.assertRaises(ProfileError) as ctx:
                     calibration._full_folder("tools.calibrate")
         self.assertEqual(ctx.exception.code if hasattr(ctx.exception, "code") else 5, 5)
-        self.assertIn("STRATA_INSTALL_DIR", str(ctx.exception))
+        self.assertIn("CORTEX_INSTALL_DIR", str(ctx.exception))
         self.assertIn("tune run --mode api", str(ctx.exception))
 
     def test_tool_availability_is_reported_for_the_plan(self):
         with mock.patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("STRATA_INSTALL_DIR", None)
+            os.environ.pop("CORTEX_INSTALL_DIR", None)
             with mock.patch("importlib.util.find_spec", return_value=None):
                 self.assertFalse(calibration._tools_available())
             with tempfile.TemporaryDirectory() as d:
                 (Path(d) / "tools").mkdir()
                 (Path(d) / "setup.py").write_text("", encoding="utf-8")
                 (Path(d) / "tools" / "calibrate.py").write_text("", encoding="utf-8")
-                os.environ["STRATA_INSTALL_DIR"] = d
+                os.environ["CORTEX_INSTALL_DIR"] = d
                 with mock.patch("importlib.util.find_spec", return_value=None):
                     self.assertTrue(calibration._tools_available())
 
@@ -93,14 +93,14 @@ class HipPackageForAnotherCard(unittest.TestCase):
             (node / "properties").write_text("cpu_cores_count 1\ngfx_target_version " + value + "\n", encoding="utf-8")
 
     def test_gfx_target_version_becomes_the_gfx_name(self):
-        from strata_control import engine_component as ec
+        from cortex_control import engine_component as ec
         with tempfile.TemporaryDirectory() as d:
             self._kfd(Path(d), ["0", "110003", "120001", "90010", "100300"])
             self.assertEqual(ec.hip_archs_present(d), ["gfx1103", "gfx1201", "gfx90a", "gfx1030"])
         self.assertEqual(ec.hip_archs_present("/nonexistent/kfd"), [])
 
     def test_a_package_without_the_cards_arch_is_not_chosen_and_one_with_it_is(self):
-        from strata_control import engine_component as ec
+        from cortex_control import engine_component as ec
         from tests.terminal.test_engine_component import make_package, rewrite
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
@@ -119,7 +119,7 @@ class HipPackageForAnotherCard(unittest.TestCase):
 
 class DeviceAccess(unittest.TestCase):
     def test_a_render_node_the_user_cannot_open_is_named(self):
-        from strata_control import doctor
+        from cortex_control import doctor
         if not sys.platform.startswith("linux"):
             self.skipTest("Linux device nodes")
         with tempfile.TemporaryDirectory() as d:

@@ -4,7 +4,7 @@
 # libze_intel_gpu while the GPU was idle) when the expert arena was DMA'd straight from pageable memory.  The engine now copies
 # every expert that is not USM host memory through the stager's pinned buffers.
 #
-#   STRATA_BIN=build-jit/strata MODEL_ARGS="--pack ... --native ... --ple-gguf ... --mtp ... --kv int8 --max-context 8192 ..." \
+#   CORTEX_BIN=build-jit/cortex MODEL_ARGS="--pack ... --native ... --ple-gguf ... --mtp ... --kv int8 --max-context 8192 ..." \
 #       sycl/tools/test_prompt_deadlock.sh
 #
 # MODEL_ARGS are the engine arguments of the box (everything but --tokens-file/--max-new); the A750 needs its usual environment
@@ -12,8 +12,8 @@
 # DEADLOCK_TIMEOUT seconds (default 900; the prompt takes about 60 s on an A750 after the start-up).  Exit 0 pass, 1 fail, 2 usage.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
-BIN=${STRATA_BIN:-}
-[ -n "$BIN" ] && [ -x "$BIN" ] && [ -n "${MODEL_ARGS:-}" ] || { echo "usage: STRATA_BIN=<strata> MODEL_ARGS=\"...\" $0"; exit 2; }
+BIN=${CORTEX_BIN:-}
+[ -n "$BIN" ] && [ -x "$BIN" ] && [ -n "${MODEL_ARGS:-}" ] || { echo "usage: CORTEX_BIN=<cortex> MODEL_ARGS=\"...\" $0"; exit 2; }
 OUT=$(mktemp)
 timeout "${DEADLOCK_TIMEOUT:-900}" "$BIN" $MODEL_ARGS --tokens-file "$HERE/data/prompt_deadlock_2744.tok" --max-new 4 --greedy > "$OUT" 2>&1
 rc=$?

@@ -1,9 +1,9 @@
-// src/spec/draft_source.cpp - see include/strata/spec/draft_source.hpp.
-#include "strata/spec/draft_source.hpp"
+// src/spec/draft_source.cpp - see include/cortex/spec/draft_source.hpp.
+#include "cortex/spec/draft_source.hpp"
 
 #include <vector>
 
-namespace strata::spec {
+namespace cortex::spec {
 
 std::vector<std::unique_ptr<DraftSource>>& extra_draft_sources() {
     static std::vector<std::unique_ptr<DraftSource>> sources;
@@ -33,4 +33,4 @@ int propose_from_sources(DraftSource& own, const int32_t* tail, int n_tail, int 
     return best;
 }
 
-}  // namespace strata::spec
+}  // namespace cortex::spec

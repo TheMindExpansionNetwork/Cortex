@@ -8,11 +8,11 @@ import re
 import unittest
 from unittest import mock
 
-from strata_cli import nav
-from strata_cli.launch import check, harness
-from strata_cli.launch.monitor_ext import LaunchMonitor
-from strata_cli.launch.widgets import DARK, LIGHT
-from strata_cli.monitor import MonitorApp
+from cortex_cli import nav
+from cortex_cli.launch import check, harness
+from cortex_cli.launch.monitor_ext import LaunchMonitor
+from cortex_cli.launch.widgets import DARK, LIGHT
+from cortex_cli.monitor import MonitorApp
 from tests.terminal.launch_support import Home, text_of
 from tests.terminal.test_launch_monitor import INFO
 from tests.terminal.test_overview import Source, metrics
@@ -132,9 +132,9 @@ class MonitorViews(unittest.TestCase):
             self.assertEqual(app.view, 5)
         self.run_app(MonitorApp, (120, 40), case)
 
-    def test_strata_monitor_is_the_same_seven_view_monitor_as_launchs(self):
-        """`strata monitor --url ...` builds the launch monitor without the quit question: seven views, key 7, Connect points at that server."""
-        from strata_cli import monitor_commands
+    def test_cortex_monitor_is_the_same_seven_view_monitor_as_launchs(self):
+        """`cortex monitor --url ...` builds the launch monitor without the quit question: seven views, key 7, Connect points at that server."""
+        from cortex_cli import monitor_commands
         seen = {}
 
         class Fake:
@@ -145,14 +145,14 @@ class MonitorViews(unittest.TestCase):
                 seen["ran"] = True
 
         args = monitor_commands.parser().parse_args(["monitor", "--url", "http://127.0.0.1:18765"])
-        with mock.patch("strata_cli.launch.monitor_ext.LaunchMonitor", Fake), mock.patch("sys.stdout.isatty", return_value=True), Home():
+        with mock.patch("cortex_cli.launch.monitor_ext.LaunchMonitor", Fake), mock.patch("sys.stdout.isatty", return_value=True), Home():
             self.assertEqual(monitor_commands.run(args), 0)
         self.assertTrue(seen.get("ran"))
         self.assertFalse(seen["ask_quit"])                                   # q detaches: this command started nothing
         self.assertEqual(seen["info"]["url"], "http://127.0.0.1:18765")      # the Connect view's address is the --url server
         self.assertIn("seven views", " ".join(monitor_commands.parser().format_help().split()))
 
-    def test_the_monitor_strata_monitor_opens_has_seven_views_and_connect_shows_the_server(self):
+    def test_the_monitor_cortex_monitor_opens_has_seven_views_and_connect_shows_the_server(self):
         async def case(app, pilot):
             shown = text_of(app)
             self.assertIn("7 Connect", shown)
@@ -174,8 +174,8 @@ class MonitorViews(unittest.TestCase):
 
     def test_the_overview_is_titled_overview(self):
         async def case(app, pilot):
-            self.assertIn("STRATA  Overview", text_of(app))
-            self.assertNotIn("STRATA  Serving", text_of(app))
+            self.assertIn("CORTEX  Overview", text_of(app))
+            self.assertNotIn("CORTEX  Serving", text_of(app))
             await pilot.press("2")
             await pilot.pause(0.1)
             self.assertIn("Serving", text_of(app))
@@ -200,7 +200,7 @@ class ConnectStatus(unittest.TestCase):
             header = next(ln for ln in shown.splitlines() if "Vendor tested" in ln)
             self.assertIn("This server", header)
             for h in harness.HARNESSES:
-                said = "built into Strata" if h.built_in else h.tested
+                said = "built into Cortex" if h.built_in else h.tested
                 row = next(ln for ln in shown.splitlines() if h.title[:16] in ln and said[:23] in ln)
                 self.assertIn("Not checked", row)                          # nothing has been tried against THIS server yet
                 self.assertNotIn("tested ok", row)

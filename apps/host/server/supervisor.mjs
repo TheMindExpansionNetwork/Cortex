@@ -7,7 +7,7 @@
  * measured numbers rather than guesses.
  *
  * Supported backends, in preference order:
- *   1. llama.cpp `llama-server` (bundled under $STRATA_HOME/engine, or on PATH)
+ *   1. llama.cpp `llama-server` (bundled under $CORTEX_HOME/engine, or on PATH)
  *   2. any already-running OpenAI-compatible server on localhost
  */
 import { CONTEXT_TOKENS } from './catalog.mjs';
@@ -62,10 +62,10 @@ const BINARY_NAMES = ['llama-server'];
 export function findBinary() {
   const candidates = [];
 
-  if (process.env.STRATA_LLAMA_SERVER) candidates.push({ path: process.env.STRATA_LLAMA_SERVER, source: 'STRATA_LLAMA_SERVER' });
+  if (process.env.CORTEX_LLAMA_SERVER) candidates.push({ path: process.env.CORTEX_LLAMA_SERVER, source: 'CORTEX_LLAMA_SERVER' });
 
   // A build downloaded into the app's own folder wins over anything on PATH:
-  // it is the version Strata was tested against.
+  // it is the version Cortex was tested against.
   try {
     const engineDir = join(MODELS_DIR, '..', 'engine');
     if (existsSync(engineDir)) {
@@ -348,7 +348,7 @@ function parsePrometheus(text) {
   return out;
 }
 
-/** Original Strata serves JSON; llama.cpp serves Prometheus. Preserve the original dashboard facts. */
+/** Original Cortex serves JSON; llama.cpp serves Prometheus. Preserve the original dashboard facts. */
 export function parseEngineMetrics(text) {
   if(text.trim().startsWith('{')) {
     const dashboard=JSON.parse(text);

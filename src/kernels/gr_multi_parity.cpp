@@ -4,7 +4,7 @@
 // Real geometry (n_embd 2560, hc 4, hc_lr 320), the pinned native MMVF path, every T = 1..8, with and without an
 // injection weight (a layer read vs the final mixer), and the write both out of place and in place (R_out == R).
 // Each output of the multi call must equal the token-by-token one bit for bit. GPU, synthetic, no model.
-#include "strata/kernels/gr.hpp"
+#include "cortex/kernels/gr.hpp"
 
 #include <cuda_runtime.h>
 
@@ -15,7 +15,7 @@
 #include <random>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 void ck(cudaError_t e, const char* w) {

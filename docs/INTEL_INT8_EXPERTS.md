@@ -12,19 +12,19 @@ never exists and the weights are read once, compressed (2.1 MB per expert instea
 
 ## Switches
 
-* `STRATA_PREFILL_MMQ=1` (alias `STRATA_PF_I8=1`): every group of experts whose formats are supported takes the int8 chain.
-* `STRATA_PREFILL_MMQ=0`: the FP16 path everywhere. The name is MMQ's because the other backends' int8
+* `CORTEX_PREFILL_MMQ=1` (alias `CORTEX_PF_I8=1`): every group of experts whose formats are supported takes the int8 chain.
+* `CORTEX_PREFILL_MMQ=0`: the FP16 path everywhere. The name is MMQ's because the other backends' int8
   prompt-expert path is MMQ; here it is this kernel.
-* `STRATA_PREFILL_MMQ=auto` (the Battlemage default): per group, int8 while the group's mean rows per expert are under the crossover measured on this GPU.
+* `CORTEX_PREFILL_MMQ=auto` (the Battlemage default): per group, int8 while the group's mean rows per expert are under the crossover measured on this GPU.
   At the first layer of each expert format the engine times both chains on synthetic experts (random blobs of the layer's format and
   shape, uneven row counts like a real group) at 16, 32, 64, 128 and 256 mean rows per expert, interpolates where the FP16 chain
   becomes the faster one, flags the result "clear" when the cost ratio falls steadily and the bracketing samples are 5% away from
-  1, and keeps it in `~/.cache/strata/i8-crossover.txt` (`STRATA_CACHE_DIR` moves it) keyed by device name, driver version, the two
+  1, and keeps it in `~/.cache/cortex/i8-crossover.txt` (`CORTEX_CACHE_DIR` moves it) keyed by device name, driver version, the two
   ggml types and the shape. A matching key is read back instead of measured. The measurement costs ~1.2 s once, during the first
   prompt. A measurement that fails (no VRAM) falls back to 64 rows.
-* `STRATA_I8_FORCE=0` hides the device from the kernels, `STRATA_I8_MT=2|4|8` forces the tile height, `STRATA_I8_WG=0` the
-  non-work-group kernels, `STRATA_I8_GRF=128` the 128-register mode, `STRATA_I8_DBG` bring-up switches (skip decode / loads / stores).
-* Default (unset): `auto` on a Battlemage GPU (bmg-g21 or bmg-g31 by the SYCL architecture id, not by name; the kernels must be in the binary and pass `available()`), the FP16 path on every other GPU. The engine prints one line at load ("int8 prompt experts are on ... STRATA_PREFILL_MMQ=0 turns them off"). If the kernels are not in the binary for the device (an AOT build for other devices) or a launch throws, the group and the rest of the process take the FP16 chain with one log line. The activations are quantized, so the bits differ from the FP16 path (see "Quality").
+* `CORTEX_I8_FORCE=0` hides the device from the kernels, `CORTEX_I8_MT=2|4|8` forces the tile height, `CORTEX_I8_WG=0` the
+  non-work-group kernels, `CORTEX_I8_GRF=128` the 128-register mode, `CORTEX_I8_DBG` bring-up switches (skip decode / loads / stores).
+* Default (unset): `auto` on a Battlemage GPU (bmg-g21 or bmg-g31 by the SYCL architecture id, not by name; the kernels must be in the binary and pass `available()`), the FP16 path on every other GPU. The engine prints one line at load ("int8 prompt experts are on ... CORTEX_PREFILL_MMQ=0 turns them off"). If the kernels are not in the binary for the device (an AOT build for other devices) or a launch throws, the group and the rest of the process take the FP16 chain with one log line. The activations are quantized, so the bits differ from the FP16 path (see "Quality").
 
 ## Tiles and thresholds
 
@@ -42,7 +42,7 @@ never exists and the weights are read once, compressed (2.1 MB per expert instea
 * The kernels need the s8 8x16x32 matrix combination (Xe2: Battlemage, Lunar Lake). Large GRF: `grf_size<256>` is requested for
   every kernel; a device that cannot build it keeps its default and the spills show in the build log. DP4a fallback: none; without the
   DPAS combination `available()` is false and the FP16 path runs (the build without ESIMD for an Alchemist / Xe-HPC AOT device
-  compiles stubs, `STRATA_I8_NO_ESIMD`).
+  compiles stubs, `CORTEX_I8_NO_ESIMD`).
 
 ## Scales
 
@@ -81,7 +81,7 @@ never exists and the weights are read once, compressed (2.1 MB per expert instea
 ## Quality
 
 The int8 path is near-lossless against the FP16 path. 28 prompts (code, reasoning, chat, multi-turn, long up to 3.2K tokens), 6002
-positions teacher-forced on the FP16 path's greedy continuations (`cuda_kl.py` with `STRATA_FOLLOW`), fixed flags: reference against
+positions teacher-forced on the FP16 path's greedy continuations (`cuda_kl.py` with `CORTEX_FOLLOW`), fixed flags: reference against
 itself KL exactly 0; int8 against reference KL mean 0.0002 nats (p99 0.006, max 0.04), top-1 99.7%, perplexity ratio 1.0004, first-token
 KL 0.0005. For comparison a chunk-size change (`--prefill 8192` against 4096) moves the first-token distribution by 0.01-0.03 nats.
 The kernel arithmetic itself matches an exact host reference on the same int8 activations to 3e-7 relative; against FP64 with the

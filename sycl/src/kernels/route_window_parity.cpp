@@ -7,8 +7,8 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/kernels/bf16_gemv.hpp"
-#include "strata/kernels/router_top10.hpp"
+#include "cortex/kernels/bf16_gemv.hpp"
+#include "cortex/kernels/router_top10.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -73,8 +73,8 @@ int main() {
                    dx, x.data(), x.size() * 4).wait()),
                "up x");
             for (int t = 0; t < T; ++t)
-                strata::kernels::bf16_gemv_fp32_mmvf(dx + (size_t) t * N, dw, dy1 + (size_t) t * n_out, N, n_out, nullptr);
-            strata::kernels::bf16_gemv_fp32_mmvf_cols(dx, dw, dyn, N, n_out, T, nullptr);
+                cortex::kernels::bf16_gemv_fp32_mmvf(dx + (size_t) t * N, dw, dy1 + (size_t) t * n_out, N, n_out, nullptr);
+            cortex::kernels::bf16_gemv_fp32_mmvf_cols(dx, dw, dyn, N, n_out, T, nullptr);
             ck(DPCT_CHECK_ERROR(
                    dpct::get_current_device().queues_wait_and_throw()),
                "sync");
@@ -109,8 +109,8 @@ int main() {
                                (size_t)T * K * 4, dpct::get_in_order_queue())),
                        "wn");
                 for (int t = 0; t < T; ++t)
-                    strata::kernels::router_top10(dy1 + (size_t) t * E, 1, E, K, i1 + t * K, w1 + t * K, nullptr);
-                strata::kernels::router_top10(dy1, T, E, K, in_, wn, nullptr);
+                    cortex::kernels::router_top10(dy1 + (size_t) t * E, 1, E, K, i1 + t * K, w1 + t * K, nullptr);
+                cortex::kernels::router_top10(dy1, T, E, K, in_, wn, nullptr);
                 ck(DPCT_CHECK_ERROR(
                        dpct::get_current_device().queues_wait_and_throw()),
                    "sync top");

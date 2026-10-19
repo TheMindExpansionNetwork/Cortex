@@ -11,7 +11,7 @@
 //   gdn_post   per (token, head): y = o * rsqrt(mean(o^2) + eps) * gamma * sigmoid(z) -> fp16 (the out GEMM's operand)
 //              and, with `f32`, fp32
 //
-// State layout as Strata's: S[(i * h_v + h) * 128 + j].  Value head h reads q/k head h % h_k.
+// State layout as Cortex's: S[(i * h_v + h) * 128 + j].  Value head h reads q/k head h % h_k.
 // The kernels are new entries (nothing of gdn.metal changes).
 
 struct GdnPArgs {

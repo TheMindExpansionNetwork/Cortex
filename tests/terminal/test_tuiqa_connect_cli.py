@@ -1,4 +1,4 @@
-"""Tester report T07: `strata connect pi --check --output json` skipped the checks and said "ok": true with exit 0 even when nothing was
+"""Tester report T07: `cortex connect pi --check --output json` skipped the checks and said "ok": true with exit 0 even when nothing was
 listening. It now runs the same two checks as the plain-words output, returns each result, and exits 1 when one failed or the server cannot be
 reached."""
 

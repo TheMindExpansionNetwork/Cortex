@@ -1,17 +1,17 @@
-// src/kernels/cuda/qsa_prompt_attn.cu - see include/strata/kernels/qsa_prompt_attn.hpp.
+// src/kernels/cuda/qsa_prompt_attn.cu - see include/cortex/kernels/qsa_prompt_attn.hpp.
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
-#include "strata/core/geometry.hpp"
+#include "cortex/core/geometry.hpp"
 #include <dpct/dpct.hpp>
-#include "strata/sycl_queue.hpp"
-#include "strata/core/emulate.hpp"
+#include "cortex/sycl_queue.hpp"
+#include "cortex/core/emulate.hpp"
 #include <cstdlib>
 #include <cstring>
-#include "strata/kernels/qsa_prompt_attn.hpp"
-#include "strata/kernels/qsa_prompt_attn_xmx.hpp"
-#include "strata/kernels/gfx_arch.hpp"
-#include "strata/kernels/kv_q8.hpp"
-#include "strata/kernels/kv_q4.hpp"
+#include "cortex/kernels/qsa_prompt_attn.hpp"
+#include "cortex/kernels/qsa_prompt_attn_xmx.hpp"
+#include "cortex/kernels/gfx_arch.hpp"
+#include "cortex/kernels/kv_q8.hpp"
+#include "cortex/kernels/kv_q4.hpp"
 
 #include <cmath>
 
@@ -20,12 +20,12 @@
 #include <cstring>
 #include <type_traits>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
 constexpr int HD = 256;           // head_dim
 constexpr int G = 12;             // query heads per KV head
-static_assert(HD == strata::core::kCompiledGeometry.head_dim && G == strata::core::kCompiledGeometry.n_head / strata::core::kCompiledGeometry.n_head_kv, "qsa_prompt_attn is compiled for core/geometry.hpp");
+static_assert(HD == cortex::core::kCompiledGeometry.head_dim && G == cortex::core::kCompiledGeometry.n_head / cortex::core::kCompiledGeometry.n_head_kv, "qsa_prompt_attn is compiled for core/geometry.hpp");
 #ifndef D1_CH
 #define D1_CH 32
 #endif
@@ -37,11 +37,11 @@ constexpr int QS = HD + 8;        // q row stride in halves (bank-conflict-free 
 // cards compile the MMA to a trap; qsa_prompt_attn_batch refuses such a device at run time, so the old kernel runs
 // there.  Turing compiles cp_async16 to a trap as well and takes the v1 kernel instead of launch_i8.
 #if defined(__HIPCC__)          // AMD: no mma.sync / cp.async; the host keeps the old kernel (below)
-#define STRATA_PA_SM80 0
+#define CORTEX_PA_SM80 0
 #elif 0   // SYCL: inline PTX (mma/ldmatrix/cp.async) - the XMX port is pending; see tools/fixups.py
-#define STRATA_PA_SM80 1
+#define CORTEX_PA_SM80 1
 #else
-#define STRATA_PA_SM80 0
+#define CORTEX_PA_SM80 0
 #endif
 
 // m16n8k16 with f16 inputs needs sm_80.  Turing (sm_75) has m16n8k8 with the SAME A/B/C register mapping, so the
@@ -50,7 +50,7 @@ constexpr int QS = HD + 8;        // q row stride in halves (bank-conflict-free 
 // products then add into the same FP32 C registers in the order hi-part-0, hi-part-1, which is the order the k16
 // instruction accumulates in as well - but the sum now rounds twice, so the two paths do not agree bit for bit.
 __dpct_inline__ void mma16816(float *c, const uint32_t *a, const uint32_t *b) {
-#if !STRATA_PA_SM80 &&                                                         \
+#if !CORTEX_PA_SM80 &&                                                         \
     (defined(__HIPCC__) || !defined(DPCT_COMPATIBILITY_TEMP) ||                \
      DPCT_COMPATIBILITY_TEMP < 750)
     /* unreachable on SYCL: the launcher refuses this device */   // AMD and pre-Turing builds: no mma.sync (the host keeps the old kernel there)
@@ -700,7 +700,7 @@ swz(int cell, int byte) { // byte offset of (cell, byte) in a stage slice
     return cell * 64 + ((((byte >> 4) ^ (cell >> 1)) & 3) << 4) + (byte & 15);
 }
 __dpct_inline__ void cp_async16(void *smem, const void *gmem, bool valid) {
-#if !STRATA_PA_SM80
+#if !CORTEX_PA_SM80
     /* unreachable on SYCL: the launcher refuses this device */
 #else
     auto sa = smem;
@@ -712,7 +712,7 @@ __dpct_inline__ void cp_async16(void *smem, const void *gmem, bool valid) {
 #endif
 }
 __dpct_inline__ void cp_async_commit() {
-#if STRATA_PA_SM80
+#if CORTEX_PA_SM80
 #if defined(__SYCL_DEVICE_ONLY__) && defined(__NVPTX__)
     asm volatile("cp.async.commit_group;\n" ::);
 #else
@@ -721,7 +721,7 @@ __dpct_inline__ void cp_async_commit() {
 #endif
 }
 __dpct_inline__ void cp_async_wait1() {
-#if STRATA_PA_SM80
+#if CORTEX_PA_SM80
 #if defined(__SYCL_DEVICE_ONLY__) && defined(__NVPTX__)
     asm volatile("cp.async.wait_group 1;\n" ::);
 #else
@@ -1257,9 +1257,9 @@ catch (sycl::exception const &exc) {
   std::exit(1);
 }
 
-// PR #600: compiled only into the experimental build (-DSTRATA_EXPERIMENTAL_SM60=ON), the one build that runs on a
+// PR #600: compiled only into the experimental build (-DCORTEX_EXPERIMENTAL_SM60=ON), the one build that runs on a
 // Volta card; the ready-made engine has none of it (no extra kernels to load, the same code as before).
-#if !defined(__HIPCC__) && defined(STRATA_EXPERIMENTAL_SM60)
+#if !defined(__HIPCC__) && defined(CORTEX_EXPERIMENTAL_SM60)
 // ---- sm_70 (Volta): v1's structure on mma.m8n8k4 ------------------------------------------------------------------
 // Volta's tensor cores only have m8n8k4 (FP16 in, FP32 accumulate): per warp FOUR independent 8x8x4 products, one per
 // quad-pair (QP q = lanes 4q..4q+3 and 4q+16..4q+19; thread j = (lane & 3) + 4 * (lane >> 4) within it). Layout, measured on
@@ -1272,13 +1272,13 @@ catch (sycl::exception const &exc) {
 //   p.v: warp w owns dims [64w, 64w+64) again; QP q takes the 16 dims 64w+16q.. (two n-tiles of 8); k = the 32 cells in
 //        steps of 4; p carries the V scale (as v1) and is split into hi + lo halves.
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700 && __CUDA_ARCH__ < 750
-#define STRATA_PA_VOLTA 1
+#define CORTEX_PA_VOLTA 1
 #else
-#define STRATA_PA_VOLTA 0
+#define CORTEX_PA_VOLTA 0
 #endif
 
 __device__ __forceinline__ void mma884(float* c, uint32_t a0, uint32_t a1, uint32_t b0, uint32_t b1) {
-#if STRATA_PA_VOLTA
+#if CORTEX_PA_VOLTA
     asm volatile("mma.sync.aligned.m8n8k4.row.col.f32.f16.f16.f32 {%0,%1,%2,%3,%4,%5,%6,%7}, {%8,%9}, {%10,%11}, "
                  "{%0,%1,%2,%3,%4,%5,%6,%7};\n"
                  : "+f"(c[0]), "+f"(c[1]), "+f"(c[2]), "+f"(c[3]), "+f"(c[4]), "+f"(c[5]), "+f"(c[6]), "+f"(c[7])
@@ -1633,17 +1633,17 @@ bool launch70(const float* q, const QsaAttnPools& pools, const int32_t* ids, con
     }
     return true;
 }
-#else   // AMD, or a build without STRATA_EXPERIMENTAL_SM60: no m8n8k4 kernel (the caller keeps the old one)
+#else   // AMD, or a build without CORTEX_EXPERIMENTAL_SM60: no m8n8k4 kernel (the caller keeps the old one)
 template <int KV_MODE>
 bool launch70(const float *, const QsaAttnPools &, const int32_t *,
               const int32_t *, int64_t, const QsaShapes &, float *, int64_t,
               dpct::queue_ptr) {
     return false;
 }
-#endif  // !__HIPCC__ && STRATA_EXPERIMENTAL_SM60
+#endif  // !__HIPCC__ && CORTEX_EXPERIMENTAL_SM60
 
 #if defined(__HIPCC__)
-// ---- S6: the int8-KV prompt attention on RDNA4 matrix cores (opt-in: STRATA_HIP_WMMA=1, gfx12 only). The design of
+// ---- S6: the int8-KV prompt attention on RDNA4 matrix cores (opt-in: CORTEX_HIP_WMMA=1, gfx12 only). The design of
 // the v2 kernel above with gfx12's v_wmma_f32_16x16x16_f16 (wave32) in place of m16n8k16: wave w owns dims
 // [64w, 64w+64) (int8 scale group w) for q.k and p.v; q and p are split into FP16 hi + lo parts, the int8 codes enter
 // exactly as FP16, the scales are applied in FP32 and the four groups' q.k partials are added in a fixed order.
@@ -1654,17 +1654,17 @@ bool launch70(const float *, const QsaAttnPools &, const int32_t *,
 // row l % 16 (lanes 16..31 repeat lanes 0..15), B lane l all 16 k of column l % 16, and C/D lane l holds
 // D[2 * i + l / 16][l % 16]. PA_KL is the k values per lane (8 or 16), PA_KOFF(half) the first one, PA_ROW the C row.
 #if defined(__gfx1200__) || defined(__gfx1201__)
-#define STRATA_PA_WMMA 1
-#define STRATA_PA_GFX11 0
+#define CORTEX_PA_WMMA 1
+#define CORTEX_PA_GFX11 0
 #elif defined(__gfx1100__) || defined(__gfx1101__) || defined(__gfx1102__) || defined(__gfx1150__) || \
     defined(__gfx1151__)
-#define STRATA_PA_WMMA 1
-#define STRATA_PA_GFX11 1
+#define CORTEX_PA_WMMA 1
+#define CORTEX_PA_GFX11 1
 #else
-#define STRATA_PA_WMMA 0
-#define STRATA_PA_GFX11 0
+#define CORTEX_PA_WMMA 0
+#define CORTEX_PA_GFX11 0
 #endif
-#if STRATA_PA_GFX11
+#if CORTEX_PA_GFX11
 constexpr int PA_KL = 16;
 #define PA_KOFF(half) 0
 #define PA_ROW(i, half) (2 * (i) + (half))
@@ -1690,9 +1690,9 @@ struct alignas(16) SmemW {
 };
 
 __device__ __forceinline__ wf8 wmma_f16(wh8 a, wh8 b, wf8 c) {
-#if STRATA_PA_WMMA && STRATA_PA_GFX11
+#if CORTEX_PA_WMMA && CORTEX_PA_GFX11
     return __builtin_amdgcn_wmma_f32_16x16x16_f16_w32(a, b, c);
-#elif STRATA_PA_WMMA
+#elif CORTEX_PA_WMMA
     return __builtin_amdgcn_wmma_f32_16x16x16_f16_w32_gfx12(a, b, c);
 #else
     __builtin_trap();
@@ -1708,7 +1708,7 @@ __device__ __forceinline__ wh8 i8_to_h(const uint32_t* x) {   // PA_KL codes, ex
 }
 
 // SPLIT = true (default): q and p carried as FP16 hi + lo pairs (two WMMAs each: FP32-level). S23 (opt-in
-// STRATA_PA_FAST=1): SPLIT = false, one FP16 image each - half the matrix work, rounding-level (FP16 attention as the
+// CORTEX_PA_FAST=1): SPLIT = false, one FP16 image each - half the matrix work, rounding-level (FP16 attention as the
 // usual flash-attention kernels), quality-gated
 template <bool SPLIT>
 __global__ void __launch_bounds__(THREADS) prompt_attn_wmma_kernel(const float* __restrict__ q, QsaAttnPools p,
@@ -1716,7 +1716,7 @@ __global__ void __launch_bounds__(THREADS) prompt_attn_wmma_kernel(const float* 
                                                                    const int32_t* __restrict__ steps, int n_kv_heads,
                                                                    int page_size, float scale_log2,
                                                                    float* __restrict__ attn, int cap) {
-#if STRATA_PA_WMMA
+#if CORTEX_PA_WMMA
     __shared__ SmemW S;
     const int qi = blockIdx.x, kvh = blockIdx.y;
     const int n_head = n_kv_heads * G;
@@ -1806,7 +1806,7 @@ __global__ void __launch_bounds__(THREADS) prompt_attn_wmma_kernel(const float* 
                 uint32_t kx[PA_KL / 4] = {};
                 if (rr >= 0) {
                     const uint32_t* src = reinterpret_cast<const uint32_t*>(p.k_q + rr * HD + dim0 + kk * 16 + PA_KOFF(half));
-#if STRATA_PA_GFX11
+#if CORTEX_PA_GFX11
                     const uint4 v = __ldg(reinterpret_cast<const uint4*>(src));
                     kx[0] = v.x; kx[1] = v.y; kx[2] = v.z; kx[3] = v.w;
 #else
@@ -1918,7 +1918,7 @@ __global__ void __launch_bounds__(THREADS) prompt_attn_wmma_kernel(const float* 
 // last bits
 bool hip_wmma_usable() {
     static const bool want = [] {
-        const char* e = std::getenv("STRATA_HIP_WMMA");
+        const char* e = std::getenv("CORTEX_HIP_WMMA");
         return e != nullptr && e[0] == '1';
     }();
     if (!want) return false;
@@ -1928,12 +1928,12 @@ bool hip_wmma_usable() {
     if (arch[dev] == 0) {
         hipDeviceProp_t prop{};
         if (hipGetDeviceProperties(&prop, dev) != hipSuccess) { (void) hipGetLastError(); return false; }
-        arch[dev] = std::strncmp(prop.gcnArchName, "gfx12", 5) == 0 || strata::kernels::gfx_arch_is_gfx11_wmma(prop.gcnArchName)
+        arch[dev] = std::strncmp(prop.gcnArchName, "gfx12", 5) == 0 || cortex::kernels::gfx_arch_is_gfx11_wmma(prop.gcnArchName)
                         ? 1 : 2;
         static bool told = false;
         if (!told) {
             told = true;
-            std::fprintf(stderr, "strata: STRATA_HIP_WMMA: the prompt attention on matrix cores %s (%s)\n",
+            std::fprintf(stderr, "cortex: CORTEX_HIP_WMMA: the prompt attention on matrix cores %s (%s)\n",
                          arch[dev] == 1 ? "on" : "unavailable", prop.gcnArchName);
         }
     }
@@ -1945,8 +1945,8 @@ bool launch_wmma(const float* q, const QsaAttnPools& pools, const int32_t* ids, 
     const float scale_log2 = 1.4426950408889634f / sqrtf((float) HD);
     for (int64_t q0 = 0; q0 < n_q; q0 += 65535) {
         const int64_t nb = n_q - q0 < 65535 ? n_q - q0 : 65535;
-        static const bool fast = [] { const char* e = std::getenv("STRATA_PA_FAST"); return e != nullptr && e[0] == '1'; }();
-        static const int64_t min_t = [] { const char* e = std::getenv("STRATA_PF_SWITCH_MIN_T"); return e ? (int64_t) std::atoll(e) : (int64_t) 0; }();
+        static const bool fast = [] { const char* e = std::getenv("CORTEX_PA_FAST"); return e != nullptr && e[0] == '1'; }();
+        static const int64_t min_t = [] { const char* e = std::getenv("CORTEX_PF_SWITCH_MIN_T"); return e ? (int64_t) std::atoll(e) : (int64_t) 0; }();
         if (fast && n_q >= min_t)
             prompt_attn_wmma_kernel<false><<<dim3((unsigned) nb, (unsigned) s.n_head_kv), THREADS, 0, st>>>(
                 q + q0 * s.n_head * HD, pools, ids + q0 * cap, steps + q0 * kStepCount, (int) s.n_head_kv,
@@ -1975,7 +1975,7 @@ bool qsa_prompt_attn_batch(const float* q, const QsaAttnPools& pools, const int3
         // no cp.async, so it runs the v1 kernel (launch<1>, same accuracy, another summation order).  An older card
         // keeps the old kernel.
         // #371: the compute capability with its minor - sm_70 (V100) has no m16n8k8 (the kernels trap below sm_75)
-#if defined(STRATA_HIP_GFX906)
+#if defined(CORTEX_HIP_GFX906)
         return false;   // gfx906: the tensor-core and WMMA kernels are not for it; the FP32 kernel runs
 #endif
         static int cc[64] = {};
@@ -2000,10 +2000,10 @@ bool qsa_prompt_attn_batch(const float* q, const QsaAttnPools& pools, const int3
                 */
                 return false;
             }
-            // STRATA_QSA_WARP=1|attn (an A/B arm): the pre-sm_80 kernels on any card, as RTX 20 runs them
-            const char* w = std::getenv("STRATA_QSA_WARP");
+            // CORTEX_QSA_WARP=1|attn (an A/B arm): the pre-sm_80 kernels on any card, as RTX 20 runs them
+            const char* w = std::getenv("CORTEX_QSA_WARP");
             cc[dev] = w && (!std::strcmp(w, "1") || !std::strcmp(w, "attn")) ? 75
-                      : 10 * strata::cc_major_of(major) + strata::cc_minor_of(minor);
+                      : 10 * cortex::cc_major_of(major) + cortex::cc_minor_of(minor);
         }
         (void) cc[dev];
         // SYCL: the mma.sync kernel below is not ported (upstream's Turing/sm_80 split - `turing` - does not
@@ -2013,7 +2013,7 @@ bool qsa_prompt_attn_batch(const float* q, const QsaAttnPools& pools, const int3
     }
 #if defined(__HIPCC__)
     // the tensor-core kernels are compiled out on AMD (its major version is not a CUDA sm); RDNA4 has its own int8-KV
-    // matrix-core kernel, opt-in (STRATA_HIP_WMMA=1); everything else keeps the old kernel
+    // matrix-core kernel, opt-in (CORTEX_HIP_WMMA=1); everything else keeps the old kernel
     (void) turing; (void) volta;
     if (pools.k_q != nullptr && pools.v_q != nullptr && pools.k_scale != nullptr && pools.v_scale != nullptr &&
         pools.k_q4 == nullptr && pools.v_q4 == nullptr && s.head_dim == HD && s.n_head == (int64_t) G * s.n_head_kv &&
@@ -2023,10 +2023,10 @@ bool qsa_prompt_attn_batch(const float* q, const QsaAttnPools& pools, const int3
 #endif
     if (s.head_dim != HD || s.n_head != (int64_t) G * s.n_head_kv || cap <= 0 || !ids || !steps || !pools.page_table)
         return false;
-    dpct::queue_ptr st = strata::q_of(stream);
-    if (pools.k_q4 != nullptr) {   // Q4_0 K and V (--kv q4_0): mode 4.  STRATA_PROMPT_ATTN_Q4=0: the old kernel (A/B)
+    dpct::queue_ptr st = cortex::q_of(stream);
+    if (pools.k_q4 != nullptr) {   // Q4_0 K and V (--kv q4_0): mode 4.  CORTEX_PROMPT_ATTN_Q4=0: the old kernel (A/B)
         static const bool q4_off = [] {
-            const char* v = std::getenv("STRATA_PROMPT_ATTN_Q4");
+            const char* v = std::getenv("CORTEX_PROMPT_ATTN_Q4");
             return v != nullptr && v[0] == '0';
         }();
         // sm_80+ only: on Turing mode 4 would run as pairs of m16n8k8 MMAs, which no parity run has checked yet
@@ -2040,10 +2040,10 @@ bool qsa_prompt_attn_batch(const float* q, const QsaAttnPools& pools, const int3
     }
     if (pools.k_q != nullptr) {
         if (!pools.v_q || !pools.k_scale || !pools.v_scale) return false;
-        // STRATA_PROMPT_ATTN_V1=1 (debug): the first version, same accuracy, another summation order - the control
+        // CORTEX_PROMPT_ATTN_V1=1 (debug): the first version, same accuracy, another summation order - the control
         // for how far the model amplifies an FP32-level change.  Turing always takes it: v2's cp.async does not
         // exist before sm_80.
-        static const bool v1 = std::getenv("STRATA_PROMPT_ATTN_V1") != nullptr;
+        static const bool v1 = std::getenv("CORTEX_PROMPT_ATTN_V1") != nullptr;
         if (volta) return launch70<1>(q, pools, ids, steps, cap, s, attn, n_q, st);
         if (v1 || turing) return launch<1>(q, pools, ids, steps, cap, s, attn, n_q, st);
         return launch_i8(q, pools, ids, steps, cap, s, attn, n_q, st);
@@ -2053,4 +2053,4 @@ bool qsa_prompt_attn_batch(const float* q, const QsaAttnPools& pools, const int3
     return launch<0>(q, pools, ids, steps, cap, s, attn, n_q, st);
 }
 
-}  // namespace strata::kernels
+}  // namespace cortex::kernels

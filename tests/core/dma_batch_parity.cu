@@ -1,5 +1,5 @@
 // Byte parity and event ordering for independent pinned-host expert uploads.
-#include "strata/core/dma_batch.hpp"
+#include "cortex/core/dma_batch.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
             for(int i=0;i<n;++i) src[i]=host+(size_t)((i*37)%129)*bytes;
             std::printf("case mode=%d n=%d bytes=%zu\n",mode,n,bytes); std::fflush(stdout);
             CK(cudaMemsetAsync(device,0xa5,std::max<size_t>(bytes*n,1),copy));
-            CK(strata::core::copy_expert_blobs(device,src.data(),n,bytes,copy,mode));
+            CK(cortex::core::copy_expert_blobs(device,src.data(),n,bytes,copy,mode));
             CK(cudaEventRecord(ready,copy));
             CK(cudaStreamWaitEvent(consume,ready,0));
             CK(cudaMemcpyAsync(out,device,std::max<size_t>(bytes*n,1),cudaMemcpyDeviceToHost,consume));
@@ -71,7 +71,7 @@ int main(int argc, char** argv) {
             if (!QueryThreadCycleTime(GetCurrentThread(), &cycle_start)) return 3;
 #endif
             auto start=std::chrono::steady_clock::now();
-            for(int k=0;k<16;++k) CK(strata::core::copy_expert_blobs(device,src.data(),n,bytes,copy,mode));
+            for(int k=0;k<16;++k) CK(cortex::core::copy_expert_blobs(device,src.data(),n,bytes,copy,mode));
             auto submitted=std::chrono::steady_clock::now();
 #if defined(_WIN32)
             if (!QueryThreadCycleTime(GetCurrentThread(), &cycle_end)) return 3;

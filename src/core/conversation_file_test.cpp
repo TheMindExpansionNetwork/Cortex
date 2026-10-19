@@ -1,7 +1,7 @@
-// CPU-only tests for the on-disk session format (include/strata/core/conversation_file.hpp).
-// Built with -DSTRATA_BUILD_CONVERSATION_TESTS=ON; no CUDA, no model.
-#include "strata/core/conversation_file.hpp"
-#include "strata/core/session_save_reclaim.hpp"
+// CPU-only tests for the on-disk session format (include/cortex/core/conversation_file.hpp).
+// Built with -DCORTEX_BUILD_CONVERSATION_TESTS=ON; no CUDA, no model.
+#include "cortex/core/conversation_file.hpp"
+#include "cortex/core/session_save_reclaim.hpp"
 
 #include <array>
 #include <cerrno>
@@ -24,7 +24,7 @@
 #include <unistd.h>
 #endif
 
-using namespace strata::core;
+using namespace cortex::core;
 namespace fs = std::filesystem;
 
 namespace {
@@ -151,7 +151,7 @@ bool rejects(const fs::path& p, const SessionFileIdentity& id, const char* expec
 } // namespace
 
 int main() {
-    const fs::path dir = fs::temp_directory_path() / ("strata-session-test-" + std::to_string(
+    const fs::path dir = fs::temp_directory_path() / ("cortex-session-test-" + std::to_string(
         std::chrono::steady_clock::now().time_since_epoch().count()));
     fs::create_directories(dir);
     const SessionFileIdentity id{0x1111222233334444ull, 0x5555666677778888ull};
@@ -177,7 +177,7 @@ int main() {
         check(u64(40) == 0 && u64(48) == 0, "golden: reserved fields are zero");
         check(std::memcmp(g.data() + g.size() - 8, "STRSEND\x01", 8) == 0, "golden: end marker");
         const uint64_t h = session_hash64(g.data(), g.size(), 0);
-        const char* golden = std::getenv("STRATA_SESSION_GOLDEN_PRINT");
+        const char* golden = std::getenv("CORTEX_SESSION_GOLDEN_PRINT");
         if (golden) std::printf("golden size %zu hash %016llx\n", g.size(), (unsigned long long)h);
         check(g.size() == kGoldenSize && h == kGoldenHash, "golden: the fixed sample's file bytes are unchanged");
     }
@@ -206,16 +206,16 @@ int main() {
     }
     // buffered I/O (the path taken where direct I/O is refused or unavailable) writes and reads the same bytes
     {
-        const char* inherited = std::getenv("STRATA_SESSION_BUFFERED");
+        const char* inherited = std::getenv("CORTEX_SESSION_BUFFERED");
         const std::string kept = inherited ? inherited : "";
-        set_env("STRATA_SESSION_BUFFERED", "1");
+        set_env("CORTEX_SESSION_BUFFERED", "1");
         const fs::path p = dir / "buffered.bin";
         check(session_file_write(p.string(), original, id, written, error), "buffered write");
         check(slurp(p) == slurp(good), "buffered write equals the default write");
         SavedConversation back;
         size_t read = 0;
         check(session_file_read(p.string(), id, back, read, error) && same(original, back), "buffered read");
-        set_env("STRATA_SESSION_BUFFERED", inherited ? kept.c_str() : nullptr);   // the caller's choice again
+        set_env("CORTEX_SESSION_BUFFERED", inherited ? kept.c_str() : nullptr);   // the caller's choice again
     }
 
     const std::vector<char> image = slurp(good);
@@ -366,7 +366,7 @@ int main() {
         c.engine_version = "0.1.38"; c.backend = "cuda"; c.kv = "int8"; c.max_context = 65536; c.kv_resident = 0;
         c.mtp_window = 4; c.rope.type = 0; c.rope.freq_base = 1e7; c.rope.factor = 1.0; c.rope.freq_scale = 1.0;
         c.rope.orig_ctx = 262144; c.rope.attn_factor = 1.0; c.rope.beta_fast = 32; c.rope.beta_slow = 1;
-        c.switches = {{"STRATA_FAST_GDN", 0}};
+        c.switches = {{"CORTEX_FAST_GDN", 0}};
         const uint64_t base = session_config_fingerprint(c);
         check(session_config_fingerprint(c) == base, "config fingerprint is deterministic");
         auto differs = [&](auto edit) { SessionConfig d = c; edit(d); return session_config_fingerprint(d) != base; };
@@ -666,7 +666,7 @@ int main() {
         check(session_save_checkpoints(chain, live, agree, out, why) && out.size() == 1 &&
               same_checkpoint(out[0], chain[1]), "save: admitted, the deepest checkpoint is copied");
         check(session_save_checkpoints({}, live, agree, out, why) && out.empty(), "save: no checkpoints, none copied");
-#if defined(__linux__) && !defined(__SANITIZE_ADDRESS__) && !defined(STRATA_NO_RLIMIT_TEST)
+#if defined(__linux__) && !defined(__SANITIZE_ADDRESS__) && !defined(CORTEX_NO_RLIMIT_TEST)
         // under a real address-space limit that cannot hold one more copy: the refusal comes first, no bad_alloc;
         // and the same limit with an admitting preflight does fail at the copy (the test can see the difference)
         std::vector<ConversationCheckpoint> fat(1);

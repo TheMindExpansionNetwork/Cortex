@@ -14,30 +14,30 @@ function compare(a, b) {
 }
 
 export async function checkUpdates({ appVersion, engineVersion }, fetcher = fetch) {
-  let strata;
+  let cortex;
   try {
     const response = await fetcher(RELEASES, { headers: { accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(10000) });
-    if (!response.ok) throw new Error(response.status === 403 || response.status === 429 ? 'The release service is busy. Try again later.' : 'Could not reach the Strata release feed. Try again.');
+    if (!response.ok) throw new Error(response.status === 403 || response.status === 429 ? 'The release service is busy. Try again later.' : 'Could not reach the Cortex release feed. Try again.');
     const releases = await response.json();
     if (!Array.isArray(releases)) throw new Error('The release service returned an invalid response.');
     const candidates = releases.filter(r => !r.draft && !r.prerelease && versionParts(r.tag_name));
     candidates.sort((a, b) => compare(versionParts(b.tag_name), versionParts(a.tag_name)));
     const latest = candidates[0];
     const installed = versionParts(appVersion);
-    if (!latest) strata = { status: 'no-releases', message: 'No stable Strata release is published in this feed yet.' };
-    else if (!installed) strata = { status: 'unavailable', message: 'This installation has no comparable version number.' };
+    if (!latest) cortex = { status: 'no-releases', message: 'No stable Cortex release is published in this feed yet.' };
+    else if (!installed) cortex = { status: 'unavailable', message: 'This installation has no comparable version number.' };
     else {
       const newer = compare(versionParts(latest.tag_name), installed) > 0;
       // Release content is untrusted. Only link back to the known repository.
       const releaseUrl = typeof latest.html_url === 'string' && latest.html_url.startsWith(RELEASE_PREFIX) ? latest.html_url : undefined;
-      strata = { status: newer ? 'available' : 'current', latestVersion: latest.tag_name, releaseUrl, message: newer ? `Strata ${latest.tag_name} is available.` : 'Strata is up to date.' };
+      cortex = { status: newer ? 'available' : 'current', latestVersion: latest.tag_name, releaseUrl, message: newer ? `Cortex ${latest.tag_name} is available.` : 'Cortex is up to date.' };
     }
   } catch (error) {
-    strata = { status: 'error', message: error.name === 'TimeoutError' ? 'The release check timed out. Try again.' : error.message ?? 'Could not check for updates.' };
+    cortex = { status: 'error', message: error.name === 'TimeoutError' ? 'The release check timed out. Try again.' : error.message ?? 'Could not check for updates.' };
   }
   return {
     checkedAt: new Date().toISOString(),
-    strata: { installedVersion: appVersion, ...strata, canInstall: false },
+    cortex: { installedVersion: appVersion, ...cortex, canInstall: false },
     // The existing binary downloader has no tested-release compatibility feed
     // or trustworthy installed build ID. Upstream's latest is not an update verdict.
     engine: { installedVersion: engineVersion, status: 'unavailable', canInstall: false, message: 'Engine update checks are not available in this build.' },
@@ -45,7 +45,7 @@ export async function checkUpdates({ appVersion, engineVersion }, fetcher = fetc
 }
 
 /**
- * The packaged app's update check: the signed feed, read by Control (`strata update --check`), plus the shell's own verdict
+ * The packaged app's update check: the signed feed, read by Control (`cortex update --check`), plus the shell's own verdict
  * on the app. Same result shape as `checkUpdates`, so the Settings screen needs no change. This is the only place the host
  * reaches the feed, and only when the user presses "Check for updates".
  */
@@ -55,9 +55,9 @@ export async function checkComponentUpdates({ control, appUpdater = null, appVer
   try {
     report = await control.updateCheck({ appVersion });
   } catch (error) {
-    const plain = plainUpdateError(error, 'Strata');
+    const plain = plainUpdateError(error, 'Cortex');
     const message = /update server|aren't available/.test(plain.headline) ? plain.message : `Couldn't check for updates. Try again in a moment.`;
-    return { checkedAt, strata: { installedVersion: appVersion ?? control.version ?? null, status: 'error', message, details: plain.details, canInstall: false }, engine: { installedVersion: null, status: 'error', message, details: plain.details, canInstall: false } };
+    return { checkedAt, cortex: { installedVersion: appVersion ?? control.version ?? null, status: 'error', message, details: plain.details, canInstall: false }, engine: { installedVersion: null, status: 'error', message, details: plain.details, canInstall: false } };
   }
   const mib = bytes => `${Math.round((bytes ?? 0) / (1 << 20))} MB`;
   const engine = report.engine ?? {};
@@ -84,8 +84,8 @@ export async function checkComponentUpdates({ control, appUpdater = null, appVer
     }
   }
   const controlNew = control_.status === 'available' ? control_.offered : null;
-  const strata = { installedVersion: appVersion ?? control_.installed ?? control.version ?? null, canInstall: !!((appNew && !appCannot) || controlNew) };
-  if (appNew || controlNew) Object.assign(strata, { status: 'available', latestVersion: appNew ?? controlNew, message: `A new version of Strata is available.${appNotes ? ` ${appNotes}` : ''}${appNew && appCannot ? ` ${appCannot}` : ''}` });
-  else Object.assign(strata, { status: 'current', message: 'Strata is up to date.' });
-  return { checkedAt, feed: report.feed, strata, engine: engineView, serving: report.serving ?? [] };
+  const cortex = { installedVersion: appVersion ?? control_.installed ?? control.version ?? null, canInstall: !!((appNew && !appCannot) || controlNew) };
+  if (appNew || controlNew) Object.assign(cortex, { status: 'available', latestVersion: appNew ?? controlNew, message: `A new version of Cortex is available.${appNotes ? ` ${appNotes}` : ''}${appNew && appCannot ? ` ${appCannot}` : ''}` });
+  else Object.assign(cortex, { status: 'current', message: 'Cortex is up to date.' });
+  return { checkedAt, feed: report.feed, cortex, engine: engineView, serving: report.serving ?? [] };
 }

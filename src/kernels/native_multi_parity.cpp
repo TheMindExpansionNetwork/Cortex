@@ -8,9 +8,9 @@
 //     output, k = 9 and a null shared row take the scalar one) against a host replay of the documented contract:
 //     the first product rounds to F32, the next ones accumulate with FMA in expert order, the shared row is added
 //     once: memcmp.
-#include "strata/kernels/native_moe.hpp"
-#include "strata/kernels/native_router.hpp"
-#include "strata/kernels/router_top10.hpp"
+#include "cortex/kernels/native_moe.hpp"
+#include "cortex/kernels/native_router.hpp"
+#include "cortex/kernels/router_top10.hpp"
 
 #include <cuda_runtime.h>
 
@@ -51,7 +51,7 @@ std::vector<T> down(const T* d, size_t n) {
 
 int main(int argc, char**) {
     (void) argc;
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     std::mt19937 rng(783);
     std::normal_distribution<float> gauss(0.0f, 1.0f);
     int bad = 0;

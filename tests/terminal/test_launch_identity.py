@@ -5,7 +5,7 @@ import unittest
 from unittest import mock
 
 from serve.launch_identity import attestation
-from strata_control import readiness
+from cortex_control import readiness
 
 
 class LaunchIdentityTests(unittest.TestCase):

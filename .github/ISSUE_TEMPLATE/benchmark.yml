@@ -12,7 +12,7 @@ body:
     id: what
     attributes:
       label: What did you measure, or what went wrong
-      description: Hardware (GPU and VRAM, CPU, RAM, OS), Strata version, model and quantization, the exact command, and the numbers. Paste the report or link the pull request.
+      description: Hardware (GPU and VRAM, CPU, RAM, OS), Cortex version, model and quantization, the exact command, and the numbers. Paste the report or link the pull request.
     validations:
       required: true
   - type: dropdown

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Strata one-click setup and start (Windows and Linux, NVIDIA or AMD GPUs).
+"""Cortex one-click setup and start (Windows and Linux, NVIDIA or AMD GPUs).
 
     START-HERE.bat  (Windows)   /   ./setup.sh  (Linux)      - they install Python if needed and run this file
 
@@ -13,11 +13,11 @@ What the first run does (each step is skipped when it is already done):
   1. checks your PC: NVIDIA or AMD GPU and driver, RAM, CPU, free disk space
   2. asks the questions
   3. installs the Python packages it needs into .venv (numpy, jinja2, ..., and NVIDIA's CUDA libraries)
-  4. gets the Strata engine: a ready-made build for RTX 20/30/40/50 cards (no compiler needed); if none fits your PC,
+  4. gets the Cortex engine: a ready-made build for RTX 20/30/40/50 cards (no compiler needed); if none fits your PC,
      it installs the missing build tools (asks first) and compiles the engine for your GPU.  AMD (--backend hip, chosen by
      itself on a PC with no usable NVIDIA card): the ready-made HIP engine on Windows, compiled here on Linux
   5. downloads the model from Hugging Face (resumable), and the vision encoder if you want images
-  6. prepares the model for Strata and fetches the MTP draft layer (~5 GB, from the original Qwen checkpoint)
+  6. prepares the model for Cortex and fetches the MTP draft layer (~5 GB, from the original Qwen checkpoint)
   7. writes run-<model>.bat / run-<model>.sh and starts the model
 
 Options: --family qwen|swift, --model Q2_0|IQ2_XS|IQ3_XXS|IQ3_S, --context 32768, --rope-scaling none|linear|yarn
@@ -62,16 +62,16 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from strata_control import acquisition
+from cortex_control import acquisition
 
 ROOT = Path(__file__).resolve().parent
-# The desktop app runs this installer under Strata Control (its bundled Python, STRATA_CONTROL_INSTALL=1). The source
+# The desktop app runs this installer under Cortex Control (its bundled Python, CORTEX_CONTROL_INSTALL=1). The source
 # (tools/, data/, serve/) stays in ROOT, inside the app; everything the install writes (run configs, logs, third_party,
-# the data folder beside it) goes to home(), a per-user folder (STRATA_INSTALL_DIR). In that mode it installs no Python
+# the data folder beside it) goes to home(), a per-user folder (CORTEX_INSTALL_DIR). In that mode it installs no Python
 # package and no engine and compiles nothing: it downloads the model files, prepares them with the bundled tools and
-# writes a run config whose engine is "component:strata-engine". Outside that mode home() is ROOT and nothing changes.
-CONTROL = os.environ.get("STRATA_CONTROL_INSTALL") == "1"
-_CONTROL_HOME = Path(os.environ["STRATA_INSTALL_DIR"]).resolve() if CONTROL and os.environ.get("STRATA_INSTALL_DIR") else None
+# writes a run config whose engine is "component:cortex-engine". Outside that mode home() is ROOT and nothing changes.
+CONTROL = os.environ.get("CORTEX_CONTROL_INSTALL") == "1"
+_CONTROL_HOME = Path(os.environ["CORTEX_INSTALL_DIR"]).resolve() if CONTROL and os.environ.get("CORTEX_INSTALL_DIR") else None
 
 
 def home() -> Path:
@@ -83,7 +83,7 @@ WIN = os.name == "nt"
 # #214: every Hugging Face file comes from a fixed commit of its repository (the `sha` of
 # https://huggingface.co/api/models/<repo> when this was pinned), so a checkout installs the same files on any
 # day.  Every file has a fixed size and SHA-256 too (REPO_PINS); a revision the repository no longer has stops the
-# download (download()), unless a tester sets STRATA_ALLOW_UNPINNED=1.
+# download (download()), unless a tester sets CORTEX_ALLOW_UNPINNED=1.
 HF_REVISIONS = {
     "ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF": "ed59f92082b1e93c0e96d60a8b11aab089b52f09",        # 2026-09-29
     "ukisai/Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF": "99bb8f7f95c7aa7b24a36a7786a4f657b30f5d3d",   # 2026-10-07 (adds IQ3_S)
@@ -117,12 +117,12 @@ _unpinned_said = []
 
 
 def allow_unpinned() -> bool:
-    """STRATA_ALLOW_UNPINNED=1: a tester's opt-out.  A file whose pinned version is gone from Hugging Face is then taken
+    """CORTEX_ALLOW_UNPINNED=1: a tester's opt-out.  A file whose pinned version is gone from Hugging Face is then taken
     from the repository's current files, without the SHA-256 check (nothing pins them).  Off by default, announced when set."""
-    on = (os.environ.get("STRATA_ALLOW_UNPINNED") or "").strip() == "1"
+    on = (os.environ.get("CORTEX_ALLOW_UNPINNED") or "").strip() == "1"
     if on and not _unpinned_said:
         _unpinned_said.append(1)
-        warn("STRATA_ALLOW_UNPINNED=1: a model file whose pinned version is gone from Hugging Face is taken from its "
+        warn("CORTEX_ALLOW_UNPINNED=1: a model file whose pinned version is gone from Hugging Face is taken from its "
              "current files instead, and is NOT checked against a SHA-256. Unset it to get the checked files only")
     return on
 
@@ -139,12 +139,12 @@ def file_pin(url: str):
 # sizes, and is reachable from mainland China where huggingface.co often is not.  It serves a repository's current
 # files (no pinned revision), so a file from it is checked against the SHA-256 ModelScope publishes for it, and the
 # MTP tensors against the pinned checkpoint's own hashes (tools/mtp_fetch.py).
-# --source / STRATA_SOURCE: huggingface (what auto means), or modelscope: only when asked for (a different host
+# --source / CORTEX_SOURCE: huggingface (what auto means), or modelscope: only when asked for (a different host
 # serving current files, not our pinned revision: setup never switches to it by itself, it recommends it, #908).
 MS_DEFAULT = "https://www.modelscope.cn"
 SOURCES = ("auto", "modelscope", "huggingface")
 HF_FILE = re.compile(r"^https?://[^/]+/(?P<repo>[^/]+/[^/]+)/resolve/[^/]+/(?P<path>.+)$")
-_sources = {}                                      # model_source()'s answer per (STRATA_SOURCE, HF_ENDPOINT, host)
+_sources = {}                                      # model_source()'s answer per (CORTEX_SOURCE, HF_ENDPOINT, host)
 _ms_files = {}
 
 
@@ -155,7 +155,7 @@ def ms_endpoint() -> str:
 def reachable(url: str, timeout: float = 5.0) -> bool:
     """Whether `url` answers a HEAD request with success (2xx, after redirects) within `timeout` seconds."""
     try:
-        _urlopen(urllib.request.Request(url, method="HEAD", headers={"User-Agent": "strata-setup"}),
+        _urlopen(urllib.request.Request(url, method="HEAD", headers={"User-Agent": "cortex-setup"}),
                                timeout=timeout).close()
         return True
     except OSError:                                    # HTTPError too: an error page is not the file
@@ -163,10 +163,10 @@ def reachable(url: str, timeout: float = 5.0) -> bool:
 
 
 def model_source() -> str:
-    """"modelscope" or "huggingface".  ModelScope only when --source modelscope / STRATA_SOURCE=modelscope asks for it;
+    """"modelscope" or "huggingface".  ModelScope only when --source modelscope / CORTEX_SOURCE=modelscope asks for it;
     everything else (auto, a HF_ENDPOINT mirror chosen on purpose, #495) is Hugging Face.  Setup does not switch hosts
     by itself (#908): ModelScope serves a repository's current files, not our pinned revision."""
-    want = (os.environ.get("STRATA_SOURCE") or "auto").strip().lower()
+    want = (os.environ.get("CORTEX_SOURCE") or "auto").strip().lower()
     key = (want, os.environ.get("HF_ENDPOINT") or "", ms_endpoint())
     if key not in _sources:
         _sources[key] = "modelscope" if want in ("ms", "modelscope") else "huggingface"
@@ -198,7 +198,7 @@ def ms_meta(repo: str, path: str):
     if repo not in _ms_files:
         try:
             api = f"{ms_endpoint()}/api/v1/models/{repo}/repo/files?Recursive=true"
-            with _urlopen(urllib.request.Request(api, headers={"User-Agent": "strata-setup"}),
+            with _urlopen(urllib.request.Request(api, headers={"User-Agent": "cortex-setup"}),
                                         timeout=60) as r:
                 files = json.loads(r.read())["Data"]["Files"]
             _ms_files[repo] = {f["Path"]: (int(f.get("Size") or 0), (f.get("Sha256") or "").lower()) for f in files}
@@ -211,9 +211,9 @@ HF = hf("ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF")
 LLAMA_CPP_COMMIT = "3cf03257f219afbe7334045ff7c6a06ac68c627d"
 LLAMA_CPP_ZIP = f"https://github.com/ggml-org/llama.cpp/archive/{LLAMA_CPP_COMMIT}.zip"
 
-# The ready-made engine: <PREBUILT_URL><asset>, a zip with strata(.exe), strata-vision(.exe) and BUILD.json, built
+# The ready-made engine: <PREBUILT_URL><asset>, a zip with cortex(.exe), cortex-vision(.exe) and BUILD.json, built
 # by tools/make_release.py.  Set this to the GitHub release download folder when publishing, e.g.
-# "https://github.com/<you>/Strata/releases/latest/download/" (or pass --prebuilt / set STRATA_PREBUILT_URL).
+# "https://github.com/<you>/Cortex/releases/latest/download/" (or pass --prebuilt / set CORTEX_PREBUILT_URL).
 # With the default, the release of this checkout's own version (PREBUILT_TAG_URL, CMakeLists.txt's version) is
 # tried first and the latest release is the fallback (#214): an older checkout keeps the engine it shipped with.
 PREBUILT_URL = "https://github.com/Niko1221/Strata/releases/latest/download/"
@@ -222,22 +222,22 @@ PREBUILT_URL = "https://github.com/Niko1221/Strata/releases/latest/download/"
 # from somewhere the download does not.
 REPO = "Niko1221/Strata"
 PREBUILT_TAG_URL = "https://github.com/Niko1221/Strata/releases/download/v{version}/"
-PREBUILT_ASSET = "strata-windows-x64.zip" if WIN else "strata-linux-x64.zip"
+PREBUILT_ASSET = "cortex-windows-x64.zip" if WIN else "cortex-linux-x64.zip"
 # the CUDA libraries the ready-made engine loads (the same CUDA 13.0 it is built with), from NVIDIA's pip packages
 CUDA_WHEELS = ["nvidia-cublas==13.0.2.14", "nvidia-cuda-runtime==13.0.96"]
 MIN_DRIVER = 580                       # CUDA 13.0
 # Older NVIDIA GPUs (experimental): CUDA 13 dropped Pascal (sm_60/61) and Volta (sm_70), so a model whose GPUs include
-# one runs a second engine, built with CUDA 12.9 (-DSTRATA_EXPERIMENTAL_SM60=ON) and kept in its own folder: the
+# one runs a second engine, built with CUDA 12.9 (-DCORTEX_EXPERIMENTAL_SM60=ON) and kept in its own folder: the
 # ready-made one is CUDA12_ASSET (Windows; on Linux it is compiled here with a CUDA 12.x toolkit).  One engine runs per
 # model, so the choice is per model config, by its oldest GPU; --cuda 12|13 overrides it (docs/OLDER_GPUS.md).
 CUDA13_MIN_ARCH = 75                   # the oldest compute capability CUDA 13 compiles for (sm_75, RTX 20)
-CUDA12_ASSET = "strata-windows-x64-cuda12.zip" if WIN else "strata-linux-x64-cuda12.zip"
+CUDA12_ASSET = "cortex-windows-x64-cuda12.zip" if WIN else "cortex-linux-x64-cuda12.zip"
 CUDA12_WHEELS = ["nvidia-cublas-cu12==12.9.1.4", "nvidia-cuda-runtime-cu12==12.9.79"]
 # CUDA 12.x minor-version compatibility (NVIDIA's table: Linux 525.60.13, Windows 527.41); the wheels match the 12.9.1
 # toolkit the CUDA 12 zip is built with (cuBLAS 12.9.1.4, runtime 12.9.79).  Not tested on such an old driver here.
 CUDA12_MIN_DRIVER = 528 if WIN else 525
 ENGINE12_DIR = "engine-cuda12"
-MIN_ENGINE = (0, 1, 45)                # versions compare all numbers; v0.1.45: Qwen3.6 parallel requests and pictures, fixes #2346 #2372 #2396; v0.1.44.1: CPUs without AVX2 start again (#2324: an illegal instruction before main in the NVFP4 CPU rows), the CUDA 12.0/12.1 toolkits build (#2322), a crashed engine start is named instead of retried as a GPU runtime start, Mac M2 (#2323); v0.1.44: UD-Q4/Q5/Q6_K_XL and Q8_0 Unsloth files in setup (K-quant experts, MMQ prompt library strata_kq), NVFP4 packs, Qwen3.6-35B-A3B, Intel Arc A-series kernels, the pipelined-decode and latency work; v0.1.43.1: the adaptive overlap no longer collapses decode on pinned-host desktops (#1964 #1975), Windows PLE mmap stall (#1984), pinned prompt uploads (#1996), the I/O watchdog allowance; v0.1.43: adaptive-tier copies overlap on CUDA, P100 (sm_60) kernel tables, RDNA4 (gfx1200/gfx1201) defaults (route tail skip, measured PCIe share, 16K prompt chunks, fused IQ3 prompt experts); v0.1.42.1: the GGUF-in-place file tier on Windows unmaps every shard, dual-socket starts judge each NUMA node and STRATA_DROP_CACHE_ON_EXIT, tools/strata_bench.py; v0.1.42: STRATA_ROUTE_TAIL_SKIP=7 default on CUDA (+13-16% decode), the AMD 2-GPU checkpoint fix (H13), Phase 2 fixes and opt-ins; v0.1.41.1 (folded into 0.1.42): the #1576 card order, #1616 stage size, #1595 CPU share, #1630/#1607 Windows HIP chunk cap and commit-limit warning, #1603 parallel-request bookkeeping; v0.1.41: CPU prefill share on by default (NVIDIA, chunks < 1024), --batch-groups auto, the file tier read in batches on Windows, Pascal decode fix, per-arch tables; v0.1.40.3: the #1357 MTP router guard, the #1376 Windows HIP cache floor, #461 runtime DLLs, Intel A750 first-request fix; v0.1.40.2: F4 verify windows, the Linux file tier (#1194), the stager wait (#1057), #1264/#1201/#1139 fixes, opt-in CPU share (#1282), Intel Arc; v0.1.40: --resident-experts on a layer split with the split+resident variant (#848), --kv k8v4 with KV streaming (#711); v0.1.39: the #577 file-tier regression fixed, the OpenAI Responses API (#451, Codex), a reply stuck on one token ended (#606), the head before the arena (#620), effort_position (#458), --vram-reserve hot resize opt-in (#533), PR batch; v0.1.38: prompts faster (one gather per expert group #372, the first chunk's PLE rows beside layer 0 #374, DeltaNet three heads per thread #413), --kv q4_0 prompts on tensor cores (#452), Q5_0 experts on the GPU (#473), IQ4_XS on AVX-2 (#415), unbuffered expert loading on Windows (#357 #362), --peer-device (#531), a 6 GB card starts (#496), PR batch; v0.1.37: a silent engine is restarted (#481), Windows AMD counts the desktop's VRAM (#380 #377 #497), a steadier PCIe probe (#485), fixes #496 #495 #498 #505 #493; v0.1.36: a cancelled prompt logged as read so far (#471), the draft-head hint (#474), UPDATE.bat (#475), --expert-profile-save (#477); v0.1.35: Windows AMD uses its bundled HIP runtime (#468 #461), the low-RAM resident mode on Windows 32 GB (#467), fixes #460 #459 #446 #447 #457 #448 #444; v0.1.34: AMD on Windows (a ready-made HIP engine), an MCP server for AI assistants (tools/strata_mcp.py), a shorter README; v0.1.33: a portable image encoder again (#411 #412), setup recommends instead of forcing (#406 #403 #364 #384), fixes #352 #365 #369 #371 #375 #393 #408 #414; v0.1.32: split prompts faster (#340), AMD router +12%, Unsloth Q4 in setup, faster Q4 prompts, #326/#327/#342/#344 fixes, PR batch; v0.1.31: Unsloth UD-Q4_K_XL (experimental), GGUF-in-place low-RAM mode, Windows GGUF load 2x, server race + tokenizer fixes, AMD intrinsics; v0.1.30: short prompts faster (streaming from 1024 tokens), resident low-RAM variant, multi-GPU session carve, RDNA4; v0.1.29: sampled answers faster (split top-k), #154 correctness fixes; v0.1.28: the expert cache reserves the draft head, a cancelled request no longer fails the next; v0.1.27: RTX 20 (sm_75) in the ready-made engine, the HIP build without CUDA headers; v0.1.26: the draft layer's prompt pass in batches; v0.1.25: faster prompts (grouping off the copy engine, fused hyper-connection kernels), AMD HIP backend, --kv k8v4; v0.1.24: long prompts faster (QSA select on tensor cores); v0.1.23: image requests honor sampling, 8 GB cards start, batched verify window; v0.1.22: faster prompts (tensor-core attention), multi-GPU across images/steering/KV streaming; v0.1.21: multi-GPU layer split (--gpus); v0.1.20: system-prompt checkpoint, PCIe probe, hit rate; v0.1.19: penalties
+MIN_ENGINE = (0, 1, 45)                # versions compare all numbers; v0.1.45: Qwen3.6 parallel requests and pictures, fixes #2346 #2372 #2396; v0.1.44.1: CPUs without AVX2 start again (#2324: an illegal instruction before main in the NVFP4 CPU rows), the CUDA 12.0/12.1 toolkits build (#2322), a crashed engine start is named instead of retried as a GPU runtime start, Mac M2 (#2323); v0.1.44: UD-Q4/Q5/Q6_K_XL and Q8_0 Unsloth files in setup (K-quant experts, MMQ prompt library cortex_kq), NVFP4 packs, Qwen3.6-35B-A3B, Intel Arc A-series kernels, the pipelined-decode and latency work; v0.1.43.1: the adaptive overlap no longer collapses decode on pinned-host desktops (#1964 #1975), Windows PLE mmap stall (#1984), pinned prompt uploads (#1996), the I/O watchdog allowance; v0.1.43: adaptive-tier copies overlap on CUDA, P100 (sm_60) kernel tables, RDNA4 (gfx1200/gfx1201) defaults (route tail skip, measured PCIe share, 16K prompt chunks, fused IQ3 prompt experts); v0.1.42.1: the GGUF-in-place file tier on Windows unmaps every shard, dual-socket starts judge each NUMA node and CORTEX_DROP_CACHE_ON_EXIT, tools/cortex_bench.py; v0.1.42: CORTEX_ROUTE_TAIL_SKIP=7 default on CUDA (+13-16% decode), the AMD 2-GPU checkpoint fix (H13), Phase 2 fixes and opt-ins; v0.1.41.1 (folded into 0.1.42): the #1576 card order, #1616 stage size, #1595 CPU share, #1630/#1607 Windows HIP chunk cap and commit-limit warning, #1603 parallel-request bookkeeping; v0.1.41: CPU prefill share on by default (NVIDIA, chunks < 1024), --batch-groups auto, the file tier read in batches on Windows, Pascal decode fix, per-arch tables; v0.1.40.3: the #1357 MTP router guard, the #1376 Windows HIP cache floor, #461 runtime DLLs, Intel A750 first-request fix; v0.1.40.2: F4 verify windows, the Linux file tier (#1194), the stager wait (#1057), #1264/#1201/#1139 fixes, opt-in CPU share (#1282), Intel Arc; v0.1.40: --resident-experts on a layer split with the split+resident variant (#848), --kv k8v4 with KV streaming (#711); v0.1.39: the #577 file-tier regression fixed, the OpenAI Responses API (#451, Codex), a reply stuck on one token ended (#606), the head before the arena (#620), effort_position (#458), --vram-reserve hot resize opt-in (#533), PR batch; v0.1.38: prompts faster (one gather per expert group #372, the first chunk's PLE rows beside layer 0 #374, DeltaNet three heads per thread #413), --kv q4_0 prompts on tensor cores (#452), Q5_0 experts on the GPU (#473), IQ4_XS on AVX-2 (#415), unbuffered expert loading on Windows (#357 #362), --peer-device (#531), a 6 GB card starts (#496), PR batch; v0.1.37: a silent engine is restarted (#481), Windows AMD counts the desktop's VRAM (#380 #377 #497), a steadier PCIe probe (#485), fixes #496 #495 #498 #505 #493; v0.1.36: a cancelled prompt logged as read so far (#471), the draft-head hint (#474), UPDATE.bat (#475), --expert-profile-save (#477); v0.1.35: Windows AMD uses its bundled HIP runtime (#468 #461), the low-RAM resident mode on Windows 32 GB (#467), fixes #460 #459 #446 #447 #457 #448 #444; v0.1.34: AMD on Windows (a ready-made HIP engine), an MCP server for AI assistants (tools/cortex_mcp.py), a shorter README; v0.1.33: a portable image encoder again (#411 #412), setup recommends instead of forcing (#406 #403 #364 #384), fixes #352 #365 #369 #371 #375 #393 #408 #414; v0.1.32: split prompts faster (#340), AMD router +12%, Unsloth Q4 in setup, faster Q4 prompts, #326/#327/#342/#344 fixes, PR batch; v0.1.31: Unsloth UD-Q4_K_XL (experimental), GGUF-in-place low-RAM mode, Windows GGUF load 2x, server race + tokenizer fixes, AMD intrinsics; v0.1.30: short prompts faster (streaming from 1024 tokens), resident low-RAM variant, multi-GPU session carve, RDNA4; v0.1.29: sampled answers faster (split top-k), #154 correctness fixes; v0.1.28: the expert cache reserves the draft head, a cancelled request no longer fails the next; v0.1.27: RTX 20 (sm_75) in the ready-made engine, the HIP build without CUDA headers; v0.1.26: the draft layer's prompt pass in batches; v0.1.25: faster prompts (grouping off the copy engine, fused hyper-connection kernels), AMD HIP backend, --kv k8v4; v0.1.24: long prompts faster (QSA select on tensor cores); v0.1.23: image requests honor sampling, 8 GB cards start, batched verify window; v0.1.22: faster prompts (tensor-core attention), multi-GPU across images/steering/KV streaming; v0.1.21: multi-GPU layer split (--gpus); v0.1.20: system-prompt checkpoint, PCIe probe, hit rate; v0.1.19: penalties
 # KV bytes per context token and attention layer: 8-bit 1056, rotated 4-bit 576, hybrid K8V4 (8-bit K, 4-bit V) 816
 KV_CELL_BYTES = {"q4_0": 576, "k8v4": 816}
 PY_PACKAGES = ["numpy", "jinja2", "regex", "pyyaml", "tqdm", "requests", "pillow", "psutil"]
@@ -245,15 +245,15 @@ REQUIREMENTS = ROOT / "requirements.txt"   # the same packages and their depende
 BUILD_PACKAGES = ["cmake", "ninja"]
 BUILD_REQUIREMENTS = ROOT / "requirements-build.txt"
 
-# NVFP4 experts (MODEL-UPDATE Phase 4; the engine path is ported from sergqwer/strata-nvfp4, MIT).  Ready-made Strata
+# NVFP4 experts (MODEL-UPDATE Phase 4; the engine path is ported from sergqwer/cortex-nvfp4, MIT).  Ready-made Cortex
 # packs on Hugging Face by the fork's author: nothing is converted here.  Every file is pinned by its upload's commit,
 # size and SHA-256 (the fork's setup.py NVFP4_REPOS, checked against the Hub's LFS pointers 2026-10-12).  The FP8 n-gram
 # table and the BF16 token embedding are the same files in both repositories (a second install links them).  The
 # MTP draft layer is setup's own, as for every other model, so the repositories' mtp/ folder is not downloaded.
 # role: pack = the experts pack folder (index.txt, experts.bin, ...), dense = the dense GGUF (--native and
 # --native-dense-gguf), ple = the FP8 n-gram table (--ple-gguf), embd = the BF16 token embedding (--embd-gguf)
-NVFP4_GPTQ_REPO = "Maximilian228/Qwen3.8-Flash-Next-NVFP4-GPTQ-Strata"     # Qwen's BF16 experts by GPTQ (the fork)
-NVFP4_NVIDIA_REPO = "Maximilian228/Qwen3.8-Flash-Next-NVIDIA-NVFP4-Strata"  # nvidia/Qwen3.8-Flash-Next-NVFP4, converted
+NVFP4_GPTQ_REPO = "Maximilian228/Qwen3.8-Flash-Next-NVFP4-GPTQ-Cortex"     # Qwen's BF16 experts by GPTQ (the fork)
+NVFP4_NVIDIA_REPO = "Maximilian228/Qwen3.8-Flash-Next-NVIDIA-NVFP4-Cortex"  # nvidia/Qwen3.8-Flash-Next-NVFP4, converted
 _NVFP4_TOKENIZER = {
     "pack/tokenizer/chat_template.jinja": ("pack", 8952, "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"),
     "pack/tokenizer/merges.txt": ("pack", 3600844, "080cf95432173729d160346b7882bd2a644b07f7a3813a3eb73f4e66787bfde9"),
@@ -322,7 +322,7 @@ FP4LOCAL_PREPARED = "prepared"                       # <models>/nvidia--Qwen3.8-
 
 # the first release engine with NVFP4 experts (a source build of this checkout has them whatever its number says)
 NVFP4_ENGINE = (0, 1, 44)
-# the first engine that reads NVIDIA's NVFP4 n-gram table (strata.ple.format = nvfp4x16); a source build of this checkout has it
+# the first engine that reads NVIDIA's NVFP4 n-gram table (cortex.ple.format = nvfp4x16); a source build of this checkout has it
 FP4LOCAL_ENGINE = (0, 1, 45)
 
 # agentionai's Gyro files (Qwen3.8-Flash-Next with trellis-coded, Hadamard-rotated experts, TQ2_T / TQK6 / TQK7): one
@@ -330,8 +330,8 @@ FP4LOCAL_ENGINE = (0, 1, 45)
 # reads them from 0.1.45.1 on: the experts are native_experts.txt v5 (Hadamard-folded, hadamard.txt), which the engine reads since the
 # APR port (commit f47b0385f, 2026-10-02, first in the 0.2.0 line).  The released 0.1.45 engine reads only up to v4 and refuses a
 # Gyro pack, so 0.1.45 is NOT enough: 0.1.45.1 is the first engine package built after the reader was merged (checked: the
-# "native_experts.txt v5 declares Hadamard-folded experts" message is in every 0.1.45.1+ strata binary and in no 0.1.45 release one).
-# (ported from agentionai/Strata rc2, MIT); the sizes and SHA-256 are the Hub's LFS pointers
+# "native_experts.txt v5 declares Hadamard-folded experts" message is in every 0.1.45.1+ cortex binary and in no 0.1.45 release one).
+# (ported from agentionai/Cortex rc2, MIT); the sizes and SHA-256 are the Hub's LFS pointers
 # of the revision pinned in HF_REVISIONS.  The model's license is Qwen's.
 GYRO_ENGINE = (0, 1, 45, 1)
 GYRO_FILES = {
@@ -451,7 +451,7 @@ MODELS = {
     # Gyro (agentionai): "ram_gb" is the memory the weights need in total, VRAM and RAM together ("mem_total"): Gyro-S
     # 27.6 GB, Gyro-M 35 GB (the rest of the download is the n-gram table, read from the SSD).  Neither is anyone's
     # default: setup and the MCP server mention them where the other sizes do not fit.  Images: the same mmproj as every
-    # Flash-Next model; strata-vision reads only the vocabulary and header of the Gyro GGUF (tools/vision/gguf_meta.h),
+    # Flash-Next model; cortex-vision reads only the vocabulary and header of the Gyro GGUF (tools/vision/gguf_meta.h),
     # whose TQK6 / TQK7 tensors llama.cpp does not know.
     "Gyro-S": {"about": "the smallest option, for PCs with little memory (27.6 GB of VRAM + RAM together); lower quality "
                         "than the 2-3-bit sizes, and the 2-bit Q2_0 decodes faster",
@@ -461,7 +461,7 @@ MODELS = {
                         "about 20% slower than Q2_0 on 12 GB cards",
                "download_gb": 92.0, "ram_gb": 35.0, "arena_gb": 32.1, "families": ("gyro",), "mem_total": True,
                "file": "Qwen3.8-Flash-Next-Gyro-M-TQ2_0.gguf", "shards": 1, "engine": GYRO_ENGINE, "vision": True},
-    "NVFP4": {"about": "best quality of the NVFP4 versions (GPTQ, sergqwer's strata-nvfp4 pack); RTX 50 has FP4 tensor cores, "
+    "NVFP4": {"about": "best quality of the NVFP4 versions (GPTQ, sergqwer's cortex-nvfp4 pack); RTX 50 has FP4 tensor cores, "
                        "other NVIDIA cards run it at 8-bit precision", "download_gb": 128.0, "ram_gb": 80, "arena_gb": 68.0,
               "families": ("nvfp4",), "nvidia_only": True, "vision": True, "repo": NVFP4_GPTQ_REPO,
               "engine": NVFP4_ENGINE,
@@ -474,7 +474,7 @@ MODELS = {
                                 "License) with Qwen3.8-Flash-Next's Qwen Community License 1.0: "
                                 "https://huggingface.co/nvidia/Qwen3.8-Flash-Next-NVFP4"},
     "NVFP4-QAD": {"about": "NVIDIA's FP4, trained for FP4 (NVIDIA's Qwen3.8-Flash-Next-FP4-Local) - slightly faster on short prompts; "
-                           "a 102 GB download that this PC turns into a Strata pack once (about 20-40 minutes, 110 GB more disk); "
+                           "a 102 GB download that this PC turns into a Cortex pack once (about 20-40 minutes, 110 GB more disk); "
                            "RTX 50 cards have FP4 tensor cores, other NVIDIA cards run it at 8-bit precision. It reads pictures (the shared Qwen3.8-Flash-Next encoder)",
                   "download_gb": 102.2, "prepare_gb": 110.0, "ram_gb": 80, "arena_gb": 68.0,
                   "families": ("nvfp4",), "nvidia_only": True, "vision": True, "repo": NVFP4_FP4LOCAL_REPO,
@@ -602,7 +602,7 @@ FAMILIES = {
              "sha256": GYRO_FILES,
              "license": "Qwen Community License 1.0 (Qwen3.8-Flash-Next's; the Gyro files are agentionai's quantization): "
                         "https://huggingface.co/agentionai/Qwen3.8-Flash-Next-Gyro-GGUF"},
-    "nvfp4": {"title": "Qwen3.8-Flash-Next (NVFP4)", "by": "NVFP4 packs by sergqwer (strata-nvfp4)",
+    "nvfp4": {"title": "Qwen3.8-Flash-Next (NVFP4)", "by": "NVFP4 packs by sergqwer (cortex-nvfp4)",
               "about": "4-bit NVFP4 experts, NVIDIA cards; a 128 GB download, ~80 GB of RAM to keep every expert in RAM",
               "tag": "nvfp4-", "name": "qwen3.8-flash-next-nvfp4", "ready": True,
               "mmproj_hf": hf("ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF"), "mmproj": "mmproj-Qwen3.8-Flash-Next-BF16.gguf",
@@ -610,7 +610,7 @@ FAMILIES = {
 }
 MMPROJ = "mmproj-Qwen3.8-Flash-Next-BF16.gguf"
 # Qwen3.6-35B-A3B (GGUF architecture qwen35moe), Unsloth's GGUFs with the MTP block: a family with an engine path of its
-# own (src/qwen35; `strata` switches to it from the file's architecture).  No pack, no expert profile, no separate MTP
+# own (src/qwen35; `cortex` switches to it from the file's architecture).  No pack, no expert profile, no separate MTP
 # draft layer: the engine reads the GGUF as it is, keeps every expert it can in VRAM and computes the rest on the CPU
 # (the hybrid mode), and drafts with the file's own MTP block.  Not in FAMILIES (whose entries are Flash-Next files with
 # packs): OWN_PATH_FAMILIES, offered in the same menu and installed by install_own_path.  NVIDIA (CUDA) and AMD (HIP)
@@ -636,17 +636,17 @@ OWN_PATH_FAMILIES = {
                           "Q8_0": {"about": "8-bit, the closest to the full model", "ram_gb": 52}},
                "sha256": QWEN36_FILES,
                # the engine's KV cache per context token: 10 attention layers + the MTP block, 2 KV heads x 256, K and
-               # V in fp32 (strata-q36)
+               # V in fp32 (cortex-q36)
                "kv_bytes_per_token": 11 * 2 * 256 * 2 * 4,
                "mtp": 2,                     # drafts per step (greedy requests): measured best on the R9700
                # pictures: Unsloth's mmproj (the same projector family as Flash-Next's: qwen3vl_merger) through
-               # strata-vision; a parallel slot's session: its KV cache (kv_bytes_per_token) and the recurrent state of
+               # cortex-vision; a parallel slot's session: its KV cache (kv_bytes_per_token) and the recurrent state of
                # the 30 GDN layers (state_gb)
                "vision": True, "state_gb": 0.07}
 }
 PREVIEW_FAMILIES = OWN_PATH_FAMILIES             # the earlier name (tools and tests that import it)
 
-# Every model file Strata downloads has a fixed size and SHA-256: (repository, file name) -> (bytes, sha256).  download()
+# Every model file Cortex downloads has a fixed size and SHA-256: (repository, file name) -> (bytes, sha256).  download()
 # checks the file against it as soon as it is whole (a wrong file is deleted and setup stops), and stops before the
 # download when the server's size is not the pinned one.  The files are fetched from the commits in HF_REVISIONS.
 REPO_PINS = {
@@ -664,12 +664,12 @@ ESP_VECTOR = ROOT / "data" / "experimental-speed-projection" / "Qwen3.8-Flash-Ne
 VISION_GPU_SMALL_RESERVE_MIB = 1000    # the tip for images on a <= 12 GB card (the engine's LOW line asked ~1003)
 VISION = {"gpu": {"max_tokens": 1024, "reserve_mib": 700},
           "cpu": {"max_tokens": 300, "reserve_mib": 0}}      # the CPU reader takes no VRAM: no reserve (serve/server.py adds 700 only for a GPU reader)
-EXE = "strata.exe" if WIN else "strata"
-VEXE = "strata-vision.exe" if WIN else "strata-vision"
-HVEXE = "strata-vision-hip.exe" if WIN else "strata-vision-hip"     # AMD: the picture reader on the GPU (tools/vision, STRATA_VISION_HIP)
+EXE = "cortex.exe" if WIN else "cortex"
+VEXE = "cortex-vision.exe" if WIN else "cortex-vision"
+HVEXE = "cortex-vision-hip.exe" if WIN else "cortex-vision-hip"     # AMD: the picture reader on the GPU (tools/vision, CORTEX_VISION_HIP)
 # MODEL-UPDATE Phase 1: the K-quant prompt kernels (Unsloth's UD-Q4/Q5/Q6_K_XL experts) are a library next to the CUDA
 # engine, opened only for those models; an engine without it runs them on the FP16 prompt path
-KQ_LIB = "strata_kq.dll" if WIN else "libstrata_kq.so"
+KQ_LIB = "cortex_kq.dll" if WIN else "libcortex_kq.so"
 
 
 # ------------------------------------------------------------------------------------------------ output
@@ -735,7 +735,7 @@ def ask(question, choices, default, yes):
 
 def _urlopen(req, timeout=None):
     """Every network request of this file goes through here: starting and serving never reach the network
-    (strata_control/acquisition.py), only an explicit setup, update or install does."""
+    (cortex_control/acquisition.py), only an explicit setup, update or install does."""
     acquisition.require("a download")
     return urllib.request.urlopen(req, timeout=timeout)
 
@@ -1093,7 +1093,7 @@ def two_socket_note(sockets) -> list[str]:
             "the config's args (START-HERE --calibrate measures it on this PC)"]
 
 
-# The engine's default count of CPU expert workers (include/strata/kernels/cpu/pool_plan.hpp, which tools/test_pool_plan.py
+# The engine's default count of CPU expert workers (include/cortex/kernels/cpu/pool_plan.hpp, which tools/test_pool_plan.py
 # keeps in step with these numbers).  Setup writes no worker count on an ordinary CPU: the engine picks it, from the
 # physical cores (not the SMT siblings), minus the host thread's core and a reserve on a big CPU, on the host thread's
 # socket, under a cap.  What setup does write (a hybrid CPU's count, the vision encoder's threads) is capped the same way.
@@ -1147,7 +1147,7 @@ def pool_workers_note(args, layout=None) -> list[str]:
            "more than its physical cores" if cores and asked + 1 > sum(cores) else
            "more than the cores of one CPU socket" if len(cores) > 1 and asked + 1 > cores[0] else
            "more than the memory bandwidth can feed")
-    return [f"the config asks for {asked} CPU expert workers, {why}: extra workers can make Strata slower. Recommended: "
+    return [f"the config asks for {asked} CPU expert workers, {why}: extra workers can make Cortex slower. Recommended: "
             f"--pool-workers {rec} (or remove the setting: the engine picks that by itself). It stays as you set it."]
 
 
@@ -1158,7 +1158,7 @@ def vision_threads(logical: int | None = None) -> int:
 
 
 def cpu_info():
-    """(name, avx2, avx512): avx512 means everything Strata's fast AVX-512 kernels use (F, BW, VL, VNNI, VBMI),
+    """(name, avx2, avx512): avx512 means everything Cortex's fast AVX-512 kernels use (F, BW, VL, VNNI, VBMI),
     the same test the engine makes (cpu_avx512_ok), not just AVX-512F."""
     name, avx2, avx512 = platform.processor() or "unknown CPU", False, False
     if WIN:
@@ -1203,9 +1203,9 @@ def _cpuid_floor() -> str:
 
 def cpu_floor(avx2: bool) -> str:
     """The experimental older-CPU build this PC needs (#394 #595 #623): "" with AVX2 (the normal engine), "avx" (Sandy /
-    Ivy Bridge, AMD Bulldozer), "none" (SSE4.2 + POPCNT: Nehalem, Westmere), or "unsupported".  STRATA_ISA_FLOOR=avx|
+    Ivy Bridge, AMD Bulldozer), "none" (SSE4.2 + POPCNT: Nehalem, Westmere), or "unsupported".  CORTEX_ISA_FLOOR=avx|
     none asks for that build on any PC (testing it on a newer one)."""
-    forced = os.environ.get("STRATA_ISA_FLOOR", "").strip().lower()
+    forced = os.environ.get("CORTEX_ISA_FLOOR", "").strip().lower()
     if forced in ("avx", "none"):
         return forced
     if avx2:
@@ -1316,7 +1316,7 @@ def compute_mode_warning(index: int, mode: str) -> str | None:
     """#1445: the warning for a card that is not in the Default compute mode, or None.  In Exclusive_Process only one
     process may hold a CUDA context, so the engine, the vision encoder and the tuning run cannot share the card
     ("CUDA-capable device(s) is/are busy or unavailable"); Prohibited allows none.  A warning only: it is the
-    administrator's setting, Strata never changes it."""
+    administrator's setting, Cortex never changes it."""
     if not mode or mode.lower() == "default" or mode.lower().startswith("n/a") or mode.lower().startswith("[n/a"):
         return None
     return (f"GPU {index} is in the compute mode {mode}, not Default: a second process cannot use the card while "
@@ -1376,10 +1376,10 @@ OLD_GPUS = None       # why Pascal / Volta cards are admitted in this run (old_g
 
 
 def experimental_sm60() -> bool:
-    """#295: STRATA_EXPERIMENTAL_SM60=1 admits Pascal (6.x) and Volta (7.0) cards, run by the experimental CUDA 12
-    engine (-DSTRATA_EXPERIMENTAL_SM60=ON).  So does naming such a card (--gpu N / --gpus), --cuda 12, or a PC that
+    """#295: CORTEX_EXPERIMENTAL_SM60=1 admits Pascal (6.x) and Volta (7.0) cards, run by the experimental CUDA 12
+    engine (-DCORTEX_EXPERIMENTAL_SM60=ON).  So does naming such a card (--gpu N / --gpus), --cuda 12, or a PC that
     has no newer card (old_gpus_opt_in)."""
-    return os.environ.get("STRATA_EXPERIMENTAL_SM60", "").strip() == "1" or OLD_GPUS is not None
+    return os.environ.get("CORTEX_EXPERIMENTAL_SM60", "").strip() == "1" or OLD_GPUS is not None
 
 
 def sm60_card(arch) -> bool:
@@ -1388,14 +1388,14 @@ def sm60_card(arch) -> bool:
 
 def old_gpus_opt_in(found, named=(), cuda=None, other=False):
     """Why this run may use Pascal / Volta cards (the experimental CUDA 12 engine), or None.  The cards are an opt-in:
-    the user named one (`named`: --gpu / --gpus), asked for --cuda 12, set STRATA_EXPERIMENTAL_SM60=1, or the PC has
+    the user named one (`named`: --gpu / --gpus), asked for --cuda 12, set CORTEX_EXPERIMENTAL_SM60=1, or the PC has
     no card the ready-made engine runs on and no supported AMD card (`other`; it used to stop there).  A PC with a
     newer card keeps recommending it."""
     old = [g for g in found if sm60_card(g["arch"])]
     if not old:
         return None
-    if os.environ.get("STRATA_EXPERIMENTAL_SM60", "").strip() == "1":
-        return "STRATA_EXPERIMENTAL_SM60=1"
+    if os.environ.get("CORTEX_EXPERIMENTAL_SM60", "").strip() == "1":
+        return "CORTEX_EXPERIMENTAL_SM60=1"
     if str(cuda) == "12":
         return "--cuda 12"
     picked = [g for g in old if g["index"] in set(named)]
@@ -1445,9 +1445,9 @@ def config_toolkit(cfg: dict) -> int:
 
 
 def gpu_problem(g, together=False):
-    """Why Strata cannot use this card, in plain words (None: it can)."""
+    """Why Cortex cannot use this card, in plain words (None: it can)."""
     if int(g["arch"]) < 75 and not (sm60_card(g["arch"]) and experimental_sm60()):
-        return (f"not supported - older than the RTX 20 series (compute capability {cc(g)}; Strata needs 7.5 or "
+        return (f"not supported - older than the RTX 20 series (compute capability {cc(g)}; Cortex needs 7.5 or "
                 "newer" + ("; experimental: choose it with --gpu " + str(g["index"]) + " (the CUDA 12 engine, "
                           "docs/OLDER_GPUS.md)" if sm60_card(g["arch"]) else "") + ")")
     if together and g["vram_gb"] < SPLIT_MIN_VRAM_GB - 0.5:
@@ -1499,7 +1499,7 @@ def parse_gpus(text, found) -> list:
         sel = [g["index"] for g in together_ok(found)]
         if not sel:
             gpu_table(found)
-            fail("--gpus all: this PC does not have two GPUs Strata can use together")
+            fail("--gpus all: this PC does not have two GPUs Cortex can use together")
         return sel
     try:
         sel = [int(x) for x in str(text).split(",") if x.strip()]
@@ -1520,7 +1520,7 @@ def check_gpus(sel, found, what="", yes=False, named=False) -> None:
         p = "not found on this PC" if g is None else gpu_problem(g, together)
         if p is None:
             continue
-        if named and g is not None and gpu_problem(g) is None:     # it runs Strata; only its VRAM is small
+        if named and g is not None and gpu_problem(g) is None:     # it runs Cortex; only its VRAM is small
             confirm_risk(f"GPU {i} ({g['name']}) has {g['vram_gb']:.0f} GB of VRAM: a card sharing the model needs "
                          f"{SPLIT_MIN_VRAM_GB} GB or more (it holds the dense weights of its layers and its own prompt "
                          "buffers), so the model may not start, or run slower than without it", True, yes,
@@ -1535,7 +1535,7 @@ def check_gpus(sel, found, what="", yes=False, named=False) -> None:
         ones = " or ".join(f"--gpu {x['index']}" for x in single)
         both = "--gpus " + ",".join(str(x["index"]) for x in can) if can else ""
         hint = ((f"use these together: {both}" + (f" (or one card: {ones})" if not together else "")) if can else
-                f"use one card: {ones}" if single else "Strata needs an NVIDIA RTX 20 series or newer card")
+                f"use one card: {ones}" if single else "Cortex needs an NVIDIA RTX 20 series or newer card")
         fail(f"GPU {i}{'' if g is None else ' (' + g['name'] + ')'} {what}cannot be used: {p}", hint)
 
 
@@ -1568,7 +1568,7 @@ def engine_runs_on(g, toolkit=13) -> bool:
 
 def start_gpus(text):
     """--gpus when starting an installed model: NVIDIA cards as nvidia-smi numbers them, or on a PC whose AMD cards
-    are the ones Strata can use, AMD cards as setup lists them ("all": every supported AMD card)."""
+    are the ones Cortex can use, AMD cards as setup lists them ("all": every supported AMD card)."""
     if not text:
         return None
     found = gpus()
@@ -1596,13 +1596,13 @@ def choose_gpus(a, found) -> list:
     single = sorted([g for g in found if gpu_problem(g) is None], key=lambda x: (-round(x["vram_gb"]), x["index"]))
     if not single:
         gpu_table(found)
-        fail("none of your GPUs can run Strata", "it needs an NVIDIA RTX 20 series or newer (compute capability 7.5+)")
+        fail("none of your GPUs can run Cortex", "it needs an NVIDIA RTX 20 series or newer (compute capability 7.5+)")
     can = together_ok(found)
     if not can:
         return [single[0]["index"]]
-    # the owner's rule (strata_control/gpu_fit.py, shared with the app and `strata launch`): the model goes on the LARGEST card + RAM first;
+    # the owner's rule (cortex_control/gpu_fit.py, shared with the app and `cortex launch`): the model goes on the LARGEST card + RAM first;
     # the second card is offered as a layer split and recommended only when the model does not fit one card (with RAM) or would be too tight
-    from strata_control import gpu_fit
+    from cortex_control import gpu_fit
     mem = None
     d = MODELS.get(getattr(a, "model", None) or "")
     if d:
@@ -1611,7 +1611,7 @@ def choose_gpus(a, found) -> list:
     res = gpu_fit.options(mem if mem is not None else 0.0, ram_gb(), cards)
     by_key = {o["key"]: o for o in res["options"]}
     say()
-    say("  Strata first tries the model on your largest GPU plus the PC's memory; a second GPU is offered as a layer split")
+    say("  Cortex first tries the model on your largest GPU plus the PC's memory; a second GPU is offered as a layer split")
     say("  (each card holds the experts of its own layers: more room, prompts read about 20% faster; details: docs/MULTI_GPU.md).")
     if mem is None:
         say("  (the model is chosen below; the numbers here are for the recommended size when you name one: --model)")
@@ -1760,7 +1760,7 @@ def offer_together(cfg_path: Path, cfg: dict, yes: bool) -> dict:
     # #642: the engines from RESIDENT_SPLIT_ENGINE keep it on both cards, so they are offered as for any config
     resident = "--resident-experts" in cfg.get("args", []) and not resident_split()
     say()
-    say("  This PC has " + " and ".join(gpu_name(g) for g in pair) + ": Strata can share the model across both.")
+    say("  This PC has " + " and ".join(gpu_name(g) for g in pair) + ": Cortex can share the model across both.")
     say("  Together they hold about twice the model's experts and read prompts about 20% faster (docs/MULTI_GPU.md).")
     if resident:
         say("  This model runs in the low-RAM mode with its experts kept in RAM, on one GPU (recommended: steady RAM")
@@ -1797,7 +1797,7 @@ def offer_together(cfg_path: Path, cfg: dict, yes: bool) -> dict:
 
 
 def gpu_info(pick=None):
-    """The GPU Strata runs on: `pick` (nvidia-smi's number) if given, else the one with the most VRAM (ties: the
+    """The GPU Cortex runs on: `pick` (nvidia-smi's number) if given, else the one with the most VRAM (ties: the
     lower number).  None when there is no NVIDIA GPU.  The dict also says how many there are ("count")."""
     found = gpus()
     if not found:
@@ -1814,17 +1814,17 @@ def gpu_info(pick=None):
 
 def find_nvcc(below=None):
     """The newest CUDA toolkit's nvcc and its (major, minor); with `below`, the newest older than that version.
-    #601: STRATA_NVCC=<path to nvcc> is the only one considered (a newer toolkit beside it that cannot build on this
+    #601: CORTEX_NVCC=<path to nvcc> is the only one considered (a newer toolkit beside it that cannot build on this
     PC - CUDA 12.9 with glibc 2.43 - is not taken instead)."""
-    pick = os.environ.get("STRATA_NVCC")
+    pick = os.environ.get("CORTEX_NVCC")
     if pick:
         if not Path(pick).exists():
-            warn(f"STRATA_NVCC={pick}: no such file; looking for a CUDA toolkit as usual")
+            warn(f"CORTEX_NVCC={pick}: no such file; looking for a CUDA toolkit as usual")
         else:
             v = re.search(r"release (\d+)\.(\d+)", out([pick, "--version"]))
             ver = (int(v.group(1)), int(v.group(2))) if v else None
             if ver and below is not None and ver >= below:
-                warn(f"STRATA_NVCC={pick} is CUDA {ver[0]}.{ver[1]}; this build needs one older than "
+                warn(f"CORTEX_NVCC={pick} is CUDA {ver[0]}.{ver[1]}; this build needs one older than "
                      f"{below[0]}.{below[1]}")
                 return (None, None)
             return (pick, ver) if ver else (None, None)
@@ -1856,9 +1856,9 @@ def find_vcvars(cuda_v=None):
     The version range is CUDA's requirement alone, so a caller with no CUDA (`cuda_v is None`) asks vswhere for no
     range at all: the CPU image encoder is built by MSVC, which is happy with any version (tools/hip/build_windows.bat
     already calls vswhere that way).  With the range applied to every caller, a machine whose only C++ tools are
-    Visual Studio 2026 gets None back and nothing can be built there (#881).  STRATA_VCVARS=<vcvars64.bat> picks one
+    Visual Studio 2026 gets None back and nothing can be built there (#881).  CORTEX_VCVARS=<vcvars64.bat> picks one
     by hand, for an install vswhere cannot use."""
-    override = os.environ.get("STRATA_VCVARS")
+    override = os.environ.get("CORTEX_VCVARS")
     if override:
         v = Path(override)
         return v if v.exists() else None
@@ -1912,7 +1912,7 @@ def drop_archive(z: Path) -> None:
 # each connection): download() takes the file in DL_CHUNK pieces over several connections, writes each piece at its own offset,
 # and keeps the finished pieces in <name>.part.chunks so a stopped download continues where it was.  Anything that is not a
 # ranged file of known length (no Range support, no length, a small file) is one stream, as before.
-DL_CONNECTIONS = 8              # STRATA_DL_CONNECTIONS=1 restores one stream (for testers)
+DL_CONNECTIONS = 8              # CORTEX_DL_CONNECTIONS=1 restores one stream (for testers)
 DL_CHUNK = 32 << 20             # bytes per ranged request; a failed request loses at most this much
 DL_MIN_PARALLEL = 256 << 20     # smaller files are one stream
 DL_CHUNK_TRIES = 5              # tries per piece (1, 2, 4, 8 s apart) before the round is given up and run again
@@ -1922,8 +1922,8 @@ DL_SAVE_EVERY = 5.0             # seconds between writes of the progress file
 
 
 def dl_connections() -> int:
-    """How many connections a big download uses: STRATA_DL_CONNECTIONS, else DL_CONNECTIONS (1 = one stream)."""
-    raw = (os.environ.get("STRATA_DL_CONNECTIONS") or "").strip()
+    """How many connections a big download uses: CORTEX_DL_CONNECTIONS, else DL_CONNECTIONS (1 = one stream)."""
+    raw = (os.environ.get("CORTEX_DL_CONNECTIONS") or "").strip()
     try:
         n = int(raw) if raw else DL_CONNECTIONS
     except ValueError:
@@ -1972,7 +1972,7 @@ class _Source:
         with self.lock:
             if stale is not None and self.final is not None and self.final != stale:
                 return self.final                        # another connection already got a fresh address
-            req = urllib.request.Request(self.url, headers={"User-Agent": "strata-setup", "Range": "bytes=0-0"})
+            req = urllib.request.Request(self.url, headers={"User-Agent": "cortex-setup", "Range": "bytes=0-0"})
             with _urlopen(req, timeout=60) as r:
                 cr = (r.headers.get("Content-Range") or "").strip()
                 if r.status != 206 or cr not in (f"bytes 0-0/{self.total}", "bytes 0-0/*"):
@@ -2042,7 +2042,7 @@ def _prefix_bytes(done: set, total: int) -> int:
 
 def _load_pieces(part: Path, total: int) -> set:
     """The finished pieces of an earlier run.  <name>.part.chunks lists them; a .part without it comes from one stream
-    (an older setup, or STRATA_DL_CONNECTIONS=1): its bytes are a run from the start, so those pieces are finished."""
+    (an older setup, or CORTEX_DL_CONNECTIONS=1): its bytes are a run from the start, so those pieces are finished."""
     side = part.with_name(part.name + ".chunks")
     n = -(-total // DL_CHUNK)
     try:
@@ -2115,7 +2115,7 @@ def _fetch_piece(src: _Source, st: _Pieces, f, i: int):
         url, err, wait = None, None, DL_BACKOFF * 2 ** tries
         try:
             url = src.get()
-            req = urllib.request.Request(url, headers={"User-Agent": "strata-setup", "Range": f"bytes={pos}-{end}"})
+            req = urllib.request.Request(url, headers={"User-Agent": "cortex-setup", "Range": f"bytes={pos}-{end}"})
             with _urlopen(req, timeout=60) as r:
                 if r.status != 206 or not (r.headers.get("Content-Range") or "").strip().startswith(f"bytes {pos}-{end}/"):
                     raise _NoRange(f"HTTP {r.status}")
@@ -2264,7 +2264,7 @@ def download_single(url: str, part: Path, total: int, label: str):
         if total and have >= total:                    # stopped after the last byte, before the rename: nothing to
             break                                      # ask for (a range past the end is a 416, retried 30 times)
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "strata-setup", "Range": f"bytes={have}-"})
+            req = urllib.request.Request(url, headers={"User-Agent": "cortex-setup", "Range": f"bytes={have}-"})
             with _urlopen(req, timeout=60) as r, open(part, "ab" if have else "wb") as f:
                 if have and r.status != 206:                     # the server ignored the range: start over
                     f.seek(0)
@@ -2320,14 +2320,14 @@ def download(url, dst: Path, what=None):
     pin = REPO_PINS.get(ms[0], {}).get(ms[1].rsplit("/", 1)[-1]) if ms is not None else file_pin(url)
     for attempt in range(5):
         try:
-            req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "strata-setup"})
+            req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "cortex-setup"})
             total = int(_urlopen(req, timeout=60).headers.get("Content-Length", 0))
             break
         except urllib.error.HTTPError as e:
             if e.code == 404 and hf_unpinned(url) != url:  # the pinned revision is gone from the repository
                 if not allow_unpinned():
                     fail(f"the pinned version of {what or dst.name} is no longer on Hugging Face",
-                         "update Strata: a newer version pins the files that are there now")
+                         "update Cortex: a newer version pins the files that are there now")
                 warn(f"{what or dst.name}: not at the pinned revision any more; downloading the repository's "
                      "current file (not checked against a SHA-256)")
                 url = hf_unpinned(url)
@@ -2344,7 +2344,7 @@ def download(url, dst: Path, what=None):
             time.sleep(5)
     if pin and total and total != pin[0]:              # not the pinned file: stop before the download, not after
         fail(f"{what or dst.name} is {total:,} bytes on {url.split('/')[2]}, not the pinned {pin[0]:,}",
-             "update Strata (the file there has changed since this version pinned it)")
+             "update Cortex (the file there has changed since this version pinned it)")
     if dst.exists() and total and dst.stat().st_size == total:    # finished by an older setup (no mark yet)
         mark(dst)
         ok(f"{what or dst.name} already downloaded")
@@ -2407,13 +2407,13 @@ def gguf_dir_shards(folder: Path, fam: dict, model: str) -> list[Path]:
 # #444: the quantization in a GGUF's name (Unsloth's UD-IQ3_XXS, a K-quant's Q2_K_XL, a GSQ-RCO IQ3_S, ...)
 GGUF_QUANT = re.compile(r"(?<![A-Za-z0-9])((?:UD-)?(?:I?Q\d+(?:_[A-Za-z0-9]+)*|BF16|F16|F32))"
                         r"(?=-\d{5}-of-\d{5}\.gguf$|\.gguf$)", re.I)
-SUPPORTED_GGUFS = ("Strata runs ISTA-DASLab's GSQ-RCO files (Qwen3.8-Flash-Next Q2_0, IQ2_XS, IQ3_XXS, IQ3_S; Swift "
+SUPPORTED_GGUFS = ("Cortex runs ISTA-DASLab's GSQ-RCO files (Qwen3.8-Flash-Next Q2_0, IQ2_XS, IQ3_XXS, IQ3_S; Swift "
                    "1.5's; the Coder's IQ1_M) and Unsloth's UD-IQ4_XS, UD-Q4_K_XL, UD-Q5_K_XL, UD-Q6_K_XL and Q8_0 "
                    "only: other GGUFs (Unsloth's UD-IQ3_XXS or UD-Q2_K_XL, other K-quant files) cannot be used")
 
 
 def gguf_unsupported(name: str) -> str | None:
-    """#444: the quantization a GGUF's name says, when it is one Strata cannot run (not a setup size); else None."""
+    """#444: the quantization a GGUF's name says, when it is one Cortex cannot run (not a setup size); else None."""
     m = GGUF_QUANT.search(name)
     return m.group(1) if m and m.group(1).upper() not in MODELS and not name.lower().startswith("mmproj") else None
 
@@ -2432,12 +2432,12 @@ def gguf_choice(name: str) -> tuple | None:
 
 def gguf_dir_problem(folder: Path, first: Path, fam: dict, model: str) -> tuple | None:
     """#444: (message, hint) when --gguf-dir has no file setup can use for this choice: the chosen shard is a GGUF
-    Strata cannot run (Unsloth's UD-IQ3_XXS taken for IQ3_XXS by its name), or it is missing and the folder holds
+    Cortex cannot run (Unsloth's UD-IQ3_XXS taken for IQ3_XXS by its name), or it is missing and the folder holds
     other GGUFs - then the hint names the --family/--model of the usable ones.  None otherwise (a missing shard in a
     folder without GGUFs stays check_shards' "missing")."""
     bad = gguf_unsupported(first.name) if first.exists() else None
     if bad:
-        return f"{first.name} is {bad}, a GGUF Strata cannot run", SUPPORTED_GGUFS
+        return f"{first.name} is {bad}, a GGUF Cortex cannot run", SUPPORTED_GGUFS
     if first.exists():
         return None
     firsts = sorted(p.name for p in folder.glob("*.gguf")
@@ -2572,7 +2572,7 @@ def resident_budget_gib(model, ram, kv_ram_gb=0.0) -> int:
 
 # MODEL-UPDATE Phase 2: Unsloth's files keep every expert in RAM (a pinned arena, as ISTA's files do) where the experts
 # and this much more fit the PC's RAM; the RAM budget (--resident-budget-gib: the hottest experts in RAM, the rest read
-# from the GGUF in place) only below that.  The rule and the 16 GiB are sergqwer's fork (sergqwer/strata-nvfp4,
+# from the GGUF in place) only below that.  The rule and the 16 GiB are sergqwer's fork (sergqwer/cortex-nvfp4,
 # 0.1.42-nvfp4.2, MIT): there, on 128 GB with an RTX 5090, UD-Q4_K_XL decoded at 169 tokens/s and read a 32K prompt in
 # 4.9 s with every expert in RAM, against 118 tokens/s and 30 s in the budget mode.
 UNSLOTH_RESIDENT_BESIDE_GB = 16
@@ -2590,7 +2590,7 @@ def unsloth_budget(model, ram, gpu=None, asked=None) -> bool:
 def images_default(model, family, ram, gpu=None) -> bool:
     """Is "images on" setup's default answer (the question's Enter, and --yes) for this choice?  Owner rule 2026-10-18: pictures are on
     wherever the model can read them - the original Flash-Next, Swift and Coder files, Unsloth's, NVFP4 - on every make of card; which
-    reader runs is strata_control/vision_reader.py's rule (the CPU under 24 GB of VRAM, the GPU from 24 GB).  The CPU reader takes no
+    reader runs is cortex_control/vision_reader.py's rule (the CPU under 24 GB of VRAM, the GPU from 24 GB).  The CPU reader takes no
     VRAM (no --vram-reserve-mib), so a small card is no exception."""
     return MODELS.get(model, {}).get("vision", FAMILIES.get(family, {}).get("vision")) is not False
 
@@ -2598,7 +2598,7 @@ def images_default(model, family, ram, gpu=None) -> bool:
 unsloth_images_default = images_default     # the earlier name
 
 
-IMAGES_GPU_ENCODER_MIN_VRAM_GB = 23.5   # = strata_control/vision_reader.py GPU_MIN_VRAM_GB, the one place for the rule; #2406: below this the images answer "yes" gets the CPU encoder (a card of 12-16 GB: the GPU
+IMAGES_GPU_ENCODER_MIN_VRAM_GB = 23.5   # = cortex_control/vision_reader.py GPU_MIN_VRAM_GB, the one place for the rule; #2406: below this the images answer "yes" gets the CPU encoder (a card of 12-16 GB: the GPU
                                         # encoder's ~1.1-1.4 GB is ~850 expert slots lost, 3-5% of decode and prompt on P100 / A4000
                                         # 16 GB (Linux, IQ3_S / IQ3_XXS), and 35-60% on an RTX 4080 SUPER under Windows as reported)
 
@@ -2690,7 +2690,7 @@ def get_llama_cpp():
     try:
         with zipfile.ZipFile(z) as f:
             # llama.cpp's own web UI (tools/ui) is not used, and its deep paths passed Windows' 260-character limit in a
-            # folder like Downloads\Strata-main\Strata-main (#206)
+            # folder like Downloads\Cortex-main\Cortex-main (#206)
             f.extractall(tmp, [m for m in f.namelist() if "/tools/ui/" not in m])
     except zipfile.BadZipFile:
         # #1797: do not let the .done mark make every later run reuse a damaged source archive.
@@ -2757,10 +2757,10 @@ def pip_install(packages, what):
     if CONTROL:                                        # the app ships these (hash-locked); nothing is installed here
         missing = control_missing_packages()
         if missing:
-            fail("this copy of Strata Control lacks " + ", ".join(missing), "reinstall the Strata app")
+            fail("this copy of Cortex Control lacks " + ", ".join(missing), "reinstall the Cortex app")
         ok(f"{what}: bundled with the app")
         return
-    stamp = Path(sys.prefix) / ".strata-pip.json"
+    stamp = Path(sys.prefix) / ".cortex-pip.json"
     have = json.loads(stamp.read_text(encoding="utf-8")) if stamp.exists() else []
     bare = {p.lower() for p in have if req_name(p) == p.lower()}
     need = [p for p in packages if p not in have and req_name(p) not in bare
@@ -2805,34 +2805,34 @@ ROCM_INDEXES = {"gfx1100": "https://rocm.nightlies.amd.com/v2/gfx110X-dgpu/",   
                 "gfx1030": "https://rocm.nightlies.amd.com/v2/gfx103X-all/",
                 "gfx1031": "https://rocm.nightlies.amd.com/v2/gfx103X-all/",
                 "gfx1151": "https://rocm.nightlies.amd.com/v2/gfx1151/",       # Strix Halo (docs/STRIX_HALO.md)
-                "gfx1150": "https://rocm.nightlies.amd.com/v2/gfx1150/",       # Strix Point: only with STRATA_EXPERIMENTAL_GFX1150=1
-                "gfx1103": "https://rocm.nightlies.amd.com/v2/gfx110X-all/"}   # Radeon 780M: only with STRATA_EXPERIMENTAL_GFX1103=1
+                "gfx1150": "https://rocm.nightlies.amd.com/v2/gfx1150/",       # Strix Point: only with CORTEX_EXPERIMENTAL_GFX1150=1
+                "gfx1103": "https://rocm.nightlies.amd.com/v2/gfx110X-all/"}   # Radeon 780M: only with CORTEX_EXPERIMENTAL_GFX1103=1
 # The TheRock nightly indexes are pruned and move on, and each GPU family's index holds its own range (#1103: gfx103X-all
 # starts at 7.13.0a20260422 and has no 7.10; #1267: the 7.10 wheel segfaults on a Strix Halo with kernel 7.2.8), so one
 # version for every card cannot work.  The wheel is chosen per index (the family): a preferred version, tried first; when
 # the index no longer offers it, the newest one of the same 7.x line, else of the same major, with a warning (rocm_pick).
-# STRATA_ROCM_VERSION still forces one exact version (no lookup).
-ROCM_VERSION_DEFAULT = "7.10.0a20251120"                 # what Strata's HIP build was tested with (gfx120X, gfx110X)
+# CORTEX_ROCM_VERSION still forces one exact version (no lookup).
+ROCM_VERSION_DEFAULT = "7.10.0a20251120"                 # what Cortex's HIP build was tested with (gfx120X, gfx110X)
 ROCM_FAMILY_PINS = {"gfx103X-all": "7.13.0a20260515",    # #1103: 7.13.0a20260515 runs; the 7.14 nightlies time out
                     "gfx110X-all": "7.10.0a20251121",    # the experimental gfx1103: this index has no ...20251120
                     "gfx1151": "7.14.0a20260608"}        # #1267: 7.14.0a20260529 to 20260608 run on kernel 7.2.8; the 7.10 wheel segfaults
-ROCM_VERSION_OVERRIDE = os.environ.get("STRATA_ROCM_VERSION") or None
+ROCM_VERSION_OVERRIDE = os.environ.get("CORTEX_ROCM_VERSION") or None
 ROCM_VERSION = ROCM_VERSION_OVERRIDE or ROCM_VERSION_DEFAULT   # kept for callers that read one version
 ROCM_SYSTEM_MIN = (7, 0)       # an older system ROCm is passed over for the wheels (gfx1201 needs ROCm 6.4 or newer)
-# STRATA_EXPERIMENTAL_GFX1103=1 (opt-in, unsupported): the Radeon 780M / 760M / 740M iGPU (Ryzen 7040 / 8040, gfx1103) is taken
+# CORTEX_EXPERIMENTAL_GFX1103=1 (opt-in, unsupported): the Radeon 780M / 760M / 740M iGPU (Ryzen 7040 / 8040, gfx1103) is taken
 # as a unified-memory AMD card like Strix Halo, with the native dot4 and gfx11 WMMA kernels, the gfx1103 exact speed switches
 # and a hipBLASLt table when one matches (measured on one machine: Ryzen 7 8745HS).  Unset: unchanged.
-GFX1103_OPT_IN = os.environ.get("STRATA_EXPERIMENTAL_GFX1103") == "1"
-# STRATA_EXPERIMENTAL_GFX1150=1 (opt-in, unvalidated): the Radeon 890M / 880M iGPU (Ryzen AI 300, Strix Point, gfx1150)
+GFX1103_OPT_IN = os.environ.get("CORTEX_EXPERIMENTAL_GFX1103") == "1"
+# CORTEX_EXPERIMENTAL_GFX1150=1 (opt-in, unvalidated): the Radeon 890M / 880M iGPU (Ryzen AI 300, Strix Point, gfx1150)
 # is taken as a unified-memory AMD card like Strix Halo.  The engine builds and runs for gfx1150 from 0.1.40.2 (#1217;
 # tools/hip/gfx1150-hipblaslt-100401.txt is calibrated on it), but no release ships a ready-made Windows engine for it:
-# build one with `STRATA_HIP_ARCHS=gfx1150 tools\hip\build_windows.bat` and start setup with `--prebuilt dist\`.
+# build one with `CORTEX_HIP_ARCHS=gfx1150 tools\hip\build_windows.bat` and start setup with `--prebuilt dist\`.
 # Unset: unchanged.
-GFX1150_OPT_IN = os.environ.get("STRATA_EXPERIMENTAL_GFX1150") == "1"
+GFX1150_OPT_IN = os.environ.get("CORTEX_EXPERIMENTAL_GFX1150") == "1"
 AMD_ARCHS = ("gfx1100", "gfx1101", "gfx1102", "gfx1200", "gfx1201", "gfx1030", "gfx1031", "gfx1151") \
             + (("gfx1103",) if GFX1103_OPT_IN else ()) + (("gfx1150",) if GFX1150_OPT_IN else ())
 # The exact (bit-identical) speed switches the engine turns on by default on gfx1151 (src/core/arch_defaults.cpp), less
-# STRATA_HCD_EXACT: that one copies the gfx1151 hipBLASLt table's solutions 1176 / 1177, and the gfx1103 table
+# CORTEX_HCD_EXACT: that one copies the gfx1151 hipBLASLt table's solutions 1176 / 1177, and the gfx1103 table
 # (tools/hip/gfx1103-hipblaslt-100401.txt) picks others, so it would only report that it cannot run.  A gfx1103 install
 # takes them from here (setup writes them into the config's "env"), the same way the table is written: one 780M measured
 # the same greedy answers with all 17 on and with all 17 off, +13% to +15% prompt and decode +3.2% (the decode half
@@ -2840,14 +2840,14 @@ AMD_ARCHS = ("gfx1100", "gfx1101", "gfx1102", "gfx1200", "gfx1201", "gfx1030", "
 # empty), so this keeps the default path byte-identical.
 GFX1103_SWITCHES = {
     # prompt
-    "STRATA_GDN_HEAD": "1", "STRATA_GDN_PP": "2", "STRATA_GDN_CONVL2": "1", "STRATA_GDN_NOY": "1",
-    "STRATA_CVEC_FUSE": "1", "STRATA_PF_PAD": "1",
+    "CORTEX_GDN_HEAD": "1", "CORTEX_GDN_PP": "2", "CORTEX_GDN_CONVL2": "1", "CORTEX_GDN_NOY": "1",
+    "CORTEX_CVEC_FUSE": "1", "CORTEX_PF_PAD": "1",
     # decode
-    "STRATA_Q8_PACKED": "1", "STRATA_Q6_PACKED": "1", "STRATA_MMVF_ROWS": "1", "STRATA_ATTN_LANECELL": "1",
-    "STRATA_EXPERT_V2": "1", "STRATA_TSUM": "1", "STRATA_LFUSE": "1", "STRATA_GDN_SPLIT": "1",
-    "STRATA_QFUSE": "1", "STRATA_PLE_BATCH": "1", "STRATA_SH_STREAM": "1",
+    "CORTEX_Q8_PACKED": "1", "CORTEX_Q6_PACKED": "1", "CORTEX_MMVF_ROWS": "1", "CORTEX_ATTN_LANECELL": "1",
+    "CORTEX_EXPERT_V2": "1", "CORTEX_TSUM": "1", "CORTEX_LFUSE": "1", "CORTEX_GDN_SPLIT": "1",
+    "CORTEX_QFUSE": "1", "CORTEX_PLE_BATCH": "1", "CORTEX_SH_STREAM": "1",
 }
-# The same set for a gfx1150 install (Radeon 890M / 880M): less STRATA_HCD_EXACT as well, because a gfx1150 table picks other
+# The same set for a gfx1150 install (Radeon 890M / 880M): less CORTEX_HCD_EXACT as well, because a gfx1150 table picks other
 # solutions than the gfx1151 one.  The Radeon 890M report (docs/AMD_HIP.md; bench/results/2026-10-07-community-gfx1150) measured the
 # same greedy answers with all 17 on and with all 17 off, decode +2% and prompts +3-6%.  The engine's arch defaults are not used
 # for gfx1150 (src/core/arch_defaults_test.cpp asserts gfx1150 stays empty), so this keeps the default path byte-identical.
@@ -2871,7 +2871,7 @@ AMD_CARDS = ("the RX 7900 XT / XTX (gfx1100), RX 7800 XT / 7700 XT (gfx1101), RX
 
 
 def rocm_index(arch):
-    return os.environ.get("STRATA_ROCM_INDEX") or ROCM_INDEXES[arch]
+    return os.environ.get("CORTEX_ROCM_INDEX") or ROCM_INDEXES[arch]
 
 
 def rocm_family(index):
@@ -2903,9 +2903,9 @@ def rocm_pick(available, preferred):
         if hits:
             got = max(hits, key=rocm_vkey)
             return got, (f"ROCm {preferred} is not on this index any more: using {got}, the newest of the same {what} "
-                         f"(set STRATA_ROCM_VERSION to choose another)")
+                         f"(set CORTEX_ROCM_VERSION to choose another)")
     return preferred, (f"ROCm {preferred} is not on this index and nothing of its major version is: "
-                       f"{available[0]} to {available[-1]} are (set STRATA_ROCM_VERSION to one of them)")
+                       f"{available[0]} to {available[-1]} are (set CORTEX_ROCM_VERSION to one of them)")
 
 
 def rocm_wanted(index, listing=None):
@@ -2917,7 +2917,7 @@ def rocm_wanted(index, listing=None):
         preferred = ROCM_FAMILY_PINS.get(rocm_family(index), ROCM_VERSION_DEFAULT)
         if listing is None:
             try:
-                req = urllib.request.Request(index.rstrip("/") + "/rocm/", headers={"User-Agent": "strata-setup"})
+                req = urllib.request.Request(index.rstrip("/") + "/rocm/", headers={"User-Agent": "cortex-setup"})
                 with _urlopen(req, timeout=30) as r:
                     listing = r.read().decode("utf-8", "replace")
             except (OSError, ValueError):
@@ -2947,7 +2947,7 @@ UMA_OS_LEFT_GB = 6             # the share of the unified memory kept for the OS
 
 
 def gfx_arch_is(arch, name) -> bool:
-    """include/strata/kernels/gfx_arch.hpp's gfx_arch_is: `arch` (gcnArchName, "gfx1151" or "gfx1151:sramecc-:xnack-")
+    """include/cortex/kernels/gfx_arch.hpp's gfx_arch_is: `arch` (gcnArchName, "gfx1151" or "gfx1151:sramecc-:xnack-")
     is exactly `name`, never a prefix: gfx1150 and gfx1152 are not gfx1151 (and gfx1151 is not gfx115)."""
     arch = str(arch or "")
     return arch == name or arch.startswith(name + ":")
@@ -3014,7 +3014,7 @@ def mem_have(model: str, ram: float, vram: float = 0.0) -> float:
 # below the tiers' names (40 / 48 / 64 GB) because the OS reports a little less than the installed memory.  64 GB and
 # up: IQ3_S (the original; Swift 1.5's IQ3_S is an equal choice), 48 GB: IQ3_XXS, 40 GB: Swift 1.5's IQ2_XS, with Gyro-M
 # (35 GB) as the other choice.  Below 40 GB the older rules stand (Gyro-S, or the Coder for code).  The Mac has its own
-# rules (strata_control/mac_fit.py).  tools/strata_mcp.py's recommend() holds the same floors (the app and `strata launch`).
+# rules (cortex_control/mac_fit.py).  tools/cortex_mcp.py's recommend() holds the same floors (the app and `cortex launch`).
 MEMORY_TIERS = ((62.0, "qwen", "IQ3_S"), (46.0, "qwen", "IQ3_XXS"), (38.0, "swift", "IQ2_XS"))
 
 
@@ -3074,19 +3074,19 @@ def installed_size(family: str, names: list, have: list) -> str | None:
 
 def unsloth_default_env(family: str, model: str, hip: bool, in_budget: bool) -> dict:
     """0.1.44 (owner, review-quants.md section 5): the run-config "env" setup writes for Unsloth's files.
-    STRATA_MMQ_KQ=1 (the K-quant MMQ prompt kernels) for UD-Q5_K_XL and UD-Q6_K_XL, where its prompt-path KL is equal
-    or better than the FP16 path's; UD-Q4_K_XL keeps it opt-in.  STRATA_HC_Q8=1 on CUDA for the UD-* files (the
+    CORTEX_MMQ_KQ=1 (the K-quant MMQ prompt kernels) for UD-Q5_K_XL and UD-Q6_K_XL, where its prompt-path KL is equal
+    or better than the FP16 path's; UD-Q4_K_XL keeps it opt-in.  CORTEX_HC_Q8=1 on CUDA for the UD-* files (the
     GGUF's own Q8_0 hyper-connection projections, closer to the file and faster; the GSQ-RCO packs are untouched).
-    STRATA_ROUTE_TAIL_SKIP=0 where every expert is in RAM (the skip costs KL there); the RAM-budget mode keeps it."""
+    CORTEX_ROUTE_TAIL_SKIP=0 where every expert is in RAM (the skip costs KL there); the RAM-budget mode keeps it."""
     env = {}
     if family != "unsloth":
         return env
     if model in ("UD-Q5_K_XL", "UD-Q6_K_XL"):
-        env["STRATA_MMQ_KQ"] = "1"
+        env["CORTEX_MMQ_KQ"] = "1"
     if not hip and model.startswith("UD-"):
-        env["STRATA_HC_Q8"] = "1"
+        env["CORTEX_HC_Q8"] = "1"
     if not in_budget:
-        env["STRATA_ROUTE_TAIL_SKIP"] = "0"
+        env["CORTEX_ROUTE_TAIL_SKIP"] = "0"
     return env
 
 
@@ -3157,13 +3157,13 @@ def amd_device_access_problem(dev="/dev", access=os.access, listing=glob.glob) -
 
 def gfx1103_notes(gpu, ram) -> list[str]:
     """What setup tells the owner of a Radeon 780M / 760M / 740M (Phoenix / Hawk Point, gfx1103, unified memory): never
-    the Strix Halo text, which is about another chip (gfx1151).  Opt-in only (STRATA_EXPERIMENTAL_GFX1103=1)."""
+    the Strix Halo text, which is about another chip (gfx1151).  Opt-in only (CORTEX_EXPERIMENTAL_GFX1103=1)."""
     notes = [f"  Radeon 780M / 760M class (gfx1103, Ryzen 7040 / 8040): the CPU and the GPU share one memory pool ({ram:.0f} GB "
              f"seen by the OS + a {gpu.get('dedicated_gb', 0.0):.1f} GB BIOS carve-out), so the model's experts live in "
              "that pool and the expert cache is sized from the memory the OS can give back."]
     notes.append("  " + ("The engine is compiled here for gfx1103" if not WIN else "This GPU has no ready-made Windows engine")
                  + " with the native dot4 and WMMA kernels and the 780M's exact speed switches"
-                 + " (experimental opt-in, STRATA_EXPERIMENTAL_GFX1103=1; measured on one machine, not validated on a real "
+                 + " (experimental opt-in, CORTEX_EXPERIMENTAL_GFX1103=1; measured on one machine, not validated on a real "
                  "card): see docs/AMD_HIP.md and docs/RADEON_780M.md. This is not a Strix Halo.")
     if not WIN and gpu.get("shared_gb", 0) < 0.75 * ram - 1:
         notes.append(f"!the GPU can reach {gpu.get('shared_gb', 0):.0f} GB of shared memory (the GTT pool; the kernel's "
@@ -3174,14 +3174,14 @@ def gfx1103_notes(gpu, ram) -> list[str]:
 
 def gfx1150_notes(gpu, ram) -> list[str]:
     """What setup tells the owner of a Radeon 890M / 880M (Ryzen AI 300, Strix Point, gfx1150, unified memory): never
-    the Strix Halo text, which is about another chip (gfx1151).  Opt-in only (STRATA_EXPERIMENTAL_GFX1150=1)."""
+    the Strix Halo text, which is about another chip (gfx1151).  Opt-in only (CORTEX_EXPERIMENTAL_GFX1150=1)."""
     notes = [f"  Radeon 890M / 880M class (gfx1150, Strix Point): the CPU and the GPU share one memory pool ({ram:.0f} GB "
              f"seen by the OS + a {gpu.get('dedicated_gb', 0.0):.1f} GB BIOS carve-out), so the model's experts live in "
              "that pool and the expert cache is sized from the memory the OS can give back."]
     notes.append("  " + ("The engine is compiled here for gfx1150" if not WIN else
-                         "Windows has no ready-made engine for gfx1150: build one with STRATA_HIP_ARCHS=gfx1150 "
+                         "Windows has no ready-made engine for gfx1150: build one with CORTEX_HIP_ARCHS=gfx1150 "
                          "tools\\hip\\build_windows.bat and start setup with --prebuilt dist\\")
-                 + " (experimental opt-in, STRATA_EXPERIMENTAL_GFX1150=1, unvalidated: docs/AMD_HIP.md).")
+                 + " (experimental opt-in, CORTEX_EXPERIMENTAL_GFX1150=1, unvalidated: docs/AMD_HIP.md).")
     if not WIN and gpu.get("shared_gb", 0) < 0.75 * ram - 1:
         notes.append(f"!the GPU can reach {gpu.get('shared_gb', 0):.0f} GB of shared memory (the GTT pool; the kernel's "
                      "default is about half of the RAM). The kernel option ttm.pages_limit raises it; setup changes no "
@@ -3309,7 +3309,7 @@ def amd_gpus(sysfs="/sys"):
 
 def amd_problem(g):
     if g["arch"] not in AMD_ARCHS:
-        return (f"not supported - Strata's AMD backend runs on {AMD_CARDS} only, this is {g['arch']}"
+        return (f"not supported - Cortex's AMD backend runs on {AMD_CARDS} only, this is {g['arch']}"
                 + (" (an integrated Radeon, not Strix Halo)" if g["arch"] in ("gfx1150", "gfx1152", "gfx1103") else ""))
     if g.get("cannot_run"):                            # Windows: the installed engine's own check (--list-devices)
         return g["cannot_run"]
@@ -3335,7 +3335,7 @@ def amd_gpus_win() -> list[dict]:
 
 def amd_parse_gpus(text, amd) -> list:
     """--gpus with AMD cards, numbered as HIP numbers them (setup's list): "1,0", or "all" (every supported card, the
-    most VRAM first).  Every chosen card must be one Strata supports (AMD_ARCHS; they may be of different
+    most VRAM first).  Every chosen card must be one Cortex supports (AMD_ARCHS; they may be of different
     architectures: the engine is compiled for each).  Returns the cards, the main one first."""
     usable = [g for g in amd if amd_problem(g) is None]
     if str(text).strip().lower() == "all":
@@ -3347,7 +3347,7 @@ def amd_parse_gpus(text, amd) -> list:
             fail(f"--gpus takes AMD GPU numbers as setup lists them, e.g. --gpus 1,0 (or --gpus all), not {text!r}")
     if len(sel) < 2 or len(set(sel)) != len(sel):
         fail("--gpus takes two or more different GPUs, e.g. --gpus 1,0 (one GPU: --gpu 1)",
-             "this PC has " + (f"{len(usable)} AMD card{'s' if len(usable) != 1 else ''} Strata can use"
+             "this PC has " + (f"{len(usable)} AMD card{'s' if len(usable) != 1 else ''} Cortex can use"
                                + (": " + ", ".join(f"GPU {g['index']} ({g['name']})" for g in usable) if usable else "")))
     byid = {g["index"]: g for g in amd}
     for i in sel:
@@ -3363,11 +3363,11 @@ def amd_parse_gpus(text, amd) -> list:
 # ------------------------------------------------------------------------------------------------ AMD on Windows
 # Windows has no KFD topology: the cards are found from the display adapters (Win32_VideoController: the ones present,
 # with their PCI ids) and the display-class registry (each adapter's 64-bit VRAM size), before any AMD software is
-# needed.  The engine is the ready-made HIP one (WIN_HIP_ASSET: strata.exe, strata-device.exe and the ROCm libraries it
+# needed.  The engine is the ready-made HIP one (WIN_HIP_ASSET: cortex.exe, cortex-device.exe and the ROCm libraries it
 # loads, built by tools/hip/build_windows.bat); it needs only the AMD driver.  Once it is installed, the cards are
-# numbered as the HIP runtime numbers them (`strata-device --list-devices`): an integrated Radeon takes HIP's device 0
+# numbered as the HIP runtime numbers them (`cortex-device --list-devices`): an integrated Radeon takes HIP's device 0
 # and pushes the discrete card to 1, which the display-adapter order does not show (#325).
-WIN_HIP_ASSET = "strata-windows-x64-hip.zip"
+WIN_HIP_ASSET = "cortex-windows-x64-hip.zip"
 WIN_HIP_MIN_ENGINE = max(MIN_ENGINE, (0, 1, 33))         # the first release with a Windows HIP engine
 WIN_AMD_DRIVER = "https://www.amd.com/en/support/download/drivers.html"
 # PCI device ids (VEN_1002) of the cards the AMD backend knows; the names below cover a card whose id is not listed
@@ -3445,7 +3445,7 @@ def _pci_device_id(text: str) -> int | None:
 
 
 def win_amd_arch(device_id: int | None, name: str) -> str:
-    """A Windows AMD adapter's architecture from its PCI device id, else its name; "" when it is none Strata knows
+    """A Windows AMD adapter's architecture from its PCI device id, else its name; "" when it is none Cortex knows
     (an integrated Radeon, an older card)."""
     if device_id in _WIN_AMD_DID:
         return _WIN_AMD_DID[device_id]
@@ -3454,7 +3454,7 @@ def win_amd_arch(device_id: int | None, name: str) -> str:
 
 def amd_gpus_windows(adapters=None, registry=None) -> list[dict]:
     """The AMD display adapters present, in display-adapter order (setup's numbering until the HIP engine is
-    installed), with the arch Strata would run them as ("" = unknown: listed, not supported).  adapters / registry:
+    installed), with the arch Cortex would run them as ("" = unknown: listed, not supported).  adapters / registry:
     tools/test_setup_amd.py passes mocked ones."""
     adapters = _win_display_adapters() if adapters is None else adapters
     registry = _win_display_registry() if registry is None else registry
@@ -3490,7 +3490,7 @@ def amd_gpus_windows(adapters=None, registry=None) -> list[dict]:
 
 
 def engine_env(eng: Path) -> dict:
-    """The environment for running an installed engine's own programs (`strata --families`, `strata-device
+    """The environment for running an installed engine's own programs (`cortex --families`, `cortex-device
     --list-devices`): the ready-made Windows HIP engine keeps hipblas.dll / libhipblaslt.dll in its rocm/bin, which the
     loader finds through PATH only (#2372: a launch without it shows a "not found" dialog per DLL and prints nothing)."""
     env = dict(os.environ)
@@ -3502,10 +3502,10 @@ def engine_env(eng: Path) -> dict:
 
 def hip_devices(probe: Path | None = None, text: str | None = None) -> list[dict] | None:
     """The GPUs the HIP runtime enumerates, numbered as HIP_VISIBLE_DEVICES numbers them, from the installed engine's
-    `strata-device --list-devices`; None when there is no HIP engine here or it does not answer.  text: its output
+    `cortex-device --list-devices`; None when there is no HIP engine here or it does not answer.  text: its output
     (tests)."""
     if text is None:
-        probe = probe or ROOT / "engine" / ("strata-device.exe" if WIN else "strata-device")
+        probe = probe or ROOT / "engine" / ("cortex-device.exe" if WIN else "cortex-device")
         try:
             hip_engine = json.loads((probe.parent / "BUILD.json").read_text(encoding="utf-8")).get("backend") == "hip"
         except (OSError, ValueError):
@@ -3552,7 +3552,7 @@ def hip_lib_dirs(eng: Path) -> list[Path]:
     return [eng / d for d in rel if (eng / d).is_dir()]
 
 
-# #468 #461: the HIP runtime the ready-made engine was built with, next to strata.exe.  Windows looks for an imported
+# #468 #461: the HIP runtime the ready-made engine was built with, next to cortex.exe.  Windows looks for an imported
 # DLL in the exe's folder, then System32, and only then on PATH (where rocm/bin is): an AMD driver that installs its own
 # amdhip64_7.dll in System32 won, and the bundled rocBLAS/hipBLAS ran on that runtime - an access violation (W7900) or
 # hipErrorInvalidDeviceFunction (7900 XTX) on the first prompt.  Only the runtime and the compiler it loads by name:
@@ -3563,7 +3563,7 @@ HIP_RUNTIME_DLLS = ("amdhip64_*.dll", "amd_comgr*.dll")
 def hip_runtime_closure(d: Path) -> list[str]:
     """The DLLs of `d` (the engine's rocm/bin) that amdhip64_7.dll and amd_comgr.dll need, the two included, read from
     their PE import tables and followed recursively (tools/hip/dll_closure.py).  #461: amdhip64_7.dll imports
-    rocm_kpack.dll, which imports the MSVC runtime; with only the two DLLs beside strata.exe the full-path load fails
+    rocm_kpack.dll, which imports the MSVC runtime; with only the two DLLs beside cortex.exe the full-path load fails
     (error 126), Windows falls back to System32's copy of the runtime, and the first big prompt dies with
     hipErrorInvalidDeviceFunction.  Falls back to the names above when the helper cannot be read."""
     roots = sorted({p.name for pat in HIP_RUNTIME_DLLS for p in d.glob(pat)})
@@ -3593,7 +3593,7 @@ def hip_runtime_beside_exe(eng: Path) -> None:
                 shutil.copy2(src, dst)
             except OSError as e:                   # e.g. the engine is running and holds the old copy
                 warn(f"could not put {src.name} next to the AMD engine ({e}); if the engine stops on its first "
-                     "request, close Strata and run START-HERE.bat again")
+                     "request, close Cortex and run START-HERE.bat again")
 
 
 def hip_match(card: dict, listed: list[dict], hip: list[dict]) -> dict | None:
@@ -3609,9 +3609,9 @@ def hip_card(eng: Path, gpu: dict, listed: list[dict]) -> dict:
     """Windows: setup's chosen AMD card as the installed HIP engine numbers it (HIP_VISIBLE_DEVICES), checked by the
     engine itself before the model download: an integrated Radeon is HIP's device 0 (#325), and a PC without a
     working AMD driver stops here with what to install."""
-    hip = hip_devices(eng / "strata-device.exe")
+    hip = hip_devices(eng / "cortex-device.exe")
     hint = (f"install or update the AMD driver (AMD Software: Adrenalin Edition) from {WIN_AMD_DRIVER}, restart the "
-            f"PC and run this again; {eng / 'strata-device.exe'} --list-devices shows what the HIP runtime sees")
+            f"PC and run this again; {eng / 'cortex-device.exe'} --list-devices shows what the HIP runtime sees")
     if not hip:
         fail("the AMD HIP runtime finds no GPU (the ready-made engine's device check)", hint)
     m = hip_match(gpu, listed, hip) if gpu.get("driver") != "hip" else \
@@ -3651,7 +3651,7 @@ def get_prebuilt_hip(url_base, gpu, updating=False) -> Path | None:
         if not base.startswith(("http://", "https://")):
             break
         try:
-            req = urllib.request.Request(base + WIN_HIP_ASSET, method="HEAD", headers={"User-Agent": "strata-setup"})
+            req = urllib.request.Request(base + WIN_HIP_ASSET, method="HEAD", headers={"User-Agent": "cortex-setup"})
             _urlopen(req, timeout=60).close()
             break
         except OSError as e:
@@ -3660,8 +3660,8 @@ def get_prebuilt_hip(url_base, gpu, updating=False) -> Path | None:
                 continue
             warn(f"no ready-made AMD engine at {base} ({e})")
             return None
-    say("  Downloading the ready-made Strata engine for AMD GPUs (with the ROCm libraries it uses) ...")
-    download(base + WIN_HIP_ASSET, z, "Strata AMD engine")
+    say("  Downloading the ready-made Cortex engine for AMD GPUs (with the ROCm libraries it uses) ...")
+    download(base + WIN_HIP_ASSET, z, "Cortex AMD engine")
     try:
         verify_engine_archive(z, WIN_HIP_ASSET, base)
     except UnverifiedEngine as e:
@@ -3686,7 +3686,7 @@ def get_prebuilt_hip(url_base, gpu, updating=False) -> Path | None:
                "for runs from a self-build of the engine: see docs/AMD_HIP.md (--build)")   # #881
         if is_strix_halo(gpu):                         # never a zip without gfx1151 code: say so, and what to do
             why = (f"it is built for {', '.join(meta.get('archs', [])) or 'other GPUs'} and has no gfx1151 code: your "
-                   f"{gpu['name']} (Strix Halo) needs a ready-made engine from Strata 0.1.40 or newer, whose zip is "
+                   f"{gpu['name']} (Strix Halo) needs a ready-made engine from Cortex 0.1.40 or newer, whose zip is "
                    "built for gfx1151 too.  Until then: the Linux guide docs/STRIX_HALO.md, or compile the engine "
                    "here with tools\\hip\\build_windows.bat (its default list has gfx1151) and start setup with "
                    "--prebuilt <its dist folder>")
@@ -3734,7 +3734,7 @@ def rocm_root(archs):
         if (ver is None or ver >= ROCM_SYSTEM_MIN) and not missing:
             return sysroot, [str(sysroot / "lib")]
         if ver is not None and ver < ROCM_SYSTEM_MIN:
-            warn(f"the ROCm in {sysroot} is {ver[0]}.{ver[1]}; Strata needs {ROCM_SYSTEM_MIN[0]}.{ROCM_SYSTEM_MIN[1]} "
+            warn(f"the ROCm in {sysroot} is {ver[0]}.{ver[1]}; Cortex needs {ROCM_SYSTEM_MIN[0]}.{ROCM_SYSTEM_MIN[1]} "
                  "or newer: using AMD's wheels in .venv instead")
         else:                                          # #446: a runtime-only ROCm (no -dev packages): cmake would fail
             warn(f"the ROCm in {sysroot} has no HIP development files ({', '.join(missing)}): using AMD's wheels in "
@@ -3744,7 +3744,7 @@ def rocm_root(archs):
         fail(f"cards of two GPU families ({', '.join(archs)}) need a system ROCm 7 (in /opt/rocm): AMD's Python "
              "wheels come per family", "install ROCm 7 system-wide, or use cards of one family (--gpu N for one card)")
     index = indexes[0]
-    stamp = Path(sys.prefix) / ".strata-rocm.json"
+    stamp = Path(sys.prefix) / ".cortex-rocm.json"
     have = json.loads(stamp.read_text(encoding="utf-8")) if stamp.exists() else {}
     wheel = None
     if have.get("index") == index and have.get("version") and not ROCM_VERSION_OVERRIDE \
@@ -3800,7 +3800,7 @@ def hipblaslt_table(arch, lib_dirs, ver=None):
     table = ROOT / "tools" / "hip" / f"{arch}-hipblaslt-{ver}.txt"
     if ver is not None and table.exists():
         head = table.read_text(encoding="utf-8").split("\n", 2)[:2]
-        if f"STRATA_HIPBLASLT_TUNING_V1 {arch} {ver}" in (h.strip() for h in head):
+        if f"CORTEX_HIPBLASLT_TUNING_V1 {arch} {ver}" in (h.strip() for h in head):
             ok(f"hipBLASLt tuning table: {table.name} (faster prompts)")
             return table
     have = sorted(p.name for p in (ROOT / "tools" / "hip").glob(f"{arch}-hipblaslt-*.txt"))
@@ -3846,15 +3846,15 @@ def build_engine_hip(gpu, llama, vision="none") -> Path:
     os.environ["PATH"] = os.pathsep.join([str(root / "bin"), str(root / "llvm" / "bin"), os.environ.get("PATH", "")])
     say("  The engine's source changed: compiling it again (only what changed, a few minutes) ..."
         if meta.get("backend") == "hip" and (eng / EXE).exists() and has_archs
-        else f"  Compiling the Strata engine for your AMD GPU{'s' if len(archs) > 1 else ''} ({', '.join(archs)}; "
+        else f"  Compiling the Cortex engine for your AMD GPU{'s' if len(archs) > 1 else ''} ({', '.join(archs)}; "
              "10-20 minutes, once) ...")
-    cmake_build(ROOT, ROOT / "build-hip", "strata",
-                ["-DSTRATA_ENABLE_HIP=ON", "-DSTRATA_ENABLE_CUDA=OFF", "-DSTRATA_BUILD_TESTS=OFF",
-                 "-DSTRATA_PREFILL_MMQ=ON", "-DSTRATA_Q6K_EXPERTS=ON", "-DSTRATA_MMQ_KQUANTS=ON", "-DCMAKE_HIP_ARCHITECTURES=" + ";".join(archs),
+    cmake_build(ROOT, ROOT / "build-hip", "cortex",
+                ["-DCORTEX_ENABLE_HIP=ON", "-DCORTEX_ENABLE_CUDA=OFF", "-DCORTEX_BUILD_TESTS=OFF",
+                 "-DCORTEX_PREFILL_MMQ=ON", "-DCORTEX_Q6K_EXPERTS=ON", "-DCORTEX_MMQ_KQUANTS=ON", "-DCMAKE_HIP_ARCHITECTURES=" + ";".join(archs),
                  f"-DCMAKE_HIP_COMPILER={root / 'llvm' / 'bin' / 'clang++'}", f"-DCMAKE_HIP_COMPILER_ROCM_ROOT={root}",
                  "-DCMAKE_PREFIX_PATH=" + ";".join([str(root), *libs]),
                  f"-DCMAKE_HIP_FLAGS=--rocm-path={root} --rocm-device-lib-path={bitcode}",
-                 f"-DSTRATA_GGML_DIR={llama}", *isa_floor_defs(floor, ROOT / "build-hip", meta)], None, "")
+                 f"-DCORTEX_GGML_DIR={llama}", *isa_floor_defs(floor, ROOT / "build-hip", meta)], None, "")
     if stale_binary(ROOT / "build-hip" / EXE):            # #2054: no stamp for a binary of another version
         fail(f"the engine build finished without a new engine ({EXE} is version "
              f"{binary_engine_version(ROOT / 'build-hip' / EXE)}, this source is {source_version()}): "
@@ -3871,10 +3871,10 @@ def build_engine_hip(gpu, llama, vision="none") -> Path:
 
 def hip_vision(asked, vram_gb: float = 0.0) -> str:
     """The picture reader wanted with the AMD backend (--vision): when nothing was asked or "yes" (pictures are on by default) the
-    default of strata_control/vision_reader.py for this card - the CPU reader under 24 GB, the GPU reader from 24 GB (owner decision
+    default of cortex_control/vision_reader.py for this card - the CPU reader under 24 GB, the GPU reader from 24 GB (owner decision
     2026-10-18, every make of card); "gpu" / "cpu" as asked (#304), "none" for no.  "gpu" is a wish: hip_reader() settles it against
     what the engine folder carries (the HIP reader, else the CPU one) once the engine is known."""
-    from strata_control import vision_reader as VR
+    from cortex_control import vision_reader as VR
     return VR.wanted(asked, vram_gb)
 
 
@@ -3893,10 +3893,10 @@ def reader_archs(eng: Path) -> list:
 
 
 def hip_reader(eng: Path, vision: str, gpu: dict):
-    """AMD: the picture reader this engine folder gets for `vision` ("gpu" or "cpu"; strata_control/vision_reader.py): the HIP
+    """AMD: the picture reader this engine folder gets for `vision` ("gpu" or "cpu"; cortex_control/vision_reader.py): the HIP
     reader with the CPU reader to fall back on, else the CPU reader.  Returns (vision, Reader); a Reader of mode "none" means
     the folder has no reader.  The one plain note (a card the HIP reader has no code for, no HIP reader in this engine) is said."""
-    from strata_control import vision_reader as VR
+    from cortex_control import vision_reader as VR
     r = VR.choose(eng, vision, windows=WIN, gpu_arch=str(gpu.get("arch") or ""), archs=reader_archs(eng))
     if r.note:
         warn(r.note)
@@ -3905,7 +3905,7 @@ def hip_reader(eng: Path, vision: str, gpu: dict):
 
 def build_vision_hip(eng: Path, stamp: Path, meta: dict, llama, vsrc, archs: list, vision: str) -> Path:
     """The picture readers beside the HIP engine: the CPU reader always (the fallback), and for "gpu" the HIP reader
-    (tools/vision, STRATA_VISION_HIP) for the same architectures.  The HIP reader needs the ROCm environment the engine build
+    (tools/vision, CORTEX_VISION_HIP) for the same architectures.  The HIP reader needs the ROCm environment the engine build
     sets; a build that fails leaves the CPU reader and says so (pictures still work, on the CPU)."""
     if vision == "gpu" and not (shutil.which("hipconfig") or os.environ.get("ROCM_PATH")):
         root, dirs = rocm_root(archs)                    # the engine was built earlier: set the same environment again
@@ -3923,9 +3923,9 @@ def build_vision_hip(eng: Path, stamp: Path, meta: dict, llama, vsrc, archs: lis
                    root / "amdgcn" / "bitcode")
     say("  Compiling the picture reader for your AMD GPU (a few minutes, once) ...")
     try:
-        cmake_build(ROOT / "tools" / "vision", ROOT / "build-vision-hip", "strata-vision",
-                    [f"-DLLAMA_DIR={llama}", "-DSTRATA_VISION_HIP=ON", "-DSTRATA_VISION_HIP_ARCHS=" + ";".join(archs),
-                     "-DSTRATA_PORTABLE=OFF", f"-DCMAKE_HIP_COMPILER={root / 'llvm' / 'bin' / 'clang++'}",
+        cmake_build(ROOT / "tools" / "vision", ROOT / "build-vision-hip", "cortex-vision",
+                    [f"-DLLAMA_DIR={llama}", "-DCORTEX_VISION_HIP=ON", "-DCORTEX_VISION_HIP_ARCHS=" + ";".join(archs),
+                     "-DCORTEX_PORTABLE=OFF", f"-DCMAKE_HIP_COMPILER={root / 'llvm' / 'bin' / 'clang++'}",
                      f"-DCMAKE_HIP_COMPILER_ROCM_ROOT={root}", "-DCMAKE_PREFIX_PATH=" + ";".join([str(root), *libs]),
                      f"-DCMAKE_HIP_FLAGS=--rocm-path={root} --rocm-device-lib-path={bitcode}"], None, "")
         shutil.copy2(ROOT / "build-vision-hip" / "bin" / HVEXE, eng / HVEXE)
@@ -3943,8 +3943,8 @@ def build_vision_cpu(eng: Path, stamp: Path, meta: dict, llama, vsrc) -> Path:
     """#304: the CPU image encoder beside the HIP engine (tools/vision without CUDA), recorded in its BUILD.json."""
     if not ((eng / VEXE).exists() and meta.get("vision_src") == vsrc):
         say("  Compiling the image encoder (for the CPU) ...")
-        cmake_build(ROOT / "tools" / "vision", ROOT / "build-vision", "strata-vision",
-                    [f"-DLLAMA_DIR={llama}", "-DSTRATA_VISION_CUDA=OFF", "-DSTRATA_PORTABLE=OFF"],
+        cmake_build(ROOT / "tools" / "vision", ROOT / "build-vision", "cortex-vision",
+                    [f"-DLLAMA_DIR={llama}", "-DCORTEX_VISION_CUDA=OFF", "-DCORTEX_PORTABLE=OFF"],
                     find_vcvars() if WIN else None,
                     "build-vision-cpu.bat" if WIN else "")   # #881: MSVC's environment on Windows, as the CUDA path has
         shutil.copy2(ROOT / "build-vision" / "bin" / VEXE, eng / VEXE)
@@ -4025,7 +4025,7 @@ def apply_native_runner(src: Path) -> None:
     """I2: tools/image/sdcpp_native's runner into the stable-diffusion.cpp source (idempotent)."""
     import importlib.util
     QI = _qimage()
-    spec = importlib.util.spec_from_file_location("strata_sdcpp_native_apply", QI.NATIVE_DIR / "apply.py")
+    spec = importlib.util.spec_from_file_location("cortex_sdcpp_native_apply", QI.NATIVE_DIR / "apply.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     mod.apply(src)
@@ -4045,7 +4045,7 @@ def build_image_engine(backend: str, gpu: dict) -> tuple[Path, list[str]]:
         ok(f"image generator already built ({backend})")
         return exe, lib_dirs
     src = get_sd_cpp()
-    if backend in QI.NATIVE_BACKENDS:                 # Strata's DiT runner (inert unless the config asks for it)
+    if backend in QI.NATIVE_BACKENDS:                 # Cortex's DiT runner (inert unless the config asks for it)
         apply_native_runner(src)
     vcvars, lib_dirs = None, []
     if backend == "cuda":
@@ -4203,7 +4203,7 @@ def engine_digest(asset: str, base: str) -> tuple[int, str] | None:
     releases, tag = where
     url = f"{releases}/tags/v{tag}" if tag else f"{releases}/latest"
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "strata-setup",
+        req = urllib.request.Request(url, headers={"User-Agent": "cortex-setup",
                                                    "Accept": "application/vnd.github+json"})
         with _urlopen(req, timeout=60) as r:
             rel = json.loads(r.read().decode("utf-8"))
@@ -4256,8 +4256,8 @@ def verify_engine_archive(z: Path, asset: str, base: str) -> None:
     to download the same file.  A mark that saves 0.8 s is not worth a class of hole - anything that
     changes the file after it was verified, at any length - so there is no mark here.
     """
-    if os.environ.get("STRATA_SKIP_SHA256") == "1":
-        warn(f"STRATA_SKIP_SHA256=1: NOT checking {asset} against its SHA-256. If the file is corrupt or "
+    if os.environ.get("CORTEX_SKIP_SHA256") == "1":
+        warn(f"CORTEX_SKIP_SHA256=1: NOT checking {asset} against its SHA-256. If the file is corrupt or "
              f"tampered with, it will be installed anyway. Unset it to get the check back.")
         return
     want = engine_digest(asset, base)          # one API call: this is a rate-limited API
@@ -4294,9 +4294,9 @@ def engine_refused(asset: str, e: Exception, updating: bool) -> None:
     catches what the download can throw.
     """
     if not updating:
-        fail(f"the downloaded Strata engine does not match GitHub's checksum: {e}",
+        fail(f"the downloaded Cortex engine does not match GitHub's checksum: {e}",
              "the bad download has been deleted (corrupt or tampered), so the next run fetches the "
-             "published file again. Set STRATA_SKIP_SHA256=1 only if you insist on installing it anyway")
+             "published file again. Set CORTEX_SKIP_SHA256=1 only if you insist on installing it anyway")
         return
     warn(f"keeping the engine that is installed: {e}")
     say("       Nothing was replaced. The bad download was deleted; run setup again to fetch it afresh.")
@@ -4304,7 +4304,7 @@ def engine_refused(asset: str, e: Exception, updating: bool) -> None:
 
 def prebuilt_bases(url_base) -> list[str]:
     """Where to look for the ready-made engine, in order (each ending in a slash).  The default: the release of this
-    checkout's version first, then the latest (#214); an explicit --prebuilt / STRATA_PREBUILT_URL: only that."""
+    checkout's version first, then the latest (#214); an explicit --prebuilt / CORTEX_PREBUILT_URL: only that."""
     base = url_base if url_base.endswith(("/", "\\")) else url_base + "/"
     if base != PREBUILT_URL:
         return [base]
@@ -4328,7 +4328,7 @@ def install_unpacked(tmp: Path, eng: Path) -> None:
     prev = eng / PREVIOUS_ENGINE
     new = list(tmp.iterdir())
     old = [eng / p.name for p in new if p.name != PREVIOUS_ENGINE and (eng / p.name).exists()]
-    if (eng / KQ_LIB).exists() and all(p.name != KQ_LIB for p in new):   # a zip without strata_kq: an older one of
+    if (eng / KQ_LIB).exists() and all(p.name != KQ_LIB for p in new):   # a zip without cortex_kq: an older one of
         old.append(eng / KQ_LIB)                       # another build would only be refused (kept in .previous too)
     shutil.rmtree(prev, ignore_errors=True)
     moved, placed = [], []
@@ -4422,7 +4422,7 @@ def get_prebuilt(url_base, gpu, vision, updating=False, toolkit=13) -> Path | No
         if not base.startswith(("http://", "https://")):
             break
         try:                                           # not published (yet), or no internet: compile instead
-            req = urllib.request.Request(base + asset, method="HEAD", headers={"User-Agent": "strata-setup"})
+            req = urllib.request.Request(base + asset, method="HEAD", headers={"User-Agent": "cortex-setup"})
             _urlopen(req, timeout=60).close()
             break
         except OSError as e:
@@ -4431,8 +4431,8 @@ def get_prebuilt(url_base, gpu, vision, updating=False, toolkit=13) -> Path | No
                 continue
             warn(f"no ready-made engine at {base} ({e})" + ("" if updating else ": compiling instead"))
             return None
-    say("  Downloading the ready-made Strata engine" + (" (CUDA 12, experimental)" if int(toolkit) == 12 else "") + " ...")
-    download(base + asset, z, "Strata engine")
+    say("  Downloading the ready-made Cortex engine" + (" (CUDA 12, experimental)" if int(toolkit) == 12 else "") + " ...")
+    download(base + asset, z, "Cortex engine")
     try:
         verify_engine_archive(z, asset, base)
     except UnverifiedEngine as e:
@@ -4527,9 +4527,9 @@ def engine_update_note() -> None:
         else:
             old = ver < need
         if old:
-            warn(f"the installed engine ({meta.get('version') or 'unknown version'}) is older than this Strata expects: "
+            warn(f"the installed engine ({meta.get('version') or 'unknown version'}) is older than this Cortex expects: "
                  "starting it as it is. Starting never updates anything; run "
-                 + ("UPDATE.bat" if WIN else "./update.sh") + " (or `strata install --update`) to update it")
+                 + ("UPDATE.bat" if WIN else "./update.sh") + " (or `cortex install --update`) to update it")
 
 
 def update_installed_engine(url_base, toolkit=None) -> None:
@@ -4645,23 +4645,23 @@ def nvcc_build(nvcc):
 
 def sm120_nvcc(nvcc, cuda_v, archs):
     """#892 / #968: CUDA 13.2.0 / 13.2.1's nvcc for an RTX 50 card (sm_120).  Returns (nvcc, cuda_v): an older 13.x toolkit
-    when one is installed and the user did not name a compiler (STRATA_NVCC), else the one found, with a warning that says
+    when one is installed and the user did not name a compiler (CORTEX_NVCC), else the one found, with a warning that says
     what to do.  CUDA 13.2.2 (build 86 or newer) is fine.  Recommends, never forces: a user who picked 13.2 keeps it."""
     if not nvcc or cuda_v != CUDA_SM120_SUSPECT or max(archs) < 120:
         return nvcc, cuda_v
     build = nvcc_build(nvcc)
     if build is not None and build >= CUDA_SM120_FIXED_BUILD:
         return nvcc, cuda_v
-    if not os.environ.get("STRATA_NVCC"):
+    if not os.environ.get("CORTEX_NVCC"):
         alt, alt_v = find_nvcc(below=CUDA_SM120_SUSPECT)
         if alt and alt_v and alt_v >= (13, 0):
             ok(f"CUDA {alt_v[0]}.{alt_v[1]} is used for the RTX 50 card (sm_120): CUDA 13.2.0 / 13.2.1's compiler made wrong "
-               "answers there (#892, #968); STRATA_NVCC=<nvcc> picks another")
+               "answers there (#892, #968); CORTEX_NVCC=<nvcc> picks another")
             return alt, alt_v
     warn("CUDA 13.2.0 and 13.2.1's compiler (nvcc) made garbage prompts and answers for RTX 50 cards (sm_120) in two "
          "reports (#892, #968): the same source compiled with CUDA 13.0, 13.1 or 13.2.2 is right. If the engine answers "
          "with nonsense, update to CUDA 13.2.2 or install CUDA 13.0 next to it (https://developer.nvidia.com/cuda-toolkit-archive) "
-         "and set STRATA_NVCC to its nvcc; the ready-made engine is built with 13.0")
+         "and set CORTEX_NVCC to its nvcc; the ready-made engine is built with 13.0")
     return nvcc, cuda_v
 
 
@@ -4690,7 +4690,7 @@ def install_build_tools(gpu, yes):
              f"Toolkit {need12[0]}.{need12[1]} or a newer 12.x (CUDA 13 cannot compile for these cards)" +
              (f"; found CUDA {cuda_v[0]}.{cuda_v[1]}" if nvcc else ""),
              "install CUDA 12.9 (it can sit next to a newer one) from https://developer.nvidia.com/cuda-toolkit-archive "
-             "and run it again (STRATA_NVCC=<its nvcc> picks one toolkit)")
+             "and run it again (CORTEX_NVCC=<its nvcc> picks one toolkit)")
     # RTX 50 (sm_120): CUDA 13.0 - an engine built with 12.8 crashed in the prompt path on Linux (#220)
     need_cuda = need12 if old else (13, 0) if max(archs) >= 120 else (12, 0)
     vcvars = find_vcvars(cuda_v) if WIN else None
@@ -4810,11 +4810,11 @@ def source_hash(parts) -> str:
 
 
 def isa_floor_defs(floor: str, bdir: Path, meta: dict) -> list:
-    """The experimental older-CPU build's CMake definition (STRATA_ISA_FLOOR, CMakeLists.txt), none for the normal
+    """The experimental older-CPU build's CMake definition (CORTEX_ISA_FLOOR, CMakeLists.txt), none for the normal
     build.  A build folder configured for another floor is configured afresh: ggml's CPU options are cached there."""
     if (meta.get("isa_floor") or "") != floor and (bdir / "CMakeCache.txt").exists():
         (bdir / "CMakeCache.txt").unlink()
-    return [f"-DSTRATA_ISA_FLOOR={floor}"] if floor else []
+    return [f"-DCORTEX_ISA_FLOOR={floor}"] if floor else []
 
 
 def host_compiler_defs(cuda: bool) -> list:
@@ -4833,7 +4833,7 @@ def host_compiler_defs(cuda: bool) -> list:
 
 def toolkit_root_defs(nvcc) -> list:
     """CUDAToolkit_ROOT for the toolkit whose nvcc builds the engine.  Without it CMake can take cudart and cuBLAS from
-    another toolkit: with STRATA_NVCC=/opt/cuda-13.0/bin/nvcc on Ubuntu 24.04 that also has the distribution's CUDA
+    another toolkit: with CORTEX_NVCC=/opt/cuda-13.0/bin/nvcc on Ubuntu 24.04 that also has the distribution's CUDA
     12.0 (nvidia-cuda-toolkit), the engine was compiled with the 13.0 headers but linked libcudart.so.12 from
     /usr/lib/x86_64-linux-gnu.  The distribution's own nvcc (/usr/bin) keeps CMake's search as before."""
     root = Path(nvcc).resolve().parent.parent
@@ -4843,7 +4843,7 @@ def toolkit_root_defs(nvcc) -> list:
 def engine_defs(archs, toolkit=13) -> list:
     """Extra CMake definitions for the engine: the experimental Pascal/Volta build (#295) for cards below sm_75, and
     for every CUDA 12 engine (the same build as the ready-made CUDA 12 one: it admits the older cards)."""
-    return ["-DSTRATA_EXPERIMENTAL_SM60=ON"] if min(int(x) for x in archs) < 75 or int(toolkit) == 12 else []
+    return ["-DCORTEX_EXPERIMENTAL_SM60=ON"] if min(int(x) for x in archs) < 75 or int(toolkit) == 12 else []
 
 
 def prebuilt_vision(meta: dict, gpu: dict, vision: str) -> str:
@@ -4897,14 +4897,14 @@ def build_engine(gpu, vision, yes, llama, toolkit=None) -> Path:
         say("  Compiling the engine for " + ", ".join(f"sm_{x}" for x in archs) + " (a card it had no code for; "
             "10-20 minutes, once) ..." if new_arch else
             "  The engine's source changed: compiling it again (only what changed, a few minutes) ..."
-            if local and (eng / EXE).exists() else "  Compiling the Strata engine for your GPU (10-20 minutes, once) ...")
-        cmake_build(ROOT, bdir, "strata",
-                    ["-DSTRATA_ENABLE_CUDA=ON", "-DSTRATA_BUILD_TESTS=OFF", "-DSTRATA_Q6K_EXPERTS=ON", "-DSTRATA_MMQ_KQUANTS=ON",
+            if local and (eng / EXE).exists() else "  Compiling the Cortex engine for your GPU (10-20 minutes, once) ...")
+        cmake_build(ROOT, bdir, "cortex",
+                    ["-DCORTEX_ENABLE_CUDA=ON", "-DCORTEX_BUILD_TESTS=OFF", "-DCORTEX_Q6K_EXPERTS=ON", "-DCORTEX_MMQ_KQUANTS=ON",
                      f"-DCMAKE_CUDA_ARCHITECTURES={cuda_archs}",
-                     f"-DCMAKE_CUDA_COMPILER={nvcc}", *toolkit_root_defs(nvcc), f"-DSTRATA_GGML_DIR={llama}",
+                     f"-DCMAKE_CUDA_COMPILER={nvcc}", *toolkit_root_defs(nvcc), f"-DCORTEX_GGML_DIR={llama}",
                      *host_compiler_defs(True), *engine_defs(archs, toolkit),
                      *isa_floor_defs(floor, bdir, meta)],
-                    vcvars, "build-strata-cuda12.bat" if t12 else "build-strata.bat")
+                    vcvars, "build-cortex-cuda12.bat" if t12 else "build-cortex.bat")
         if stale_binary(bdir / EXE):                      # #2054: the stamp below is written only for a binary of this source
             fail(f"the engine build finished without a new engine ({EXE} is version {binary_engine_version(bdir / EXE)}, "
                  f"this source is {source_version()}): the installed engine and its stamp are left as they were",
@@ -4916,12 +4916,12 @@ def build_engine(gpu, vision, yes, llama, toolkit=None) -> Path:
             (eng / KQ_LIB).unlink()
     if not vision_ok:
         say("  Compiling the image encoder" + (" with CUDA (10-20 minutes, once) ..." if vision == "gpu" else " ..."))
-        defs = [f"-DLLAMA_DIR={llama}", f"-DSTRATA_VISION_CUDA={'ON' if vision == 'gpu' else 'OFF'}",
-                "-DSTRATA_PORTABLE=OFF", *host_compiler_defs(vision == "gpu")]   # native, like the engine
+        defs = [f"-DLLAMA_DIR={llama}", f"-DCORTEX_VISION_CUDA={'ON' if vision == 'gpu' else 'OFF'}",
+                "-DCORTEX_PORTABLE=OFF", *host_compiler_defs(vision == "gpu")]   # native, like the engine
         if vision == "gpu":
             defs += [f"-DCMAKE_CUDA_ARCHITECTURES={cuda_archs}", f"-DCMAKE_CUDA_COMPILER={nvcc}",
                      *toolkit_root_defs(nvcc)]
-        cmake_build(ROOT / "tools" / "vision", vdir, "strata-vision", defs, vcvars,
+        cmake_build(ROOT / "tools" / "vision", vdir, "cortex-vision", defs, vcvars,
                     "build-vision-cuda12.bat" if t12 else "build-vision.bat")
         shutil.copy2(vdir / "bin" / VEXE, eng / VEXE)
     bindir = Path(nvcc).parent                            # the toolkit's own libraries (bin, bin/x64, lib64)
@@ -4936,9 +4936,9 @@ def build_engine(gpu, vision, yes, llama, toolkit=None) -> Path:
 
 # ------------------------------------------------------------------------------------------------ the data folder
 # The model files - the GGUFs, the prepared packs and the MTP layer, 70-120 GB - live in a data folder NEXT TO the
-# Strata folder (`Strata-data`), not inside it: updating Strata by unzipping a new copy used to give a new, empty
-# folder and a full download again.  Where it is, and which Strata folders this user ran, is kept in a small
-# per-user file, so every Strata folder on the PC finds the same files.
+# Cortex folder (`Cortex-data`), not inside it: updating Cortex by unzipping a new copy used to give a new, empty
+# folder and a full download again.  Where it is, and which Cortex folders this user ran, is kept in a small
+# per-user file, so every Cortex folder on the PC finds the same files.
 DATA_ITEMS = ("models", "packs", "mtp")
 
 
@@ -5185,9 +5185,9 @@ def ram_ctx(model, ram, low_ram=False) -> int:
 
 
 def app_settings_file() -> Path | None:
-    """The desktop app keeps its own settings file (STRATA_SETTINGS_FILE, in the app's data folder) and never reads or writes the
-    one an older command-line Strata uses, so an old install is never adopted or moved."""
-    raw = os.environ.get("STRATA_SETTINGS_FILE")
+    """The desktop app keeps its own settings file (CORTEX_SETTINGS_FILE, in the app's data folder) and never reads or writes the
+    one an older command-line Cortex uses, so an old install is never adopted or moved."""
+    raw = os.environ.get("CORTEX_SETTINGS_FILE")
     return Path(raw) if raw else None
 
 
@@ -5196,8 +5196,8 @@ def settings_path() -> Path:
     if own is not None:
         return own
     if WIN:
-        return Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming") / "Strata" / "settings.json"
-    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "strata" / "settings.json"
+        return Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming") / "Cortex" / "settings.json"
+    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "cortex" / "settings.json"
 
 
 def load_settings() -> dict:
@@ -5226,15 +5226,15 @@ def has_data(folder: Path) -> bool:
 
 
 def other_installs(settings: dict) -> list:
-    """Strata folders besides this one that may hold model files: the ones this user ran before, and Strata* folders
-    next to this one (a zip unpacked again lands in e.g. `Strata-main (1)\\Strata-main`)."""
+    """Cortex folders besides this one that may hold model files: the ones this user ran before, and Cortex* folders
+    next to this one (a zip unpacked again lands in e.g. `Cortex-main (1)\\Cortex-main`)."""
     cands = [Path(p) for p in settings.get("installs", [])]
     for base in dict.fromkeys(() if app_settings_file() else (home().parent, home().parent.parent)):
         try:
             for d in base.iterdir():
-                if d.is_dir() and d.name.lower().startswith("strata"):
+                if d.is_dir() and d.name.lower().startswith("cortex"):
                     cands.append(d)
-                    cands += [c for c in d.iterdir() if c.is_dir() and c.name.lower().startswith("strata")]
+                    cands += [c for c in d.iterdir() if c.is_dir() and c.name.lower().startswith("cortex")]
         except OSError:
             pass
     found = []
@@ -5306,22 +5306,22 @@ def repoint_config(cfg_file: Path, old: Path, new: Path) -> None:
 
 def data_folder(requested: str | None) -> tuple:
     """(the data folder, folders on other drives that still hold model files).  Moves the model files of this folder
-    and of earlier Strata folders on the same drive into the data folder, and points their configs there."""
+    and of earlier Cortex folders on the same drive into the data folder, and points their configs there."""
     settings = load_settings()
     dest = Path(requested).expanduser().resolve() if requested else \
-        Path(settings["data_dir"]) if settings.get("data_dir") else home().parent / "Strata-data"
+        Path(settings["data_dir"]) if settings.get("data_dir") else home().parent / "Cortex-data"
     try:
         dest.mkdir(parents=True, exist_ok=True)
-    except OSError as e:                                # e.g. no write access next to the Strata folder
+    except OSError as e:                                # e.g. no write access next to the Cortex folder
         warn(f"cannot use {dest} for the model files ({e}): keeping them in {home()}")
         dest = home()
     elsewhere = []
-    # #198: the data folder remembered before (a --data-dir to a new place) is a source too, and so is a Strata-data
+    # #198: the data folder remembered before (a --data-dir to a new place) is a source too, and so is a Cortex-data
     # folder nested in any of them (an install that kept its models one level down)
     sources = [home(), *other_installs(settings)]
     if settings.get("data_dir") and Path(settings["data_dir"]) != dest:
         sources.append(Path(settings["data_dir"]))
-    sources += [f / "Strata-data" for f in list(sources) if (f / "Strata-data") != dest]
+    sources += [f / "Cortex-data" for f in list(sources) if (f / "Cortex-data") != dest]
     seen = set()
     for folder in sources:
         key = os.path.normcase(str(folder))
@@ -5352,7 +5352,7 @@ def data_folder(requested: str | None) -> tuple:
             elsewhere.append(folder)                    # in use, or a copy the data folder already has
             warn(f"some model files are still in {folder} (in use, or already in {dest})")
         else:
-            ok(f"model files from {folder} moved to {dest} (a new copy of Strata finds them there)")
+            ok(f"model files from {folder} moved to {dest} (a new copy of Cortex finds them there)")
     installs = [str(home())] + [p for p in settings.get("installs", []) if p != str(home()) and Path(p).is_dir()]
     save_settings({**settings, "data_dir": str(dest), "installs": installs[:20]})
     return dest, elsewhere
@@ -5361,15 +5361,15 @@ def data_folder(requested: str | None) -> tuple:
 def data_folder_in_place() -> tuple:
     """(the data folder, []) for a start: where settings.json says the model files are, or the default place.  Reads
     the settings and nothing else: no folder is created, nothing is moved or copied, no setting is saved.  The run
-    configs name their model files, so an install made by an earlier Strata starts from where it is."""
+    configs name their model files, so an install made by an earlier Cortex starts from where it is."""
     settings = load_settings()
-    dest = Path(settings["data_dir"]) if settings.get("data_dir") else home().parent / "Strata-data"
+    dest = Path(settings["data_dir"]) if settings.get("data_dir") else home().parent / "Cortex-data"
     return dest, []
 
 
 def write_config(path: Path, cfg: dict):
     """A run config, written whole or not at all (#459): to a temporary file first, then moved over the old one, so
-    a setup stopped half-way (a closed window, a full disk) never leaves an empty strata-*.json behind."""
+    a setup stopped half-way (a closed window, a full disk) never leaves an empty cortex-*.json behind."""
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(cfg, indent=1), encoding="utf-8")
     os.replace(tmp, path)
@@ -5379,12 +5379,12 @@ def write_config(path: Path, cfg: dict):
 # "sampling" or "mcp_servers" block, "allowed_hosts", "cors_origins", "open_browser" - and is kept when setup runs again
 SETUP_KEYS = frozenset({"exe", "args", "cwd", "tokenizer", "model_name", "log", "lib_dirs", "port", "backend", "env",
                         "gpu", "gpus_asked", "layer_split", "host", "api_key", "draft_vocab", "vision"})
-SETUP_ENV = frozenset({"STRATA_HIPBLASLT_TUNING", "STRATA_ROCBLAS_TUNING", "STRATA_RESIDENT_PIN", "STRATA_NO_ARENA_THP", "STRATA_MMQ_KQ", "STRATA_HC_Q8",
-                       "STRATA_ROUTE_TAIL_SKIP"}) | frozenset(GFX1103_SWITCHES) | frozenset(GFX1150_SWITCHES)   # the "env" entries setup writes (the gfx1103 switches are setup's too: a re-run refreshes them, they do not linger)
+SETUP_ENV = frozenset({"CORTEX_HIPBLASLT_TUNING", "CORTEX_ROCBLAS_TUNING", "CORTEX_RESIDENT_PIN", "CORTEX_NO_ARENA_THP", "CORTEX_MMQ_KQ", "CORTEX_HC_Q8",
+                       "CORTEX_ROUTE_TAIL_SKIP"}) | frozenset(GFX1103_SWITCHES) | frozenset(GFX1150_SWITCHES)   # the "env" entries setup writes (the gfx1103 switches are setup's too: a re-run refreshes them, they do not linger)
 # 0.1.44 added these three, written for Unsloth's files only (unsloth_default_env).  In any other model's config they are the
-# user's own (STRATA_ROUTE_TAIL_SKIP=0 to turn the tail skip off, STRATA_MMQ_KQ=1 ...): a setup run again keeps them there
+# user's own (CORTEX_ROUTE_TAIL_SKIP=0 to turn the tail skip off, CORTEX_MMQ_KQ=1 ...): a setup run again keeps them there
 # (0.1.44 dropped them with the rest of SETUP_ENV).
-SETUP_ENV_UNSLOTH = frozenset({"STRATA_MMQ_KQ", "STRATA_HC_Q8", "STRATA_ROUTE_TAIL_SKIP"})
+SETUP_ENV_UNSLOTH = frozenset({"CORTEX_MMQ_KQ", "CORTEX_HC_Q8", "CORTEX_ROUTE_TAIL_SKIP"})
 SETUP_VISION = frozenset({"exe", "cpu_exe", "mmproj", "model", "gpu", "max_tokens", "threads"})
 
 
@@ -5459,13 +5459,13 @@ def args_dropped(old: dict, cfg: dict) -> list[str]:
 
 def engine_exe(eng: Path) -> str:
     """The `exe` of a run config: the engine component in the app, else the engine binary's path."""
-    return "component:strata-engine" if CONTROL else str(eng / EXE)
+    return "component:cortex-engine" if CONTROL else str(eng / EXE)
 
 
 def write_setup_config(cfg_path: Path, cfg: dict, source: Path | None = None) -> None:
     """#629: setup's run config, written over an earlier one for the same model without losing what the user added
     to it: the keys setup does not write are carried over (carry_over), and the earlier file is kept as
-    strata-<model>.json.bak when it changes.  `source`: an earlier install's config to carry the keys over from when
+    cortex-<model>.json.bak when it changes.  `source`: an earlier install's config to carry the keys over from when
     this folder has none yet (a copy set up like the last one).  A line says what was kept, one what was not."""
     old_path = cfg_path if cfg_path.is_file() else source
     old = None
@@ -5514,13 +5514,13 @@ def readable_config(path: Path) -> bool:
 
 
 def model_config_files(folder: Path) -> list:
-    """#346: the strata-*.json files of a folder that can be model configs. The server keeps a config's Chat settings
-    next to it as strata-<model>.shared-settings.json: it matches the pattern but is no config (no exe, no args)."""
-    return [p for p in folder.glob("strata-*.json") if not p.name.endswith(".shared-settings.json")]
+    """#346: the cortex-*.json files of a folder that can be model configs. The server keeps a config's Chat settings
+    next to it as cortex-<model>.shared-settings.json: it matches the pattern but is no config (no exe, no args)."""
+    return [p for p in folder.glob("cortex-*.json") if not p.name.endswith(".shared-settings.json")]
 
 
 def previous_config(elsewhere_first: list, settings: dict):
-    """The most recently used model config of another Strata folder on this PC, for a folder that has none yet.  One
+    """The most recently used model config of another Cortex folder on this PC, for a folder that has none yet.  One
     that does not parse (an empty or cut-off file, #459) is skipped with a warning: the newest readable one is used,
     and with none this copy is set up as a fresh install."""
     cands = []
@@ -5538,7 +5538,7 @@ def own_path_config(cfg: dict) -> bool:
 def choices_from_config(cfg_path: Path) -> dict:
     """The setup answers a config was written with (family, size, context, KV, images, projection, network)."""
     cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
-    tag = cfg_path.stem[len("strata-"):]
+    tag = cfg_path.stem[len("cortex-"):]
     own = next((f for f, d in OWN_PATH_FAMILIES.items() if tag.startswith(d["tag"])), None)
     if own is not None:                                # Qwen3.6: its own sizes; no KV / images / projection settings
         d = OWN_PATH_FAMILIES[own]
@@ -5595,7 +5595,7 @@ def find_in(roots: list, rel: str):
 
 # ------------------------------------------------------------------------------------------------ start
 def model_config(path: Path) -> bool:
-    """#549: a model's run config (a JSON object with "exe" and "args"). Any other strata-*.json in the folder (a
+    """#549: a model's run config (a JSON object with "exe" and "args"). Any other cortex-*.json in the folder (a
     file of the user's own, a cut-off one) is skipped with a warning naming it instead of stopping setup."""
     try:
         cfg = json.loads(path.read_text(encoding="utf-8-sig"))
@@ -5606,7 +5606,7 @@ def model_config(path: Path) -> bool:
         why = e.strerror or str(e)
     except ValueError:
         why = "not valid JSON"
-    warn(f"skipped {path.name} ({why}): it is not a Strata model config")
+    warn(f"skipped {path.name} ({why}): it is not a Cortex model config")
     return False
 
 
@@ -5617,7 +5617,7 @@ def installed_configs():
 
 def source_version() -> str:
     """The engine version the source tree builds (CMakeLists.txt's project version)."""
-    m = re.search(r"project\(strata VERSION ([\d.]+)", (ROOT / "CMakeLists.txt").read_text(encoding="utf-8"))
+    m = re.search(r"project\(cortex VERSION ([\d.]+)", (ROOT / "CMakeLists.txt").read_text(encoding="utf-8"))
     return m.group(1) if m else "0"
 
 
@@ -5728,7 +5728,7 @@ def calibrate_config(cfg_path: Path) -> bool:
     import calibrate as CAL
     cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
     say()
-    say("  Tuning Strata for this PC: the output speed is measured with a few engine settings (the PCIe share, the")
+    say("  Tuning Cortex for this PC: the output speed is measured with a few engine settings (the PCIe share, the")
     say("  draft depth, the CPU threads, the expert cache; on two or more cards also the prompt chunks). It takes")
     say("  roughly 15-30 minutes (3 rounds of each value); the PC is busy meanwhile.")
     try:
@@ -5744,7 +5744,7 @@ def calibrate_config(cfg_path: Path) -> bool:
             say(f"       the engine said: {why}")
         return False
     cfg["args"] = CAL.apply(cfg["args"], res["settings"])
-    if "env" in res:                                   # HIP: the engine variables it measured (STRATA_SH_STREAM)
+    if "env" in res:                                   # HIP: the engine variables it measured (CORTEX_SH_STREAM)
         cfg["env"] = CAL.apply_env(cfg.get("env"), res["env"])
     write_config(cfg_path, cfg)
     st = load_settings()
@@ -5808,9 +5808,9 @@ def update_install(have: list, a) -> int:
     setup needs a newer one (MIN_ENGINE; a compiled engine when its source changed), each installed model's config
     upgrades and its draft subset.  No question is asked and the model files are not touched; a model still running
     keeps its engine (update_installed_engine says to close it and run this again)."""
-    have = [p for p in have if model_config(p)]        # #549: a strata-*.json that is no model config is skipped
+    have = [p for p in have if model_config(p)]        # #549: a cortex-*.json that is no model config is skipped
     if not have:
-        say("  No model is installed in this Strata folder yet: run START-HERE.bat (Linux: ./setup.sh) to set it up -")
+        say("  No model is installed in this Cortex folder yet: run START-HERE.bat (Linux: ./setup.sh) to set it up -")
         say("  it finds an earlier install's model files next to it and reuses them.")
         return 0
     pip_install(requirement_lines() if REQUIREMENTS.exists() else PY_PACKAGES,
@@ -5827,14 +5827,14 @@ def update_install(have: list, a) -> int:
         ok(f"{cfg.get('model_name', cfg_path.stem)}: up to date")
     ver = engine_version(Path(json.loads(have[0].read_text(encoding="utf-8-sig"))["exe"]))
     say()
-    ok("Strata is updated" + (f" (engine {'.'.join(map(str, ver))})" if any(ver) else "") +
+    ok("Cortex is updated" + (f" (engine {'.'.join(map(str, ver))})" if any(ver) else "") +
        ". Start the model with " + ("START-HERE.bat" if WIN else "./setup.sh") + " when you want it.")
     return 0
 
 
 def settings_summary(cfg: dict, port=None) -> str:
     """#564: the settings a start uses, in one line: the config's engine options (the model's file paths left out)
-    and the server's own fields, so a change made by hand to strata-<model>.json can be checked without the log."""
+    and the server's own fields, so a change made by hand to cortex-<model>.json can be checked without the log."""
     a, out, i = [str(x) for x in cfg.get("args") or []], [], 0
     while i < len(a):
         flag = a[i]
@@ -5859,8 +5859,8 @@ def settings_summary(cfg: dict, port=None) -> str:
 
 def start(cfg_path: Path, port: int | None, gpu: int | list | None = None, open_browser=True, yes=False,
           layer_split=None, keep=None) -> int:
-    """Start the model.  Nothing is installed, downloaded or compiled while it starts (strata_control/acquisition.py):
-    what is missing is named with the command that installs it (SETUP / UPDATE / strata install)."""
+    """Start the model.  Nothing is installed, downloaded or compiled while it starts (cortex_control/acquisition.py):
+    what is missing is named with the command that installs it (SETUP / UPDATE / cortex install)."""
     with acquisition.forbidden():
         return _start(cfg_path, port, gpu, open_browser, yes, layer_split, keep)
 
@@ -5892,7 +5892,7 @@ def _start(cfg_path: Path, port: int | None, gpu: int | list | None = None, open
     cfg_path.touch()                                     # the most recently used model
     if "--mtp" in cfg["args"][:-1] and not own_path_config(cfg):
         refresh_draft_vocab(Path(cfg["args"][cfg["args"].index("--mtp") + 1]), cfg.get("draft_vocab", "cjk"))
-    cmd = [sys.executable, str(ROOT / "serve" / "server.py"), "--engine", "strata", "--config", str(cfg_path),
+    cmd = [sys.executable, str(ROOT / "serve" / "server.py"), "--engine", "cortex", "--config", str(cfg_path),
            "--port", str(port or cfg.get("port", 8080))]
     if cfg.get("backend") == "hip":                    # AMD, numbered as HIP numbers them (setup's KFD order)
         if WIN:
@@ -5989,8 +5989,8 @@ def _start(cfg_path: Path, port: int | None, gpu: int | list | None = None, open
     for n, line in enumerate(textwrap.wrap(f"Settings ({cfg_path.name}): {settings_summary(cfg, port)}", 100,
                                            break_on_hyphens=False)):   # #564: what this start uses
         say(("  " if n == 0 else "    ") + line)
-    if not WIN and os.environ.get("STRATA_EXECV"):
-        # Replace this process instead of spawning a child. The Docker image sets STRATA_EXECV=1,
+    if not WIN and os.environ.get("CORTEX_EXECV"):
+        # Replace this process instead of spawning a child. The Docker image sets CORTEX_EXECV=1,
         # so there the server is PID 1 and docker stop's SIGTERM reaches the process that can
         # answer the engine with QUIT. Normal Linux starts keep spawning the server as a child.
         os.execve(cmd[0], cmd, {**os.environ, acquisition.ENV: "1"})
@@ -6197,7 +6197,7 @@ def parallel_note(asked: int | None, vram_gbs, arena_gb: float, ctx: int, kv: st
 
 PREFILL_BIG_RAM_GB = 96        # bench #433 #440 #834 #669: --prefill auto:32768 +21-35% at 96 GB, ~3x slower at 32 GB
 PREFILL_RISK_RAM_GB = 64       # below this an explicit auto:32768 is warned about
-HEADROOM_RAM_GB = 48           # bench #834: STRATA_RESIDENT_HEADROOM_GIB=6 on a PC with this much RAM or less
+HEADROOM_RAM_GB = 48           # bench #834: CORTEX_RESIDENT_HEADROOM_GIB=6 on a PC with this much RAM or less
 AGENT_CACHE_FREE_GB = 24       # bench #882 #440: RAM left beside the model for the conversation cache
 AGENT_CACHE_MIB = 8192
 SMALL_VISION_VRAM_GB = 12.5    # bench #469: the GPU image encoder shrinks the prompt chunks on cards up to 12 GB
@@ -6225,8 +6225,8 @@ def bench_tips(args, env, ram: float, model_ram_gb: float, vram_gb: float, visio
         tips.append(f"tip: with {ram:.0f} GB of RAM, --prefill auto:32768 in the config's args read prompts 21-35% "
                     "faster in community benchmarks (#433 #440 #834); not set, nothing changes")
     resident = any(a in args for a in ("--resident-experts", "--resident-budget-gib"))
-    if resident and ram <= HEADROOM_RAM_GB and "STRATA_RESIDENT_HEADROOM_GIB" not in (env or {}):
-        tips.append(f"tip: on a PC with {ram:.0f} GB of RAM, \"env\": {{\"STRATA_RESIDENT_HEADROOM_GIB\": \"6\"}} in the "
+    if resident and ram <= HEADROOM_RAM_GB and "CORTEX_RESIDENT_HEADROOM_GIB" not in (env or {}):
+        tips.append(f"tip: on a PC with {ram:.0f} GB of RAM, \"env\": {{\"CORTEX_RESIDENT_HEADROOM_GIB\": \"6\"}} in the "
                     "config kept decode speed in a community benchmark and left the system 2 GiB more (#834); the "
                     "default is 4")
     if "--conversation-cache-mib" not in args and ram - model_ram_gb >= AGENT_CACHE_FREE_GB:
@@ -6369,7 +6369,7 @@ def use_cuda12(cards, cfg_path: Path, cfg: dict, yes: bool) -> dict:
          "CUDA 12 engine (docs/OLDER_GPUS.md; START-HERE.bat --setup --cuda 13 and newer cards only moves it back)")
     main = gpu_info(cards[0]["index"]) or cards[0]
     vision = "gpu" if cfg.get("vision") else "none"
-    eng = get_cuda12_engine(os.environ.get("STRATA_PREBUILT_URL", PREBUILT_URL),
+    eng = get_cuda12_engine(os.environ.get("CORTEX_PREBUILT_URL", PREBUILT_URL),
                             {**main, "archs": sorted({int(g["arch"]) for g in cards})}, vision, yes)
     cfg["exe"] = str(eng / EXE)
     cfg["cuda"] = 12
@@ -6383,11 +6383,11 @@ def use_cuda12(cards, cfg_path: Path, cfg: dict, yes: bool) -> dict:
 
 def write_run_script(model, cfg_path, port, open_browser=True):
     """run-<model>.bat / .sh: the server with this config; `open_browser` False (#609: --no-browser) leaves --open out."""
-    serve = [sys.executable, str(ROOT / "serve" / "server.py"), "--engine", "strata", "--config", str(cfg_path),
+    serve = [sys.executable, str(ROOT / "serve" / "server.py"), "--engine", "cortex", "--config", str(cfg_path),
              "--port", str(port)] + (["--open"] if open_browser else [])
     if WIN:
         script = home() / f"run-{model.lower()}.bat"
-        script.write_text("@echo off\r\ntitle Strata " + model + "\r\ncd /d \"" + str(ROOT) + "\"\r\n" +
+        script.write_text("@echo off\r\ntitle Cortex " + model + "\r\ncd /d \"" + str(ROOT) + "\"\r\n" +
                           " ".join(f'"{x}"' for x in serve) + "\r\nif errorlevel 1 pause\r\n", encoding="utf-8")
     else:
         script = home() / f"run-{model.lower()}.sh"
@@ -6464,16 +6464,16 @@ def sycl_setup(argv) -> int:
             rest.append(x)
     script = ROOT / "sycl" / "setup_intel.py"
     if not script.exists():
-        fail(f"{script} is missing", "use a full Strata checkout (git clone) - docs/INTEL_ARC.md")
+        fail(f"{script} is missing", "use a full Cortex checkout (git clone) - docs/INTEL_ARC.md")
     return subprocess.call([sys.executable, str(script), *rest])
 
 
 def control_engine_step(gpu, vision):
-    """Step 4 in the app: the engine is the component folder's package (strata_control/engine_component.py), found if it is
+    """Step 4 in the app: the engine is the component folder's package (cortex_control/engine_component.py), found if it is
     there and never fetched or built. A model can be downloaded and prepared before the engine is installed; the run config
-    names "component:strata-engine" and the engine is looked up when the model is loaded. llama.cpp's source zip is fetched
+    names "component:cortex-engine" and the engine is looked up when the model is loaded. llama.cpp's source zip is fetched
     for gguf-py only (the preparation tools), as setup always did: no git, no compiler."""
-    from strata_control import engine_component as EC
+    from cortex_control import engine_component as EC
     llama = get_llama_cpp()
     ok(f"llama.cpp {LLAMA_CPP_COMMIT[:7]} (gguf-py for the preparation tools)")
     try:
@@ -6482,12 +6482,12 @@ def control_engine_step(gpu, vision):
         ok(f"engine component: {found.version} ({found.platform}-{found.backend}) in {eng}")
     except EC.EngineMissing as e:
         plain = getattr(e, "plain_notice", None) or getattr(e, "driver_notice", None)
-        if os.environ.get("STRATA_NEED_ENGINE") == "1" and os.environ.get("STRATA_ALLOW_NO_ENGINE") != "1":
-            # strata launch needs an engine now: stop before step 5 instead of after the download, unless launch itself asked to go on
-            # (STRATA_ALLOW_NO_ENGINE: the person said yes to "download the model anyway").  The app does not stop (owner decision
+        if os.environ.get("CORTEX_NEED_ENGINE") == "1" and os.environ.get("CORTEX_ALLOW_NO_ENGINE") != "1":
+            # cortex launch needs an engine now: stop before step 5 instead of after the download, unless launch itself asked to go on
+            # (CORTEX_ALLOW_NO_ENGINE: the person said yes to "download the model anyway").  The app does not stop (owner decision
             # 2026-10-18): it says so in its download card and still downloads the model.
             fail(plain or "no engine is installed for this PC",
-                 "get the engine that matches this graphics card (`strata update`, or the app's Settings), then run this again; "
+                 "get the engine that matches this graphics card (`cortex update`, or the app's Settings), then run this again; "
                  "nothing was downloaded and files already downloaded are kept")
         eng = home() / "engine"
         meta = {"version": "99.0.0", "source": "local", "component": "missing"}   # its version is checked when it loads
@@ -6497,7 +6497,7 @@ def control_engine_step(gpu, vision):
         if (eng / VEXE).is_file():
             ok(f"image encoder: {eng / VEXE} (carried by the engine component)")
             return llama, eng, meta, [], gpu, vision
-        warn("this engine component has no image encoder (strata-vision): images off for this model")
+        warn("this engine component has no image encoder (cortex-vision): images off for this model")
     return llama, eng, meta, [], gpu, "none"
 
 
@@ -6511,8 +6511,8 @@ def engine_step(a, gpu, hip, amd, cuda_tk, vision):
     if hip and WIN:                                    # AMD on Windows: the ready-made HIP engine (no compiler)
         eng = None if a.build else get_prebuilt_hip(a.prebuilt, gpu)
         if eng is None:
-            fail("no ready-made AMD engine for this Strata version" + (" (--build)" if a.build else ""),
-                 "compiling it on Windows: tools\\hip\\build_windows.bat makes strata-windows-x64-hip.zip, then run "
+            fail("no ready-made AMD engine for this Cortex version" + (" (--build)" if a.build else ""),
+                 "compiling it on Windows: tools\\hip\\build_windows.bat makes cortex-windows-x64-hip.zip, then run "
                  "START-HERE.bat --backend hip --prebuilt <its dist folder> (docs/AMD_HIP.md)")
         gpu = hip_card(eng, gpu, amd)
         a.gpu = gpu["index"] if gpu["count"] > 1 else a.gpu
@@ -6537,7 +6537,7 @@ def engine_step(a, gpu, hip, amd, cuda_tk, vision):
 
 
 def engine_families(eng: Path) -> set:
-    """The model families an engine runs (`strata --families`; an engine from before it: Flash-Next's only)."""
+    """The model families an engine runs (`cortex --families`; an engine from before it: Flash-Next's only)."""
     try:
         text = subprocess.run([str(eng / EXE), "--families"], capture_output=True, text=True, timeout=60,
                               env=engine_env(eng)).stdout      # #2372: with the engine's rocm/bin on PATH
@@ -6561,7 +6561,7 @@ def own_path_size(fam: dict, ram: float) -> str:
 
 def own_path_vision(a, fam: dict, gpu: dict, hip: bool) -> str:
     """The image encoder for an own-path family (Qwen3.6-35B-A3B): "gpu", "cpu" or "none".  Pictures are on by default (owner rule
-    2026-10-18) and the reader follows strata_control/vision_reader.py's one rule on every make of card: the CPU encoder under 24 GB of
+    2026-10-18) and the reader follows cortex_control/vision_reader.py's one rule on every make of card: the CPU encoder under 24 GB of
     VRAM (the GPU one takes ~1.4 GB the experts would use), the GPU encoder from 24 GB.  --vision yes|no|gpu|cpu, else a question whose
     default answer is yes; what is asked for with --vision gpu / cpu is kept, with a note (recommend, never force)."""
     asked = a.vision
@@ -6569,7 +6569,7 @@ def own_path_vision(a, fam: dict, gpu: dict, hip: bool) -> str:
     if asked in ("no", "none"):
         return "none"
     if asked is None:
-        from strata_control import vision_reader as VR
+        from cortex_control import vision_reader as VR
         mode = VR.default_mode(vram)
         say()
         say(f"  Images: {fam['title']} can also read pictures (screenshots, photos, scanned pages). This adds a "
@@ -6743,7 +6743,7 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
     pip_install(requirement_lines() if REQUIREMENTS.exists() else PY_PACKAGES,
                 "numpy, jinja2, regex, pyyaml, tqdm, requests, cmake, ninja, pillow, psutil")
 
-    step(4, "the Strata engine")
+    step(4, "the Cortex engine")
     llama, eng, meta, lib_dirs, gpu, vision = engine_step(a, gpu, hip, amd, cuda_tk, vision)
     reader = None
     if hip and vision != "none":
@@ -6753,7 +6753,7 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
         vision = "none"
     if fam["arch"] not in engine_families(eng):
         fail(f"this engine ({meta.get('version')}) does not run {fam['title']} yet",
-             "update Strata, or compile the engine with --build, and run setup again")
+             "update Cortex, or compile the engine with --build, and run setup again")
     ok("engine: the engine component (looked up when the model loads)" if CONTROL else f"engine: {eng / EXE}")
 
     step(5, f"downloading {fam['title']} {model}")
@@ -6776,12 +6776,12 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
         verify_sha256(mmproj, *fam["sha256"][mmproj.name])
         ok(f"vision encoder: {mmproj}")
 
-    step(6, "preparing the model for Strata")
+    step(6, "preparing the model for Cortex")
     data, _ = data_folder(a.data_dir)
     pack = data / "packs" / tag.lower()            # only the tokenizer: the engine reads the GGUF itself
     if not (pack / "tokenizer" / "vocab.json").exists():
-        run([sys.executable, str(ROOT / "tools" / "strata_tokenizer.py"), "--gguf", str(gguf), "--out", str(pack)],
-            env=dict(os.environ, STRATA_GGUF_PY=str(llama / "gguf-py")))
+        run([sys.executable, str(ROOT / "tools" / "cortex_tokenizer.py"), "--gguf", str(gguf), "--out", str(pack)],
+            env=dict(os.environ, CORTEX_GGUF_PY=str(llama / "gguf-py")))
     ok(f"tokenizer: {pack / 'tokenizer'}")
 
     step(7, "writing the start script")
@@ -6793,7 +6793,7 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
         ok(f"VRAM kept free for other programs: about {a.vram_reserve_mib} MiB (the experts' share is set lower)")
     cfg = {"exe": engine_exe(eng), "args": args, "cwd": str(ROOT), "tokenizer": str(pack / "tokenizer"),
            "model_name": f"{fam['name']}-{model.lower()}", "arch": fam["arch"],
-           "log": str(home() / f"strata-{tag.lower()}.log"), "lib_dirs": lib_dirs, "port": port}
+           "log": str(home() / f"cortex-{tag.lower()}.log"), "lib_dirs": lib_dirs, "port": port}
     if cuda_tk == 12:
         cfg["cuda"] = 12
     if hip:
@@ -6810,7 +6810,7 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
     cfg["args"] = recommend_pool_workers(cfg["args"])   # --pool-workers: this engine path's CPU expert threads too
     for line in pool_workers_note(cfg["args"]):
         warn(line)
-    cfg_path = home() / f"strata-{tag.lower()}.json"
+    cfg_path = home() / f"cortex-{tag.lower()}.json"
     if vision != "none":
         old_cfg = cfg_path if cfg_path.is_file() else adopted
         vt = vision_tokens(getattr(a, "vision_tokens", None), vision, old_cfg)
@@ -6818,7 +6818,7 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
         cfg["vision"] = {"exe": str(eng / VEXE), "mmproj": str(mmproj), "model": str(gguf), "gpu": vision == "gpu",
                          "max_tokens": vt}          # the text model, opened vocab-only
         if reader is not None:                      # AMD: the HIP reader with the CPU reader behind it, or the CPU reader
-            from strata_control import vision_reader as VR
+            from cortex_control import vision_reader as VR
             cfg["vision"] = VR.vision_section(reader, cfg["vision"])
         if vision == "cpu":
             cfg["vision"]["threads"] = vision_threads()
@@ -6854,12 +6854,12 @@ def install_own_path(a, family, gpu, hip, amd, cuda_tk, multi, port, ram, adopte
 def preview_family(a) -> int:
     """--family qwen36: a family setup knows but the engine does not run yet (PREVIEW_FAMILIES).  Downloads the chosen
     size (pinned revision, size and SHA-256 checked) and, with --vision, the image encoder - and says plainly that
-    Strata cannot start it yet.  Nothing is configured: no engine, no pack, no start script."""
+    Cortex cannot start it yet.  Nothing is configured: no engine, no pack, no start script."""
     fam = PREVIEW_FAMILIES[a.family]
     names = list(fam["models"])
     say()
     say(f"  {fam['title']} - {fam['by']}: {fam['about']}")
-    warn(f"this Strata version does not run {fam['title']} yet (support is in development): setup downloads its "
+    warn(f"this Cortex version does not run {fam['title']} yet (support is in development): setup downloads its "
          "files, and the engine refuses them with a message until a version that runs it")
     if a.model and a.model not in names:
         fail(f"{fam['title']} has no {a.model} model file", "choose one of: " + ", ".join(names))
@@ -6890,19 +6890,19 @@ def preview_family(a) -> int:
         verify_sha256(f, *fam["sha256"][f.name])
     ok(f"{fam['title']} {model}: {folder}")
     say()
-    say(f"{fam['title']} is downloaded, but this Strata version cannot run it yet (its engine path is in "
+    say(f"{fam['title']} is downloaded, but this Cortex version cannot run it yet (its engine path is in "
         "development); nothing was configured. Run setup again without --family qwen36 to install a model it runs.")
     return 0
 
 
 def mac_control_setup(a) -> int:
-    """The app (and the Terminal's `strata launch`) on a Mac, STRATA_CONTROL_INSTALL=1: the same job as on Windows and Linux. It
-    downloads and prepares the model files and writes a run config whose engine is "component:strata-engine"; it builds nothing
+    """The app (and the Terminal's `cortex launch`) on a Mac, CORTEX_CONTROL_INSTALL=1: the same job as on Windows and Linux. It
+    downloads and prepares the model files and writes a run config whose engine is "component:cortex-engine"; it builds nothing
     (the Metal engine is a component: a ready-made package from the feed, or the one inside the installer) and runs no
     metal/setup_mac.py. Which sizes a Mac can run, whether one stays in memory or streams its experts from the SSD, and the
-    Metal flags of the config are strata_control/mac_fit.py's, the module setup_mac.py and the model list use too."""
-    from strata_control import mac_fit as MF
-    say("Strata on a Mac (Apple Silicon, Metal)")
+    Metal flags of the config are cortex_control/mac_fit.py's, the module setup_mac.py and the model list use too."""
+    from cortex_control import mac_fit as MF
+    say("Cortex on a Mac (Apple Silicon, Metal)")
     step(1, "checking your Mac")
     info = MF.mac_info()
     ram = float(info["ram_gb"] or ram_gb())
@@ -6943,8 +6943,8 @@ def mac_control_setup(a) -> int:
     tag = fam["tag"] + model
     stream = MF.streams(model, ram)
 
-    step(4, "the Strata engine (Metal)")
-    from strata_control import engine_component as EC
+    step(4, "the Cortex engine (Metal)")
+    from cortex_control import engine_component as EC
     llama = get_llama_cpp()                            # gguf-py for the preparation tools only: no git, no compiler
     ok(f"llama.cpp {LLAMA_CPP_COMMIT[:7]} (gguf-py for the preparation tools)")
     try:
@@ -6960,7 +6960,7 @@ def mac_control_setup(a) -> int:
     files = gguf_dir_shards(models_dir, fam, model) if a.gguf_dir else \
         [models_dir / model_file(fam, model, i) for i in range(1, model_shards(fam, model) + 1)]
     problem = gguf_dir_problem(models_dir, files[0], fam, model) if a.gguf_dir else None
-    if problem:                                        # files Strata cannot run, or another choice's files
+    if problem:                                        # files Cortex cannot run, or another choice's files
         fail(*problem)
     for s in files:                                    # a whole file copied in by hand has no finish mark
         if s.exists() and not done(s) and whole_shard(s):
@@ -6984,9 +6984,9 @@ def mac_control_setup(a) -> int:
     check_shards(files)
     ok("model files present")
 
-    step(6, "preparing the model for Strata")
+    step(6, "preparing the model for Cortex")
     pack = find_in(roots, f"packs/{tag.lower()}") or data / "packs" / tag.lower()
-    env = dict(os.environ, STRATA_GGUF_PY=str(llama / "gguf-py"))
+    env = dict(os.environ, CORTEX_GGUF_PY=str(llama / "gguf-py"))
     if not (pack / "native_experts.txt").exists() or not (pack / "tokenizer" / "vocab.json").exists():
         run([sys.executable, str(ROOT / "tools" / "iq_pack.py"), "--gguf", str(files[0]), "--out", str(pack)], env=env)
     ok(f"model prepared: {pack}")
@@ -7000,7 +7000,7 @@ def mac_control_setup(a) -> int:
     if use_mtp and not (mtp / "mtp-q2_0.gguf").exists():
         say("  The MTP draft layer (speculative decoding) comes from the original Qwen checkpoint: only its ~5 GB of MTP tensors are downloaded.")
         run([sys.executable, str(ROOT / "tools" / "mtp_fetch.py"), "fetch", "--out", str(mtp)],
-            env={**env, "STRATA_SOURCE": model_source()})
+            env={**env, "CORTEX_SOURCE": model_source()})
         run([sys.executable, str(ROOT / "tools" / "mtp_pack.py"), "--src", str(mtp), "--experts", "q2_0",
              "--out", str(mtp / "mtp-q2_0.gguf")], env=env)
     if use_mtp:
@@ -7012,8 +7012,8 @@ def mac_control_setup(a) -> int:
     port = a.port or 8080
     args = MF.engine_args(pack, files, rt, ctx, stream, ram, ROOT / "data" / "expert-profile.bin")
     cfg = {"exe": engine_exe(Path("engine")), "args": args, "cwd": str(ROOT), "tokenizer": str(pack / "tokenizer"),
-           "model_name": f"{fam['name']}-{model.lower()}", "log": str(home() / f"strata-{tag.lower()}.log"),
-           "lib_dirs": [], "port": port, "backend": "metal", "env": {"STRATA_METAL_STREAM": "1" if stream else "0"}}
+           "model_name": f"{fam['name']}-{model.lower()}", "log": str(home() / f"cortex-{tag.lower()}.log"),
+           "lib_dirs": [], "port": port, "backend": "metal", "env": {"CORTEX_METAL_STREAM": "1" if stream else "0"}}
     if a.host:
         cfg["host"] = a.host
     if a.api_key:
@@ -7022,7 +7022,7 @@ def mac_control_setup(a) -> int:
         cfg["draft_vocab"] = a.draft_vocab
     if a.browser is not None:
         cfg["open_browser"] = a.browser
-    cfg_path = home() / f"strata-{tag.lower()}.json"
+    cfg_path = home() / f"cortex-{tag.lower()}.json"
     write_setup_config(cfg_path, cfg)
     script = write_run_script(tag, cfg_path, port, cfg.get("open_browser") is not False)
     ok(f"start script: {script.name}")
@@ -7033,7 +7033,7 @@ def mac_control_setup(a) -> int:
 
 def main() -> int:
     try:                                               # files made by a run as administrator still belong to the user
-        from strata_control import private_files as _pf
+        from cortex_control import private_files as _pf
         _pf.adopt_user_defaults()
     except Exception:
         pass
@@ -7096,8 +7096,8 @@ def main() -> int:
                          "that uses the API; remembered for this model, also in run-<model>.bat/.sh)")
     ap.add_argument("--browser", dest="browser", action="store_true",
                     help="open the chat page again when the model is ready (the default; undoes --no-browser)")
-    ap.add_argument("--data-dir", help="where the model files go (~70-120 GB): default Strata-data next to this folder, "
-                                       "remembered for every Strata folder on this PC")
+    ap.add_argument("--data-dir", help="where the model files go (~70-120 GB): default Cortex-data next to this folder, "
+                                       "remembered for every Cortex folder on this PC")
     ap.add_argument("--models-dir", help="where the GGUF files go (default: <data folder>/models)")
     ap.add_argument("--gguf-dir", help="use GGUF files you already have (a folder with every shard: "
                                        "<name>-00001-of-0000N.gguf ... -0000N-of-0000N.gguf)")
@@ -7113,15 +7113,15 @@ def main() -> int:
     ap.add_argument("--source", choices=SOURCES, default=None,
                     help="where the model files come from: auto (default: Hugging Face), huggingface or modelscope "
                          "(mainland China: the same files, checked against ModelScope's published SHA-256; "
-                         "STRATA_SOURCE)")
+                         "CORTEX_SOURCE)")
     ap.add_argument("--inspect", nargs="+", metavar=("SOURCE", "VARIANT"),
-                    help="what a GGUF is and whether Strata runs it, from its headers only (no download): a file, a "
+                    help="what a GGUF is and whether Cortex runs it, from its headers only (no download): a file, a "
                          "folder, a URL, ms:owner/repo (ModelScope) or hf:owner/repo, and optionally a variant name")
-    ap.add_argument("--cuda", choices=["12", "13", "auto"], default=os.environ.get("STRATA_CUDA") or None,
+    ap.add_argument("--cuda", choices=["12", "13", "auto"], default=os.environ.get("CORTEX_CUDA") or None,
                     help="NVIDIA: the CUDA toolkit of this model's engine. auto (default): CUDA 13, the ready-made "
                          "engine; CUDA 12 (experimental) when a chosen card is older than CUDA 13 supports (Pascal, "
                          "Volta). 12 also runs with an older driver (Windows 528+, Linux 525+). docs/OLDER_GPUS.md")
-    ap.add_argument("--prebuilt", default=os.environ.get("STRATA_PREBUILT_URL", PREBUILT_URL),
+    ap.add_argument("--prebuilt", default=os.environ.get("CORTEX_PREBUILT_URL", PREBUILT_URL),
                     help="where the ready-made engine is (a URL folder or a local folder)")
     ap.add_argument("--check", action="store_true", help="only check this PC and exit")
     ap.add_argument("--calibrate", action="store_true",
@@ -7154,7 +7154,7 @@ def main() -> int:
                          "experts fit on the GPU); auto: when the RAM has room for it")
     ap.add_argument("--backend", choices=["cuda", "hip", "sycl"],
                     help="cuda = NVIDIA (default), hip = AMD RX 7900 / 7800 / 7700 XT, RX 9060 XT / 9070 / AI PRO R9700 on "
-                         "Linux or Windows (chosen by itself when the PC has no NVIDIA card Strata can use), "
+                         "Linux or Windows (chosen by itself when the PC has no NVIDIA card Cortex can use), "
                          "sycl = Intel Arc, EXPERIMENTAL: Linux, built from source (docs/INTEL_ARC.md)")
     ap.add_argument("--skip-build", action="store_true", help=argparse.SUPPRESS)
     a = ap.parse_args()
@@ -7162,9 +7162,9 @@ def main() -> int:
         ap.error(f"--model {a.model} is a size of " + ", ".join(f"--family {f}" for f, d in PREVIEW_FAMILIES.items()
                                                               if a.model in d["models"]))
     if a.source:
-        os.environ["STRATA_SOURCE"] = a.source
+        os.environ["CORTEX_SOURCE"] = a.source
     if a.inspect:                                      # headers only: nothing is installed
-        sys.exit(subprocess.run([sys.executable, str(ROOT / "tools" / "strata_inspect.py"), *a.inspect[:2]]).returncode)
+        sys.exit(subprocess.run([sys.executable, str(ROOT / "tools" / "cortex_inspect.py"), *a.inspect[:2]]).returncode)
     if sys.platform == "darwin" and CONTROL:           # the app on a Mac: model files only; the Metal engine is a component
         return mac_control_setup(a)
     if a.backend == "sycl":                            # Intel Arc: the SYCL port's own setup (sycl/setup_intel.py)
@@ -7182,7 +7182,7 @@ def main() -> int:
             a.gpu = int(a.gpu)
         else:
             ap.error(f"--gpu takes a GPU number as nvidia-smi numbers them, e.g. --gpu 1 (or --gpus 0,2), not {a.gpu!r}")
-    say("Strata - Qwen3.8-Flash-Next on a normal PC (a GPU + system RAM + CPU)")
+    say("Cortex - Qwen3.8-Flash-Next on a normal PC (a GPU + system RAM + CPU)")
     have = installed_configs()
     # A plain start of an installed model finds everything where it already is: it creates, moves and copies nothing
     # (the model paths are in the run config; the data folder is the one settings.json remembers).  Setting up, checking,
@@ -7203,12 +7203,12 @@ def main() -> int:
         return update_install(have, a)
     explicit = a.setup or a.model or a.family or a.check or a.no_start
     adopted = None                                     # #629: the earlier install this copy is set up like
-    if not have and not explicit:                      # a new copy of Strata (an update unzipped elsewhere): set it
+    if not have and not explicit:                      # a new copy of Cortex (an update unzipped elsewhere): set it
         prev = previous_config(elsewhere, load_settings())   # up like the last one, from the files already here
         if prev is not None:
             ch = choices_from_config(prev)
             if ch["model"]:
-                say(f"  Found your earlier install in {prev.parent} ({prev.stem[len('strata-'):]}): setting up this "
+                say(f"  Found your earlier install in {prev.parent} ({prev.stem[len('cortex-'):]}): setting up this "
                     "copy the same way - the model files are reused, nothing big is downloaded.")
                 a.family, a.model, a.context = ch["family"], ch["model"], a.context or ch["context"]
                 adopted = prev
@@ -7294,7 +7294,7 @@ def main() -> int:
     if a.backend is None and nv_ok and amd_ok:
         # both kinds of card: asked (a first run on such a PC used to take NVIDIA without mentioning the Radeon)
         say()
-        say("  This PC has NVIDIA and AMD cards Strata can use:")
+        say("  This PC has NVIDIA and AMD cards Cortex can use:")
         say("  1) NVIDIA: " + ", ".join(f"{g['name']} ({g['vram_gb']:.0f} GB)" for g in found if gpu_problem(g) is None)
             + "   (recommended)")
         say("  2) AMD: " + ", ".join(f"{g['name']} ({g['vram_gb']:.0f} GB{', unified memory' if g.get('uma') else ''})"
@@ -7303,7 +7303,7 @@ def main() -> int:
               " - docs/AMD_HIP.md)")
         say("  One engine drives the cards of one make: a model is never split across NVIDIA and AMD cards, and two models at the same")
         say("  time, one on each, is not supported yet.")
-        from strata_control import gpu_fit
+        from cortex_control import gpu_fit
         bigger = gpu_fit.other_vendor_note([{**g, "vendor": "nvidia", "usable": gpu_problem(g) is None} for g in found] +
                                            [{**g, "vendor": "amd", "usable": True} for g in amd_ok], "nvidia")
         if bigger:
@@ -7331,7 +7331,7 @@ def main() -> int:
                         "empty: ROCm cannot use it yet (docs/STRIX_HALO.md: the amdgpu driver and /dev/kfd access, "
                         "your user in the render and video groups)")
         if not usable:
-            fail("no AMD GPU Strata can use", f"the AMD backend runs on {AMD_CARDS}")
+            fail("no AMD GPU Cortex can use", f"the AMD backend runs on {AMD_CARDS}")
         if a.gpus:                                     # a layer split across these cards, the first one the main
             chosen = amd_parse_gpus(a.gpus, amd)
             gpu = chosen[0]
@@ -7392,7 +7392,7 @@ def main() -> int:
                                            f"{CUDA12_MIN_DRIVER} or newer, docs/OLDER_GPUS.md)"))
     if gpu["vram_gb"] < 11:
         warn("less than 12 GB of " + ("GPU memory (this APU's carve-out + shared memory)" if gpu.get("uma") else "VRAM")
-             + ": Strata will run, but most experts stay on the CPU and it will be slow")
+             + ": Cortex will run, but most experts stay on the CPU and it will be slow")
     ram = ram_gb()
     cpu, avx2, avx512 = cpu_info()
     need = min(d["ram_gb"] for d in MODELS.values() if not d.get("mem_total"))   # Gyro counts VRAM + RAM: not a RAM floor
@@ -7401,11 +7401,11 @@ def main() -> int:
         # every model keeps ALL its experts in RAM (23+ GB); VRAM only holds a copy of the most-used ones, so a
         # bigger GPU does not lower this.  The owner's rule: a stop by default, a risk the user can take (--model
         # with --yes, or y)
-        confirm_risk(f"RAM: {ram:.0f} GB - the smallest model (the Coder) needs about {need} GB: Strata keeps all of "
+        confirm_risk(f"RAM: {ram:.0f} GB - the smallest model (the Coder) needs about {need} GB: Cortex keeps all of "
                      "the model's experts in RAM (23-50 GB, whatever the GPU), so the OS will page them from disk. "
                      "Expect it to be very slow, and it may not start at all.", bool(a.model), a.yes,
                      f"RAM: {ram:.0f} GB - the smallest model (the Coder) needs about {need} GB",
-                     "Strata keeps all of the model's experts in RAM (23-50 GB, whatever the GPU) and the GPU holds a "
+                     "Cortex keeps all of the model's experts in RAM (23-50 GB, whatever the GPU) and the GPU holds a "
                      "copy of the most-used ones: it needs 32 GB of RAM or more (48 GB for the full model); --model "
                      "NAME --yes installs one anyway")
         warn(f"going on with {ram:.0f} GB of RAM, as you chose")
@@ -7424,13 +7424,13 @@ def main() -> int:
             warn(problem)
     floor = cpu_floor(avx2)
     if floor == "unsupported":
-        fail("this CPU has neither AVX2 nor SSE4.2; Strata needs at least SSE4.2 (Intel Nehalem, 2008, or newer)")
+        fail("this CPU has neither AVX2 nor SSE4.2; Cortex needs at least SSE4.2 (Intel Nehalem, 2008, or newer)")
     if not avx2:
         # #394 #595 #623: the ready-made engine is AVX2; an older CPU gets one compiled here, whose CPU experts run on
         # ggml-cpu's kernels for this CPU.  Experimental: measured only on newer CPUs with the older path forced, and by
         # users on a few Xeons.  A warning, not a stop.
-        warn(f"this CPU has no AVX2: Strata support for it is EXPERIMENTAL and slow. Setup compiles the engine on this "
-             f"PC for {'AVX' if floor == 'avx' else 'SSE4.2'} (STRATA_ISA_FLOOR={floor}; 10-20 minutes, once), and the "
+        warn(f"this CPU has no AVX2: Cortex support for it is EXPERIMENTAL and slow. Setup compiles the engine on this "
+             f"PC for {'AVX' if floor == 'avx' else 'SSE4.2'} (CORTEX_ISA_FLOOR={floor}; 10-20 minutes, once), and the "
              "CPU's share of the experts runs on ggml-cpu's kernels, a few times slower than on an AVX2 CPU. "
              "See \"Older CPUs\" in docs/INSTALL.md")
         if hip and WIN:
@@ -7468,10 +7468,10 @@ def main() -> int:
         if not any_fits:
             # #977: every size says "does not fit", so the verdict says so too (and the exit code, for scripts). It only
             # reports: --model NAME --yes still installs one anyway.
-            say(f"\nThis PC cannot run Strata yet: no model size fits {ram:.0f} GB of RAM (the smallest needs about "
+            say(f"\nThis PC cannot run Cortex yet: no model size fits {ram:.0f} GB of RAM (the smallest needs about "
                 f"{need} GB). --model NAME --yes installs one anyway, slowly.")
             return 1
-        say("\nThis PC can run Strata. Run it again without --check to install.")
+        say("\nThis PC can run Cortex. Run it again without --check to install.")
         return 0
 
     # ---- 2. the questions
@@ -7514,7 +7514,7 @@ def main() -> int:
     names = [m for m in MODELS if family in MODELS[m].get("families", ("qwen", "swift"))]
     names.sort(key=lambda m: bool(MODELS[m].get("experimental")))   # an experimental size last, never the default
     if a.model and a.model not in names:
-        # #444: say which family has that size, and (with --gguf-dir) which files Strata can run at all
+        # #444: say which family has that size, and (with --gguf-dir) which files Cortex can run at all
         elsewhere_fams = [f for f in FAMILIES if f in MODELS[a.model].get("families", ("qwen", "swift"))]
         fail(f"{fam['title']} has no {a.model} model file", "choose one of: " + ", ".join(names)
              + (f" (or {a.model}: " + ", ".join(f"--family {f} --model {a.model}" for f in elsewhere_fams) + ")"
@@ -7557,7 +7557,7 @@ def main() -> int:
                  "2-3-bit models" if in_budget else "") + "; quality checked against llama.cpp")
         if hip and MODELS[model].get("nvidia_only"):
             # #429 (jkuepker): checked before the 111 GB download.  The HIP engine has no prompt kernels for its
-            # Q4_K / Q5_K experts (STRATA_MMQ_KQUANTS is CUDA-only) and it has not been run on AMD: asked, not refused
+            # Q4_K / Q5_K experts (CORTEX_MMQ_KQUANTS is CUDA-only) and it has not been run on AMD: asked, not refused
             confirm_risk(f"{model} has not been run on AMD cards yet: its prompt kernels are NVIDIA-only, so on "
                          f"{gpu_name(gpu)} long prompts read much more slowly, and it may not work at all",
                          bool(a.model), a.yes, f"{model} is NVIDIA-only so far", "choose one of the 2-3-bit models, "
@@ -7756,7 +7756,7 @@ def main() -> int:
     ready = bool(fam.get("ready"))                     # NVFP4: ready-made packs (NVFP4_REPOS), no GGUF shards
     if ready:
         models_dir = Path(a.models_dir)
-        for r in elsewhere:                            # already downloaded and checked in a Strata folder elsewhere
+        for r in elsewhere:                            # already downloaded and checked in a Cortex folder elsewhere
             if all(ready_verified(ready_where(r / "models", f), f[5]) for f in ready_needed(model, r / "models")):
                 models_dir = r / "models"
                 ok(f"model files found in {models_dir}")
@@ -7767,10 +7767,10 @@ def main() -> int:
         shards = gguf_dir_shards(models_dir, fam, model) if a.gguf_dir else \
             [models_dir / model_file(fam, model, i) for i in range(1, model_shards(fam, model) + 1)]
     problem = gguf_dir_problem(models_dir, shards[0], fam, model) if a.gguf_dir else None
-    if problem:                                        # #444: files Strata cannot run, or another choice's files
+    if problem:                                        # #444: files Cortex cannot run, or another choice's files
         fail(*problem)
     if not ready and not a.gguf_dir and not all(sh.exists() and done(sh) for sh in shards):
-        for r in elsewhere:                            # already downloaded in a Strata folder on another drive
+        for r in elsewhere:                            # already downloaded in a Cortex folder on another drive
             cand = [r / "models" / tag / sh.name for sh in shards]
             if all(c.exists() and done(c) for c in cand):
                 models_dir, shards = cand[0].parent, cand
@@ -7813,7 +7813,7 @@ def main() -> int:
                 "numpy, jinja2, regex, pyyaml, tqdm, requests, pillow, psutil")
 
     # ---- 4. the engine
-    step(4, "the Strata engine")
+    step(4, "the Cortex engine")
     llama, eng, meta, lib_dirs, gpu, vision = engine_step(a, gpu, hip, amd, cuda_tk, vision)
     reader = None
     if hip and vision != "none":                       # AMD: the engine folder's reader (GPU, else CPU), settled now the engine is known
@@ -7831,7 +7831,7 @@ def main() -> int:
     # checked before the 94-188 GB download
     if (MODELS[model].get("budget") or family == "gyro") and engine_ver < need_engine:
         fail(f"{model} needs engine {'.'.join(map(str, need_engine))} or newer; this one is {meta.get('version')}",
-             "update Strata (or compile the engine with --build) and run setup again")
+             "update Cortex (or compile the engine with --build) and run setup again")
     ok("engine: the engine component (looked up when the model loads)" if CONTROL else f"engine: {eng / EXE}")
 
     # ---- 5. the model files
@@ -7891,12 +7891,12 @@ def main() -> int:
                 "cosine 0.999 vs BF16); see 'A Q8_0 encoder' in docs/DETAILS.md")
 
     # ---- 6. the pack and the MTP draft layer
-    step(6, "preparing the model for Strata")
+    step(6, "preparing the model for Cortex")
     pack = find_in(roots, f"packs/{tag.lower()}") or data / "packs" / tag.lower()
-    env = dict(os.environ, STRATA_GGUF_PY=str(llama / "gguf-py"))
+    env = dict(os.environ, CORTEX_GGUF_PY=str(llama / "gguf-py"))
     prepared = bool(ready and MODELS[model].get("prepare"))
     if prepared and not prepared_done(model, models_dir):
-        say("  NVIDIA's checkpoint is turned into a Strata pack on this PC (once; 20-40 minutes, reads the 102 GB, writes about")
+        say("  NVIDIA's checkpoint is turned into a Cortex pack on this PC (once; 20-40 minutes, reads the 102 GB, writes about")
         say(f"  {MODELS[model]['prepare_gb']:.0f} GB). Nothing of NVIDIA's weights leaves this PC.")
         run([sys.executable, str(ROOT / "tools" / "nvfp4_local_pack.py"), "prepare",
              "--model", str(ready_where(models_dir, ("src", MODELS[model]["repo"], "", "", 0, ""))),
@@ -7909,11 +7909,11 @@ def main() -> int:
         # the Q2_0 experts repacked for the AVX-512 kernel (the measured speed): a one-time ~40 GB conversion
         if not (pack / "index.txt").exists() or not (pack / "experts.bin").exists():   # index.txt is written last
             say("  Converting the Q2_0 experts for the AVX-512 kernel (one time, ~40 GB written, 2-5 min) ...")
-            run([sys.executable, str(ROOT / "tools" / "strata_pack.py"), "build", "--gguf", str(shards[0]),
+            run([sys.executable, str(ROOT / "tools" / "cortex_pack.py"), "build", "--gguf", str(shards[0]),
                  "--out", str(pack), "--skip-hash", "--force"], env=env)   # --force: #634 refuses an occupied pack
             run([sys.executable, str(ROOT / "tools" / "pack_index.py"), "--pack", str(pack)], env=env)
         if not (pack / "tokenizer" / "vocab.json").exists():
-            run([sys.executable, str(ROOT / "tools" / "strata_tokenizer.py"), "--gguf", str(shards[0]),
+            run([sys.executable, str(ROOT / "tools" / "cortex_tokenizer.py"), "--gguf", str(shards[0]),
                  "--out", str(pack)], env=env)   # writes <pack>/tokenizer/
     elif not (pack / "native_experts.txt").exists() or not (pack / "tokenizer" / "vocab.json").exists():
         # every tensor as the GGUF stores it; the experts are read from the GGUF at start (seconds to build)
@@ -7936,13 +7936,13 @@ def main() -> int:
         say("  The MTP draft layer (speculative decoding, ~2x faster output) comes from the original Qwen checkpoint:")
         say("  only its ~5 GB of MTP tensors are downloaded.")
         run([sys.executable, str(ROOT / "tools" / "mtp_fetch.py"), "fetch", "--out", str(mtp)],
-            env={**env, "STRATA_SOURCE": model_source()})
+            env={**env, "CORTEX_SOURCE": model_source()})
         run([sys.executable, str(ROOT / "tools" / "mtp_pack.py"), "--src", str(mtp), "--experts", "q2_0",
              "--out", str(mtp / "mtp-q2_0.gguf")], env=env)
         run([sys.executable, str(ROOT / "tools" / "mtp_rt.py"), "--gguf", str(mtp / "mtp-q2_0.gguf"), "--out", str(rt)],
             env=env)
     # a setup run again without --draft-vocab keeps the subset this model's config chose before (cyrillic, fr, en)
-    draft_vocab = a.draft_vocab or saved_draft_vocab(home() / f"strata-{tag.lower()}.json")
+    draft_vocab = a.draft_vocab or saved_draft_vocab(home() / f"cortex-{tag.lower()}.json")
     refresh_draft_vocab(rt, draft_vocab or "cjk")
     ok(f"MTP draft layer: {rt}")
     for line in draft_vocab_note(gpu.get("vram_gb", 0.0), draft_vocab):   # #474: a recommendation, nothing changes
@@ -8144,7 +8144,7 @@ def main() -> int:
         args += ["--control-vector-scaled", f"{esp}:1.0", "--control-vector-layer-range", "4", "44",
                  "--cvec-mode", "project", "--cvec-dir", "per-layer"]
     cfg = {"exe": engine_exe(eng), "args": args, "cwd": str(ROOT), "tokenizer": str(pack / "tokenizer"),
-           "model_name": f"{fam['name']}-{model.lower()}", "log": str(home() / f"strata-{tag.lower()}.log"),
+           "model_name": f"{fam['name']}-{model.lower()}", "log": str(home() / f"cortex-{tag.lower()}.log"),
            "lib_dirs": lib_dirs, "port": port}
     if cuda_tk == 12:                                  # the experimental CUDA 12 engine (engine-cuda12/)
         cfg["cuda"] = 12
@@ -8157,10 +8157,10 @@ def main() -> int:
         # engine refuses any other one and falls back to plain hipBLAS)
         table = hipblaslt_table(gpu["arch"], lib_dirs, meta.get("hipblaslt_version"))
         if table:
-            cfg["env"] = {"STRATA_HIPBLASLT_TUNING": str(table)}
+            cfg["env"] = {"CORTEX_HIPBLASLT_TUNING": str(table)}
         if GFX1103_OPT_IN and gfx_arch_is(gpu["arch"], "gfx1103") and not WIN:
             # the 780M's KFD queues are evicted (a GPU reset) while transparent huge pages move the pinned expert arena
-            cfg.setdefault("env", {})["STRATA_NO_ARENA_THP"] = "1"
+            cfg.setdefault("env", {})["CORTEX_NO_ARENA_THP"] = "1"
             # the exact gfx1151 speed switches measured on this chip (GFX1103_SWITCHES): the engine has no arch defaults
             # for gfx1103, so setup writes them into the config.  They are setup's own (SETUP_ENV), so a re-run refreshes
             # them and turning the opt-in off takes them out again.
@@ -8176,10 +8176,10 @@ def main() -> int:
         # <arch>-rocblas-<version>.txt for its own library, or runs the default kernels and says so in its log.
         rocblas_tables = sorted(p.name for p in (ROOT / "tools" / "hip").glob(f"{gpu['arch']}-rocblas-*.txt"))
         if rocblas_tables:
-            cfg.setdefault("env", {})["STRATA_ROCBLAS_TUNING"] = str(ROOT / "tools" / "hip")
+            cfg.setdefault("env", {})["CORTEX_ROCBLAS_TUNING"] = str(ROOT / "tools" / "hip")
             ok(f"rocBLAS tuning tables for {gpu['arch']}: {', '.join(rocblas_tables)} (the engine takes the one of its rocBLAS build)")
         if resident:   # ROCm: large page-locked host allocations can fail or be slow for the CPU; keep the copy pageable
-            cfg.setdefault("env", {})["STRATA_RESIDENT_PIN"] = "0"
+            cfg.setdefault("env", {})["CORTEX_RESIDENT_PIN"] = "0"
     if gpu["count"] > 1 or a.gpu is not None:
         cfg["gpu"] = gpu["index"]                      # the engine is told this card (issue #51)
         cfg["gpus_asked"] = True                       # chosen at setup: not asked again at start
@@ -8222,13 +8222,13 @@ def main() -> int:
             cfg["parallel"] = 1
             ok("parallel requests: one at a time (--parallel 1)")
     if vision != "none":
-        old_cfg = home() / f"strata-{tag.lower()}.json"
+        old_cfg = home() / f"cortex-{tag.lower()}.json"
         vt = vision_tokens(a.vision_tokens, vision, old_cfg if old_cfg.is_file() else adopted)
         cfg["vision"] = {"exe": str(eng / VEXE), "mmproj": str(mmproj),     # the text model, opened vocab-only:
                          "model": str(ready_paths(model, models_dir)["dense"] if ready else shards[0]),
                          "gpu": vision == "gpu", "max_tokens": vt}
         if reader is not None:                          # AMD: the HIP reader with the CPU reader behind it, or the CPU reader
-            from strata_control import vision_reader as VR
+            from cortex_control import vision_reader as VR
             cfg["vision"] = VR.vision_section(reader, cfg["vision"])
         if vision == "cpu":
             cfg["vision"]["threads"] = vision_threads()
@@ -8236,7 +8236,7 @@ def main() -> int:
         warn("--vision-tokens: images are off for this model, so it is not used")
     if a.images:                                       # only when given: else an earlier "images" is carried over
         cfg["images"] = setup_images(a, gpu, hip, Path(a.models_dir))
-    cfg_path = home() / f"strata-{tag.lower()}.json"
+    cfg_path = home() / f"cortex-{tag.lower()}.json"
     cal = setup_calibration(cfg, hip)                  # #566: Linux HIP too; the tuning is offered on NVIDIA only
     if cal is not None:
         sys.path.insert(0, str(ROOT / "tools"))
@@ -8257,7 +8257,7 @@ def main() -> int:
     script = write_run_script(tag, cfg_path, port, cfg.get("open_browser") is not False)
     # offered only when someone answers: --yes installs and adopted earlier installs are not held up by it
     if cal is None and not hip and not a.no_start and not a.yes and ask(
-            "Tune Strata for this PC now? It measures a few engine settings (about 15-30 minutes, longer on a slow card; the PC is busy "
+            "Tune Cortex for this PC now? It measures a few engine settings (about 15-30 minutes, longer on a slow card; the PC is busy "
             "meanwhile; later: START-HERE --calibrate)", ["y", "n"], "y", a.yes) == "y":
         tuned = calibrate_config(cfg_path)
     else:
@@ -8289,7 +8289,7 @@ def main() -> int:
     if not a.yes and sys.stdin.isatty() and ask(
             "Run a quick benchmark now? It measures this install for about 10 minutes and writes a report you can share "
             f"(later: {'BENCH.bat' if WIN else './bench.sh'})", ["y", "n"], "n", a.yes) == "y":
-        subprocess.call([sys.executable, str(ROOT / "tools" / "strata_bench.py"), "--config", str(cfg_path), "--port", str(port)])
+        subprocess.call([sys.executable, str(ROOT / "tools" / "cortex_bench.py"), "--config", str(cfg_path), "--port", str(port)])
     return start(cfg_path, port)
 
 

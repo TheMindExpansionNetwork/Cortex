@@ -1,7 +1,7 @@
-# Strata
+# Cortex
 
 Local AI, with one model by default and multiple native instances in Expert mode.
-The React UI connects to the official Strata installer and engine, checks the
+The React UI connects to the official Cortex installer and engine, checks the
 hardware, prepares supported models, serves compatible APIs and shows measured
 engine activity. See [native integration handover](docs/native-engine-handover.md).
 
@@ -26,7 +26,7 @@ npm install
 npm run dev          # host on :8791 + web on :5199, one command
 ```
 
-Open <http://localhost:5199>. On a clean machine Strata opens the first-run
+Open <http://localhost:5199>. On a clean machine Cortex opens the first-run
 Welcome flow: hardware check → choose version → optionally read pictures → download/load → chat. Advanced settings remain collapsed.
 
 Single-port mode (what the desktop build will use):
@@ -57,8 +57,8 @@ The sidebar shares the preview tab bar and respects reduced-motion preferences.
 | Area | Status |
 | --- | --- |
 | Hardware detection | **Real.** `system_profiler` / `sysctl` / `vm_stat` on macOS, `nvidia-smi` / `/proc` on Linux, `os` module fallbacks everywhere. |
-| Native model catalog | **Read from the installed Strata source.** Families, real download sizes and hardware compatibility come from its official MCP catalog. |
-| Model files | **Native installer or real GGUF adapter.** Native preparation reuses/resumes shards and companion files. The older design adapter remains simulated unless `STRATA_REAL_ENGINE=1`. |
+| Native model catalog | **Read from the installed Cortex source.** Families, real download sizes and hardware compatibility come from its official MCP catalog. |
+| Model files | **Native installer or real GGUF adapter.** Native preparation reuses/resumes shards and companion files. The older design adapter remains simulated unless `CORTEX_REAL_ENGINE=1`. |
 | Engine tuning | **Native config and measured operations.** Validated parameters/JSON, config backups, per-model GPU placement, measured benchmark and supported NVIDIA calibration. |
 | Serving API | **Native gateway.** Chat Completions, Anthropic and supported Responses protocols route by exact model ID. Existing key/network controls and request cancellation remain. |
 | Inference | **Native managed processes or a selected API/local adapter.** Native vision sends actual image content, and explicitly enabled MCP calls appear in chat. Design demonstrations remain labelled. |
@@ -73,7 +73,7 @@ native API monitoring can retain request content in memory when explicitly enabl
 ## Layout
 
 ```
-strata/
+cortex/
 ├── index.html               single entry, dark by default
 ├── src/
 │   ├── app/                 shell: App, Sidebar, CommandPalette (⌘K)
@@ -93,17 +93,17 @@ strata/
 │   ├── monitor.mjs          live phase + throughput + thermals
 │   ├── serving.mjs          API keys, access policy, request log
 │   ├── inference.mjs        backend detection (llama.cpp/Ollama/LM Studio) + proxy
-│   └── store.mjs            JSON state under $STRATA_HOME (~/.strata)
+│   └── store.mjs            JSON state under $CORTEX_HOME (~/.cortex)
 └── scripts/                 dev runner, design-kit sync, screenshot harness
 ```
 
-State lives in `~/.strata` (`models/`, `data/state.json`). If the home directory
+State lives in `~/.cortex` (`models/`, `data/state.json`). If the home directory
 is not writable — sandboxes, locked-down accounts — the host falls back to
-`./.strata`. Override with `STRATA_HOME`, `STRATA_WORKSPACE`, `STRATA_PORT`.
+`./.cortex`. Override with `CORTEX_HOME`, `CORTEX_WORKSPACE`, `CORTEX_PORT`.
 
 ## Design
 
-The interface **is** the Strata UI kit in `../ui`, not a lookalike.
+The interface **is** the Cortex UI kit in `../ui`, not a lookalike.
 
 - **Light is the default.** `:root` holds the light palette; `data-theme="dark"`
   swaps the same token names. Both themes are laid out from one stylesheet.

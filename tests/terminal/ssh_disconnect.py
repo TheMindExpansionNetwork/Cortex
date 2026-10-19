@@ -3,7 +3,7 @@
 
     python tests/terminal/ssh_disconnect.py --host p2003ssh.claryel.space --src /data/split-life/src --python /data/venv/bin/python
 
-Runs from any machine with ssh: it starts `strata serve` on the box in an `ssh -tt` session (a pty, like an interactive
+Runs from any machine with ssh: it starts `cortex serve` on the box in an `ssh -tt` session (a pty, like an interactive
 login), kills the LOCAL ssh client (the connection drops, sshd hangs up the pty), and then checks on the box that the
 server and the fake engine are gone, the port is free and the lease is free. The engine is the fake package of
 lifecycle_matrix.py (no GPU, no model). It prints one line, `PASS ssh-disconnect ...` or `FAIL ...`, and exits 0/1.
@@ -21,18 +21,18 @@ from pathlib import Path
 from tests.terminal import lifecycle_matrix as m
 root = Path("/data/split-life/sshrig"); import shutil; shutil.rmtree(root, ignore_errors=True); root.mkdir(parents=True)
 rig = m.Rig(root)
-print(json.dumps({"argv": rig.serve_argv(), "env": {k: v for k, v in rig.env.items() if k.startswith(("STRATA_", "FAKE_", "XDG_", "LOCALAPPDATA", "PYTHONPATH"))}, "port": rig.port}))
+print(json.dumps({"argv": rig.serve_argv(), "env": {k: v for k, v in rig.env.items() if k.startswith(("CORTEX_", "FAKE_", "XDG_", "LOCALAPPDATA", "PYTHONPATH"))}, "port": rig.port}))
 '''
 
 REMOTE_STATE = r'''
 import json, os, socket, sys
 sys.path.insert(0, "%(src)s")
 os.environ.update(json.loads(%(env)r))
-from strata_control import procs, runtime
+from cortex_control import procs, runtime
 port = %(port)d
 left = [r for r in procs.records() if procs.start_token(r["pid"]) == r["token"]]
 import psutil
-fam = [p.pid for p in psutil.process_iter(["cmdline"]) if any("sshrig" in c or "serve.server" in c or "strata.py" in c for c in (p.info["cmdline"] or [])) and p.pid != os.getpid()]
+fam = [p.pid for p in psutil.process_iter(["cmdline"]) if any("sshrig" in c or "serve.server" in c or "cortex.py" in c for c in (p.info["cmdline"] or [])) and p.pid != os.getpid()]
 with socket.socket() as s:
     s.settimeout(0.5); open_ = s.connect_ex(("127.0.0.1", port)) == 0
 try:

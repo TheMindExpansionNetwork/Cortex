@@ -1,24 +1,24 @@
-// src/kernels/cuda/qsa_decode_attn.cu - see include/strata/kernels/qsa_decode_attn.hpp.
+// src/kernels/cuda/qsa_decode_attn.cu - see include/cortex/kernels/qsa_decode_attn.hpp.
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
-#include "strata/core/geometry.hpp"
+#include "cortex/core/geometry.hpp"
 #include <dpct/dpct.hpp>
-#include "strata/sycl_queue.hpp"
-#include "strata/kernels/qsa_decode_attn.hpp"
-#include "strata/kernels/kv_q8.hpp"
-#include "strata/kernels/kv_q4.hpp"
+#include "cortex/sycl_queue.hpp"
+#include "cortex/kernels/qsa_decode_attn.hpp"
+#include "cortex/kernels/kv_q8.hpp"
+#include "cortex/kernels/kv_q4.hpp"
 
 #include <cfloat>
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
 constexpr int HD = 256;          // head_dim
 constexpr int G = 12;            // query heads per KV head (24 / 2)
-static_assert(HD == strata::core::kCompiledGeometry.head_dim && G == strata::core::kCompiledGeometry.n_head / strata::core::kCompiledGeometry.n_head_kv, "qsa_decode_attn is compiled for core/geometry.hpp");
+static_assert(HD == cortex::core::kCompiledGeometry.head_dim && G == cortex::core::kCompiledGeometry.n_head / cortex::core::kCompiledGeometry.n_head_kv, "qsa_decode_attn is compiled for core/geometry.hpp");
 constexpr int CHUNK = 64;        // cells per block
 constexpr int THREADS = 256;
 constexpr int WARPS = THREADS / 32;
@@ -181,7 +181,7 @@ attn_chunk_kernel(const float *__restrict__ q, QsaAttnPools p,
     */
     item_ct1.barrier();
     if constexpr (LANE_CELL) {
-        // S25 (STRATA_ATTN_LANECELL=1): thread t scores cell t % 64 for heads 3 (t / 64) .. +2 by itself - the same
+        // S25 (CORTEX_ATTN_LANECELL=1): thread t scores cell t % 64 for heads 3 (t / 64) .. +2 by itself - the same
         // 8-dimension partial per former lane (the identical expression), then the former warp_sum's butterfly as
         // lane 0 ran it (a[l] += a[l + o] for o = 16 .. 1), so every score is bit-identical without 12 shuffle
         // reductions per cell
@@ -376,8 +376,8 @@ attn_chunk_kernel(const float *__restrict__ q, QsaAttnPools p,
 // PR #540 (sskver): the same attention with fewer shuffles and less shared-memory traffic, bit for bit the kernel
 // above (same operands, same order); +7% prompt speed on a V100, where this kernel reads every prompt chunk.  It
 // uses more registers (80 vs 38 on sm_70), so it runs on cards below sm_75 only, and exists only in the experimental
-// build (-DSTRATA_EXPERIMENTAL_SM60=ON): the ready-made engine keeps exactly the kernel above.
-#if defined(STRATA_EXPERIMENTAL_SM60)
+// build (-DCORTEX_EXPERIMENTAL_SM60=ON): the ready-made engine keeps exactly the kernel above.
+#if defined(CORTEX_EXPERIMENTAL_SM60)
 // The 12 heads' lane sums (`part[12..15]` zero), reduce-scattered with warp_sum's pairing order (xor 16, 8, 4, 2, 1):
 // every output adds the same two operands at every level, so each sum is bit for bit warp_sum's (float add commutes),
 // for 16 shuffles instead of 12 x 5.  Lane l ends holding head head_of_lane(l); lanes l and l^1 agree.
@@ -582,7 +582,7 @@ __global__ void __launch_bounds__(THREADS) attn_chunk_kernel_pre75(const float* 
 #pragma unroll
     for (int h = 0; h < G; ++h) part_acc[((size_t) slot * G + h) * HD + t] = acc[h];
 }
-#endif  // STRATA_EXPERIMENTAL_SM60
+#endif  // CORTEX_EXPERIMENTAL_SM60
 
 __dpct_inline__ void attn_merge_kernel(const float *__restrict__ part_acc,
                                        const float *__restrict__ part_m,
@@ -615,12 +615,12 @@ __dpct_inline__ void attn_merge_kernel(const float *__restrict__ part_acc,
     attn[(size_t) h * HD + d] = L > 0.0f ? acc / L : 0.0f;
 }
 
-#if defined(STRATA_EXPERIMENTAL_SM60)
-// the current device is below sm_75 (per device: a layer split can mix cards); STRATA_ATTN_PRE75=0 turns PR #540's
+#if defined(CORTEX_EXPERIMENTAL_SM60)
+// the current device is below sm_75 (per device: a layer split can mix cards); CORTEX_ATTN_PRE75=0 turns PR #540's
 // kernel off (A/B)
 bool pre75_attn() {
     static const bool off = [] {
-        const char* e = std::getenv("STRATA_ATTN_PRE75");
+        const char* e = std::getenv("CORTEX_ATTN_PRE75");
         return e != nullptr && e[0] == '0';
     }();
     static int cc[64] = {};
@@ -638,9 +638,9 @@ bool pre75_attn() {
     }
     return cc[dev] < 75;
 }
-#define STRATA_ATTN_CHUNK(M) (pre75_attn() ? attn_chunk_kernel_pre75<M> : attn_chunk_kernel<M>)
+#define CORTEX_ATTN_CHUNK(M) (pre75_attn() ? attn_chunk_kernel_pre75<M> : attn_chunk_kernel<M>)
 #else
-#define STRATA_ATTN_CHUNK(M) attn_chunk_kernel<M>
+#define CORTEX_ATTN_CHUNK(M) attn_chunk_kernel<M>
 #endif
 
 }  // namespace
@@ -664,10 +664,10 @@ void qsa_decode_attn_batch(const float* q, const QsaAttnPools& pools, const int3
     const float scale = 1.0f / sqrtf((float) HD);
     const dpct::dim3 grid((unsigned)n_chunks, (unsigned)s.n_head_kv,
                           (unsigned)n_q);
-    dpct::queue_ptr st = strata::q_of(stream);
-    // S25: STRATA_ATTN_LANECELL=1 - the score phase one cell per thread (bit-identical scores, no shuffle reductions)
-    static const bool lane_cell = [] { const char* v = std::getenv("STRATA_ATTN_LANECELL"); return v && v[0] == '1'; }();
-#define STRATA_ATTN_LC(M)                                                      \
+    dpct::queue_ptr st = cortex::q_of(stream);
+    // S25: CORTEX_ATTN_LANECELL=1 - the score phase one cell per thread (bit-identical scores, no shuffle reductions)
+    static const bool lane_cell = [] { const char* v = std::getenv("CORTEX_ATTN_LANECELL"); return v && v[0] == '1'; }();
+#define CORTEX_ATTN_LC(M)                                                      \
     {                                                                          \
         auto exp_props = sycl::ext::oneapi::experimental::properties{          \
             sycl::ext::oneapi::experimental::use_root_sync};                   \
@@ -704,7 +704,7 @@ void qsa_decode_attn_batch(const float* q, const QsaAttnPools& pools, const int3
                     });                                                        \
         });                                                                    \
     }
-#define STRATA_ATTN_RSK(M, V)                                                      \
+#define CORTEX_ATTN_RSK(M, V)                                                      \
     {                                                                          \
         auto exp_props = sycl::ext::oneapi::experimental::properties{          \
             sycl::ext::oneapi::experimental::use_root_sync};                   \
@@ -741,29 +741,29 @@ void qsa_decode_attn_batch(const float* q, const QsaAttnPools& pools, const int3
                     });                                                        \
         });                                                                    \
     }
-#undef STRATA_ATTN_RSK_DEFINED
-    // 151-b70: STRATA_ATTN_RS=2 (default): the probabilities in [cell][head] order and the value phase reading a cell's 12 as three vectors - the same
+#undef CORTEX_ATTN_RSK_DEFINED
+    // 151-b70: CORTEX_ATTN_RS=2 (default): the probabilities in [cell][head] order and the value phase reading a cell's 12 as three vectors - the same
     // bits (first-token logits md5 equal at 4K and 16K), +0.8..0.9% prompt tok/s on the B70; =1 adds a 16-shuffle reduce-scatter for the scores
     // (bit-exact too, but -1.5% here: the score phase is not shuffle bound); =0 the layout before
-    static const int rs_on = [] { const char* v = std::getenv("STRATA_ATTN_RS"); return v ? std::atoi(v) : 2; }();
+    static const int rs_on = [] { const char* v = std::getenv("CORTEX_ATTN_RS"); return v ? std::atoi(v) : 2; }();
     if (lane_cell) {
-        if (kv_mode == 3) { STRATA_ATTN_LC(3); }
-        else if (kv_mode == 2) { STRATA_ATTN_LC(2); }
-        else if (kv_mode == 1) { STRATA_ATTN_LC(1); }
-        else { STRATA_ATTN_LC(0); }
+        if (kv_mode == 3) { CORTEX_ATTN_LC(3); }
+        else if (kv_mode == 2) { CORTEX_ATTN_LC(2); }
+        else if (kv_mode == 1) { CORTEX_ATTN_LC(1); }
+        else { CORTEX_ATTN_LC(0); }
     } else if (rs_on == 1) {
-        if (kv_mode == 3) { STRATA_ATTN_RSK(3, 1); }
-        else if (kv_mode == 2) { STRATA_ATTN_RSK(2, 1); }
-        else if (kv_mode == 1) { STRATA_ATTN_RSK(1, 1); }
-        else { STRATA_ATTN_RSK(0, 1); }
+        if (kv_mode == 3) { CORTEX_ATTN_RSK(3, 1); }
+        else if (kv_mode == 2) { CORTEX_ATTN_RSK(2, 1); }
+        else if (kv_mode == 1) { CORTEX_ATTN_RSK(1, 1); }
+        else { CORTEX_ATTN_RSK(0, 1); }
     } else if (rs_on == 2) {
-        if (kv_mode == 3) { STRATA_ATTN_RSK(3, 2); }
-        else if (kv_mode == 2) { STRATA_ATTN_RSK(2, 2); }
-        else if (kv_mode == 1) { STRATA_ATTN_RSK(1, 2); }
-        else { STRATA_ATTN_RSK(0, 2); }
+        if (kv_mode == 3) { CORTEX_ATTN_RSK(3, 2); }
+        else if (kv_mode == 2) { CORTEX_ATTN_RSK(2, 2); }
+        else if (kv_mode == 1) { CORTEX_ATTN_RSK(1, 2); }
+        else { CORTEX_ATTN_RSK(0, 2); }
     } else
-#undef STRATA_ATTN_LC
-#undef STRATA_ATTN_RSK
+#undef CORTEX_ATTN_LC
+#undef CORTEX_ATTN_RSK
     if (kv_mode == 3)
     {
         auto exp_props = sycl::ext::oneapi::experimental::properties{
@@ -876,7 +876,7 @@ void qsa_decode_attn_step(const float* q, const QsaAttnPools& pools, const int32
     float* part_l = part_m + (size_t) n_chunks * s.n_head;
     const float scale = 1.0f / sqrtf((float) HD);
     const dpct::dim3 grid((unsigned)n_chunks, (unsigned)s.n_head_kv);
-    dpct::queue_ptr st = strata::q_of(stream);
+    dpct::queue_ptr st = cortex::q_of(stream);
     if (kv_mode == 3)
     {
         auto exp_props = sycl::ext::oneapi::experimental::properties{
@@ -961,4 +961,4 @@ void qsa_decode_attn_step(const float* q, const QsaAttnPools& pools, const int32
     const dpct::err0 e = 0;
 }
 
-}  // namespace strata::kernels
+}  // namespace cortex::kernels

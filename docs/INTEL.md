@@ -1,7 +1,7 @@
-# Strata on an Intel Arc
+# Cortex on an Intel Arc
 
-Strata's engine is CUDA. On an Intel Arc it runs as **Strata's own engine, ported to SYCL** (`sycl/`, the
-section "The engine itself on Intel" below), behind the same Strata server: OpenAI and Anthropic APIs, streaming,
+Cortex's engine is CUDA. On an Intel Arc it runs as **Cortex's own engine, ported to SYCL** (`sycl/`, the
+section "The engine itself on Intel" below), behind the same Cortex server: OpenAI and Anthropic APIs, streaming,
 tool calls, MCP and the web app all unchanged. llama.cpp's SYCL backend is the comparison point in the tables (it
 runs the same GGUF at about a third of the speed).
 
@@ -14,7 +14,7 @@ PCIe 3.0 x8 slot (the card trains at Gen3 x8 there; it can do Gen5 x16).
 
 ## What you get (2026-10-01)
 
-| | NVIDIA (Strata engine) | Intel Arc, Strata SYCL port | Intel Arc, llama.cpp |
+| | NVIDIA (Cortex engine) | Intel Arc, Cortex SYCL port | Intel Arc, llama.cpp |
 |---|---|---|---|
 | models | all four | the Coder IQ1_M; the original IQ2_XS too (experts beyond VRAM in the host mirror: 58-64 tok/s) | the Coder (fits VRAM) |
 | model files | the same GGUFs | the same GGUFs + a native pack | the same GGUFs |
@@ -43,7 +43,7 @@ On Ubuntu 24.04 or newer, from nothing. The Intel GPU driver (the `xe` or `i915`
 
    Log out and in again (or reboot) so the groups apply. `docker ps` must work without `sudo`; the `render` group lets
    the container open the GPU.
-2. **Get Strata and build the engine** ("How to build it" below, about 10 minutes the first time).
+2. **Get Cortex and build the engine** ("How to build it" below, about 10 minutes the first time).
 3. **Run setup:**
 
         ./setup.sh --backend sycl [setup.py's options, e.g. --model IQ3_S --context 32768 --port 8085]
@@ -59,8 +59,8 @@ questions are setup's own. What changes:
 
 - **GPU check:** the Arc is found in sysfs (vendor 8086 under `xe` or `i915`) and offered through setup's AMD
   path. That is the path that builds locally and has no images.
-- **Engine step:** it uses the SYCL build (`build-sycl-aot/strata` or `build-sycl/strata`, run in the `strata-sycl-dev`
-  image by `sycl/serve/strata-sycl.sh`) instead of compiling CUDA or HIP.
+- **Engine step:** it uses the SYCL build (`build-sycl-aot/cortex` or `build-sycl/cortex`, run in the `cortex-sycl-dev`
+  image by `sycl/serve/cortex-sycl.sh`) instead of compiling CUDA or HIP.
 - **RAM rule:** this does not apply on an `xe` card. The CUDA engine keeps every expert in RAM; the port streams them from
   the GGUF into VRAM (`--stream-experts`), so RAM only decides the KV streaming. `--check` lists what fits by VRAM.
 - **The config:** it uses the container's paths and `"backend": "sycl"`. The VRAM reserve is 1,024 MiB up to
@@ -69,15 +69,15 @@ questions are setup's own. What changes:
   64K up when the RAM holds the KV. A `model_switcher` or `sampling` block from an earlier config is kept.
   `run-<model>.sh` starts `sycl/serve/server_intel.py`.
 - **Arc A-series (`i915`, e.g. the A750 with 8 GB):** a different config, see "Arc A750 and the other Alchemist cards" below.
-- **Engine settings:** the config's `"env"` block reaches the engine. `strata-sycl.sh` forwards every variable starting with
-  `STRATA_`, `ONEAPI_`, `UR_`, `IGC_`, `SYCL_` or `ZES_` into the container and sets `STRATA_VERIFY_DEVICE_PLAN=1`,
-  `STRATA_VERIFY_NO_HOST=1` and `STRATA_STAGER_THREADS=12` unless the environment says otherwise (for example
-  `"env": {"STRATA_VERIFY_NO_HOST": "0"}`).
+- **Engine settings:** the config's `"env"` block reaches the engine. `cortex-sycl.sh` forwards every variable starting with
+  `CORTEX_`, `ONEAPI_`, `UR_`, `IGC_`, `SYCL_` or `ZES_` into the container and sets `CORTEX_VERIFY_DEVICE_PLAN=1`,
+  `CORTEX_VERIFY_NO_HOST=1` and `CORTEX_STAGER_THREADS=12` unless the environment says otherwise (for example
+  `"env": {"CORTEX_VERIFY_NO_HOST": "0"}`).
 
 If a future `setup.py` drops a step this relies on, it stops with a message instead of writing a wrong config.
-The models, packs and checkout must sit under the folder `strata-sycl.sh` mounts at `/work` (the one above the
-checkout, or `STRATA_SYCL_ROOT`). An earlier Strata install on the same PC keeps its data folder in
-`~/.config/strata/settings.json`; pass `--data-dir <folder above the checkout>/Strata-data` to put this one under the
+The models, packs and checkout must sit under the folder `cortex-sycl.sh` mounts at `/work` (the one above the
+checkout, or `CORTEX_SYCL_ROOT`). An earlier Cortex install on the same PC keeps its data folder in
+`~/.config/cortex/settings.json`; pass `--data-dir <folder above the checkout>/Cortex-data` to put this one under the
 mount. A symlink to a folder outside the mount does not work in the container; a hard link does.
 
 Then `run-<model>.sh` (or `./setup.sh --backend sycl` again) starts the model. The first start of a 30 GB model
@@ -85,29 +85,29 @@ takes about two minutes. `--port N` and `--host 0.0.0.0` work as in upstream's s
 
 ## How to build it
 
-The engine is built in Docker, in the `strata-sycl-dev` image (oneAPI 2026.1 compiler, oneMKL and Level Zero, from a
-community llama.cpp SYCL image), so the PC needs no oneAPI. From the checkout (its folder is called `Strata` here; the
+The engine is built in Docker, in the `cortex-sycl-dev` image (oneAPI 2026.1 compiler, oneMKL and Level Zero, from a
+community llama.cpp SYCL image), so the PC needs no oneAPI. From the checkout (its folder is called `Cortex` here; the
 folder above it is what the container mounts at `/work`):
 
-    cd Strata
-    docker build -t strata-sycl-dev sycl/tools          # once: about 6 minutes, a 13 GB image
+    cd Cortex
+    docker build -t cortex-sycl-dev sycl/tools          # once: about 6 minutes, a 13 GB image
     H=$(basename "$PWD")
 
 **Arc B-series** (Pro B70: `bmg-g31`; B580, B570 and Pro B60: `bmg-g21`; `ocloc ids bmg-g21` in the image lists the
 device ids). Ahead-of-time code, no compile at the first start:
 
     docker run --rm -u $(id -u):$(id -g) -v "$PWD/..:/work" -e AOT=bmg-g31 -e REPO=/work/$H \
-        -e BUILD_DIR=/work/$H/build-sycl-aot strata-sycl-dev "cd /work/$H && bash sycl/tools/build.sh strata"
+        -e BUILD_DIR=/work/$H/build-sycl-aot cortex-sycl-dev "cd /work/$H && bash sycl/tools/build.sh cortex"
 
 **Arc A-series** (Alchemist: A750, A770, A580, A380): no `AOT=`. The code is compiled from SPIR-V at the first start
 (JIT, about a minute). Nobody has run an AOT build for these cards.
 
     docker run --rm -u $(id -u):$(id -g) -v "$PWD/..:/work" -e REPO=/work/$H \
-        -e BUILD_DIR=/work/$H/build-sycl strata-sycl-dev "cd /work/$H && bash sycl/tools/build.sh strata"
+        -e BUILD_DIR=/work/$H/build-sycl cortex-sycl-dev "cd /work/$H && bash sycl/tools/build.sh cortex"
 
-The build takes about 3 minutes and ends with `BUILD EXIT 0` and `errors: 0`. The binary is `build-sycl-aot/strata`
-(B-series) or `build-sycl/strata` (A-series); setup finds either one. Run the `docker build` again after pulling a
-Strata update that changes `sycl/tools/Dockerfile`, and the `docker run` after every update of the engine (setup
+The build takes about 3 minutes and ends with `BUILD EXIT 0` and `errors: 0`. The binary is `build-sycl-aot/cortex`
+(B-series) or `build-sycl/cortex` (A-series); setup finds either one. Run the `docker build` again after pulling a
+Cortex update that changes `sycl/tools/Dockerfile`, and the `docker run` after every update of the engine (setup
 says when the engine is older than it needs).
 
 ## Things that matter on this GPU
@@ -118,8 +118,8 @@ says when the engine is older than it needs).
   the single 28.8 GB tensor of shard 2. `--override-tensor per_layer_token_embd=CPU` keeps it in host
   memory, mmapped and paged from the SSD by row, which is how the model's authors serve it. Host RSS
   stays around 2 GB.
-- **Thinking.** The model reasons before it answers. Strata's web app has the setting; for an API
-  client, put `{"reasoning_effort": "none"}` in `strata-<model>.shared-settings.json` next to the
+- **Thinking.** The model reasons before it answers. Cortex's web app has the setting; for an API
+  client, put `{"reasoning_effort": "none"}` in `cortex-<model>.shared-settings.json` next to the
   config, or send `chat_template_kwargs: {"enable_thinking": false}` per request. Without one of
   those a short `max_tokens` is spent entirely inside the think block and the answer looks empty.
 - **`/health` says 503 while loading**; the server polls `/props` instead.
@@ -153,7 +153,7 @@ not fifteen.
 
 ## The engine itself on Intel: the SYCL port (`sycl/`)
 
-Everything above runs the model through llama.cpp. This is the other half: Strata's own engine - the 50 CUDA
+Everything above runs the model through llama.cpp. This is the other half: Cortex's own engine - the 50 CUDA
 kernels and the host code that drives them (streams, events, graph capture, pinned memory) - built for the
 Arc with oneAPI. It is a migration of the tree, not a new backend: the engine has no backend seam to slot
 into.
@@ -174,7 +174,7 @@ migration tool.
 3. `sycl/tools/fixups.py` - what dpct got wrong or could not do, as an idempotent script with a reason per
    item. The ones that mattered:
    - CUDA's null stream means the default stream; dpct turned it into a null `sycl::queue*`. Every
-     stream cast now goes through `strata::q_of()` (`sycl/include/strata/sycl_queue.hpp`).
+     stream cast now goes through `cortex::q_of()` (`sycl/include/cortex/sycl_queue.hpp`).
    - `__ldg((const float*) p)` came out as `*p`, reading one byte of a float scale (two sites, s_gemv).
    - `__fadd_rn(a, b ? c : d)` lost its parentheses (two sites).
    - the ggml lookup tables were threaded through kernel parameters with the wrong table per template;
@@ -184,17 +184,17 @@ migration tool.
 4. `sycl/tools/build.sh` - configure + build with icpx inside the image. Two compiler flags are load-bearing:
    `-fp-model=precise` (icpx defaults to a fast FP model) and `-cl-fp32-correctly-rounded-divide-sqrt`
    for the device compiler - the Arc's fp32 divide is not correctly rounded by default (OpenCL allows
-   2.5 ulp), and Strata's quantizers are byte-exact against ggml through `amax / 127`. Measured: without
+   2.5 ulp), and Cortex's quantizers are byte-exact against ggml through `amax / 127`. Measured: without
    it `quantize_act_parity` has 303k mismatches, with it none.
 
-**Where it stands (2026-09-29).** The whole tree builds and links: the `strata` binary and 22 kernel
+**Where it stands (2026-09-29).** The whole tree builds and links: the `cortex` binary and 22 kernel
 parity tests. On the B70, 19 of the 22 pass byte-for-byte or within their tolerances; the other three
 need model fixtures (`iq_parity`, `ple_parity`) or the tensor-core kernel below (`qsa_prompt_attn`).
 
 | parity test | result |
 |---|---|
 | bf16_gemv, cvec, dequant_s2, elementwise, gdn, gr, kv_q4, kv_q8, kv_stream, qsa, quantize_act, rope, router_top10, s2_gemv, s2_gemv_q8, s_gemv, s_gemv_q8k, sampler, shared_expert | pass |
-| iq_parity, ple_parity | `ctest` generates the `iq_parity` fixtures into the build tree (`iq_parity_fixtures`, needs python3 with numpy; skipped without). `ple_parity` needs the Q2_0 shard 2 GGUF and the dense pack: configure with `-DSTRATA_PLE_GGUF=<shard 2 .gguf>` (and `-DSTRATA_PLE_FIXTURE_DIR=<dir with ple_in.bin and ple_out.bin>`); a missing input is a hard error, as in the CUDA build (#1795) |
+| iq_parity, ple_parity | `ctest` generates the `iq_parity` fixtures into the build tree (`iq_parity_fixtures`, needs python3 with numpy; skipped without). `ple_parity` needs the Q2_0 shard 2 GGUF and the dense pack: configure with `-DCORTEX_PLE_GGUF=<shard 2 .gguf>` (and `-DCORTEX_PLE_FIXTURE_DIR=<dir with ple_in.bin and ple_out.bin>`); a missing input is a hard error, as in the CUDA build (#1795) |
 | qsa_prompt_attn_parity | needs the tensor-core kernel (below) |
 | kv_hybrid_parity (0.1.27, hybrid K8V4 KV) | appends, gathers and attention pass; its last step is that same tensor-core kernel |
 
@@ -208,13 +208,13 @@ that returns the n-th Fibonacci number", greedy, 64 tokens:
 Measured on the same card, same 2,185-token prompt, 64 greedy tokens (AOT build, `--spec 2`,
 `--no-prefill-borrow`), against llama.cpp's SYCL build serving the same GGUF:
 
-| | llama.cpp SYCL | Strata SYCL port |
+| | llama.cpp SYCL | Cortex SYCL port |
 |---|---|---|
 | prompt reading | 138-319 tok/s | **560 tok/s** (693 at 2,000 tokens, 180 at 300) |
 | decode, suffix drafter only (`--spec 2`) | 24.2-26.0 tok/s | 20.2-20.8 tok/s |
 | decode with the MTP draft layer (`--spec 4 --mtp`) | - | **42.7 tok/s** at the 2,185-token context (81% accepted, 2.9 tokens/round); 45.3 on a short prompt |
 
-Prompt reading is where Strata's design pays (oneMKL GEMM over dequantised experts, the whole model on
+Prompt reading is where Cortex's design pays (oneMKL GEMM over dequantised experts, the whole model on
 the card). Decode is at ~80%: a speculative round costs ~53 ms whatever its size and the suffix drafter
 is accepted 9% of the time, so nearly every round yields one token; `--spec 4` (16.9 tok/s) was worse
 than `--spec 2` (20.8) for that reason. The kernels themselves run at 130-160 GB/s of weights on a card
@@ -230,11 +230,11 @@ Without AOT the runtime JIT-compiles every kernel on first use, ~47 s the first 
 `SYCL_CACHE_PERSISTENT=1 SYCL_CACHE_DIR=<dir>` keeps that across runs (15 MB).
 
 How to run it by hand (a greedy test run, the way every number in this section was measured; inside the
-`strata-sycl-dev` image, AOT build in `build-sycl-aot/`):
+`cortex-sycl-dev` image, AOT build in `build-sycl-aot/`):
 
 ```
-STRATA_VERIFY_DEVICE_PLAN=1 STRATA_VERIFY_NO_HOST=1 \
-build-sycl/strata --pack <iq pack> --native <shard1> --ple-gguf <shard2> \
+CORTEX_VERIFY_DEVICE_PLAN=1 CORTEX_VERIFY_NO_HOST=1 \
+build-sycl/cortex --pack <iq pack> --native <shard1> --ple-gguf <shard2> \
     --expert-profile data/expert-profile-coder.bin --expert-cache auto --stream-experts \
     --prefill auto --spec 4 --spec-min-p 0.5 --max-context 8192 --tokens <ids> --max-new 64 --greedy
 ```
@@ -242,15 +242,15 @@ build-sycl/strata --pack <iq pack> --native <shard1> --ple-gguf <shard2> \
 - `--stream-experts` (this port): no resident host copy of the experts; every one of the 12,288 goes from
   the GGUF into the VRAM cache through a small staging ring (`GgufExpertSource`). Upstream needs 32 GB of
   RAM for this model; with the flag the engine runs on 23 GiB.
-- `STRATA_VERIFY_DEVICE_PLAN=1`: the GPU plans each layer itself (upstream's E-6; off by default there).
-- `STRATA_VERIFY_NO_HOST=1` (this port): the host waits for the whole window graph instead of per-layer
+- `CORTEX_VERIFY_DEVICE_PLAN=1`: the GPU plans each layer itself (upstream's E-6; off by default there).
+- `CORTEX_VERIFY_NO_HOST=1` (this port): the host waits for the whole window graph instead of per-layer
   rings. Only valid with every expert resident, which is the case on a 32 GB card.
 - `--no-prefill-borrow`: the prompt path must not lend expert slots (a lent expert is served from the host
   behind a flag the GPU does not see reliably here; long prompts hung without it).
 
 What the port had to get right beyond compiling (each is an entry in `sycl/tools/fixups.py` or a flag):
 
-- **Host-mapped flags.** Strata's decode is a GPU/CPU handshake through host-mapped memory. `volatile`
+- **Host-mapped flags.** Cortex's decode is a GPU/CPU handshake through host-mapped memory. `volatile`
   device loads do not bypass the caches on Intel; system-scope atomics do, and they are the only thing
   measured to work (`sycl/probe/doorbell.cpp`, six variants). Host-to-device visibility *during* a kernel
   stays unreliable on this platform, which is why the all-resident path waits for the window instead.
@@ -261,7 +261,7 @@ What the port had to get right beyond compiling (each is an entry in `sycl/tools
   would run at Xe2's default 16 (`-fsycl-default-sub-group-size=32`).
 - **Synchronous copies.** `cudaMemcpy` blocks; dpct's default-queue `memcpy` did not wait. With the
   streaming ring that filled the expert cache from overwritten buffers: non-deterministic residuals, NaN by
-  layer 5. Found with the per-layer residual ladder (`STRATA_VERIFY_DEBUG=1` prints R after every layer).
+  layer 5. Found with the per-layer residual ladder (`CORTEX_VERIFY_DEBUG=1` prints R after every layer).
 - `native_expert_parity` hand-ported: the GPU native expert kernel matches ggml's float reference on real
   IQ1_M rows (rel 1.1e-2, the same class as the CPU path).
 
@@ -280,18 +280,18 @@ same prompts as above (outputs identical before and after each change):
 
 | change | effect |
 |---|---|
-| every window graph and the drafter's graphs captured at load (`STRATA_WARM_GRAPHS=0`: as before) | the first request no longer pays 250-290 ms of captures |
+| every window graph and the drafter's graphs captured at load (`CORTEX_WARM_GRAPHS=0`: as before) | the first request no longer pays 250-290 ms of captures |
 | the commit graph left running while the drafter's round runs on its own queue (`Verifier::commit(wait=false)` + `commit_finish`) | decode 38.3 -> 43.0 tok/s at the 2,184-token context, 46.5 -> 49.8 short |
 | upstream 0.1.29 merged (GDN recurrence pipelining, the block-scores read, sampler) | 2,184-token prompt 765 -> 792 tok/s, decode at that context 43.1 -> 45.2 |
 | the draft layer's batched prompt pass takes prompts under 64 rows (it fell back to per-6-token graphs) | its prompt cost on 19 tokens 106 -> 16 ms |
 | one device module per kernel (`-fsycl-device-code-split=per_kernel`) | the first launch in the prompt path (the embedding gather) 245 -> 1 ms |
 | the expert dequant writes each thread's run of FP16 values as one vector store (it wrote them one 2-byte store at a time) | dequant per expert 0.085 -> 0.030 ms; prompt 496 -> 575 tok/s at 2,184 tokens, 720 -> 841 at 8,000 |
 | SWAR sign compare/subtract in the expert dots, a local-memory resident-plan kernel, a split-K fused down kernel (bit-identical to the single-token one) | parity-clean, no measurable decode change; kept |
-| the PLE row reader's default queue depth 16 -> 64 blocking O_DIRECT threads (`STRATA_IO_THREADS`; 128 and 256 change nothing: the drive tops out near 85k IOPS on the 27k random 4 KB reads a 2,184-token prompt needs) | the rows of that prompt 466 -> 330 ms |
-| a short first prompt chunk (`STRATA_PREFILL_FIRST`, default 256 tokens) so the GPU starts while the remaining rows are still being read | 2,184 tokens: 711 -> 765 tok/s, 8,000: 857 -> 986; time to first token about 150 ms less. The chunk boundary moves rounding in the expert GEMMs, so a long greedy continuation can diverge late (token 45 of 64 on the test prompt) |
+| the PLE row reader's default queue depth 16 -> 64 blocking O_DIRECT threads (`CORTEX_IO_THREADS`; 128 and 256 change nothing: the drive tops out near 85k IOPS on the 27k random 4 KB reads a 2,184-token prompt needs) | the rows of that prompt 466 -> 330 ms |
+| a short first prompt chunk (`CORTEX_PREFILL_FIRST`, default 256 tokens) so the GPU starts while the remaining rows are still being read | 2,184 tokens: 711 -> 765 tok/s, 8,000: 857 -> 986; time to first token about 150 ms less. The chunk boundary moves rounding in the expert GEMMs, so a long greedy continuation can diverge late (token 45 of 64 on the test prompt) |
 
 Draft policy sweep (2,184-token prompt, 128 tokens): windows of 6 (`--spec 4`) at 41.6-43.5 tok/s; `--spec 2`
-33.6, `--spec 6` 35-37; `--spec-min-p` 0.3-0.7 within noise. Profiles (unitrace, `strata-sycl-dev:metrics` with
+33.6, `--spec 6` 35-37; `--spec-min-p` 0.3-0.7 within noise. Profiles (unitrace, `cortex-sycl-dev:metrics` with
 Intel's metrics libraries and `dev.xe.observation_paranoid=0`): the expert dot kernels are ALU-bound (77% XVE
 active), the dense projections memory-latency bound (92-128 GB/s at 84-93% occupancy), a decode round is 80-85%
 kernel time and ~5 us of launch gap per node over 2,400-2,600 nodes.
@@ -301,7 +301,7 @@ bound by the dequant that feeds them, not by the products. Two joint_matrix kern
 but lose to the existing paths on this card, so both stay opt-in: `xmx_gemm_iq` (a fused dequant + GEMM straight
 from the quantized rows, 4-5x slower than dequant + oneMKL) and `qsa_prompt_attn_xmx` (the port of the mma.sync
 prompt attention; `qsa_prompt_attn_parity` passes at 1e-6 of scale, 3x slower than the FP32 fallback per chunk;
-`STRATA_PROMPT_ATTN_XMX=1`). Where the prompt time goes now (2,184 / 8,000 tokens): dequant 28% / 27%, GEMMs
+`CORTEX_PROMPT_ATTN_XMX=1`). Where the prompt time goes now (2,184 / 8,000 tokens): dequant 28% / 27%, GEMMs
 22% / 20%, the per-layer host grouping 9.5% / 9%, attention 7% / 14%, embeddings + PLE rows 13% / 5%.
 
 A trap worth knowing: with a native pack `--prefill-until N` does not feed the rest of the prompt through the
@@ -320,8 +320,8 @@ output tokens between paths, never only timings.
   held `GgufExpertSource::blob()` pointers across ~1,900 reads of a 512-slot ring (so blobs were overwritten
   before they were copied: the 75 s / 1,065 tok/s measured first was computed partly with the wrong experts), and
   the stream-all walk hangs on this card in its first large chunk (the copy engine stops on a barrier). The stager
-  threads now read the blobs themselves, and the port uses the per-layer routed-only walk (`STRATA_PREFILL_RING=8`
-  upstream, the port's default; `STRATA_PREFILL_STREAM_ALL=1` restores the other for debugging).
+  threads now read the blobs themselves, and the port uses the per-layer routed-only walk (`CORTEX_PREFILL_RING=8`
+  upstream, the port's default; `CORTEX_PREFILL_STREAM_ALL=1` restores the other for debugging).
 - **Correct result: 80,000 tokens in 101 s = 790 tok/s.** GPU time: expert down GEMM 26.0 s, attention 15.4 s,
   dequant 12.7 s, QSA block selection 9.3 s (0.2 s at 8k: it scans every block of the context per query), gate/up
   GEMM 8.9 s, gather 6.1 s, the per-layer grouping sync 5.2 s, GDN recurrence 4.8 s. The PLE rows are free at this
@@ -363,23 +363,23 @@ attention fallback (its dedicated prompt kernel is the XMX one below).
 one accumulator update per chunk: 1.4-1.5x faster than v1 and correct in all modes (`qsa_prompt_attn_parity`,
 and `kv_hybrid_parity` passes completely with it), but still ~2x slower than the FP32 fallback (13.4 vs 5.5 ms per
 chunk, INT8, 32K context). This attention is gather-bound: each query position selects its own ~2,000 cells, so
-the K/V fetch dominates and only 12 of the 16 matrix rows are real heads. Opt-in: `STRATA_PROMPT_ATTN_XMX=1`
+the K/V fetch dominates and only 12 of the 16 matrix rows are real heads. Opt-in: `CORTEX_PROMPT_ATTN_XMX=1`
 (64-cell chunks, 120 KB of local memory) or `=32`.
 
-**XMX v2 in the full matrix, and why a grouped kernel is not next (2026-09-30).** With `STRATA_PROMPT_ATTN_XMX=1`
+**XMX v2 in the full matrix, and why a grouped kernel is not next (2026-09-30).** With `CORTEX_PROMPT_ATTN_XMX=1`
 (stage timing on, ~8-10% overhead) the long prompts run 23-33% slower than with the FP32 attention: 128K int8 666 vs
 960 tok/s, k8v4 596 vs 983; 256K k8v4 506 vs 752, int8 536 vs 718 (q4_0 does not use the XMX kernel). The obvious
 fix, gathering the union of neighbouring positions' cells once, depends on how much their selections overlap.
-Measured on the last chunk of an 80K prompt (first QSA layer, `STRATA_DUMP_SEL=<file>`): the union of 8 consecutive
+Measured on the last chunk of an 80K prompt (first QSA layer, `CORTEX_DUMP_SEL=<file>`): the union of 8 consecutive
 positions is 3.3x one position's 2,051 cells (16: 5.1x), and only 12% of a selection is shared by all 8. Grouping
 would cut the K/V gather to ~40% but multiply the arithmetic by 3-5x: at best 5-8 s of an 80K prompt. Not built.
 
-**Serving the port (2026-09-30).** `serve/server.py --engine strata` runs the SYCL engine unchanged through
-`sycl/serve/strata-sycl.sh`, an `exe` that starts the binary inside the oneAPI runtime image with the serve pipes
+**Serving the port (2026-09-30).** `serve/server.py --engine cortex` runs the SYCL engine unchanged through
+`sycl/serve/cortex-sycl.sh`, an `exe` that starts the binary inside the oneAPI runtime image with the serve pipes
 attached (paths in the config's `args` are the container's, the data root mounted at `/work`). A config:
 
 ```json
-{"engine": "strata", "exe": "<repo>/sycl/serve/strata-sycl.sh",
+{"engine": "cortex", "exe": "<repo>/sycl/serve/cortex-sycl.sh",
  "args": ["--pack", "/work/pack", "--native", "<shard 1>", "--ple-gguf", "<shard 2>",
           "--expert-profile", "data/expert-profile-coder.bin", "--expert-cache", "auto", "--stream-experts",
           "--prefill", "auto", "--spec", "4", "--spec-min-p", "0.5", "--mtp", "/work/mtp/rt",
@@ -426,11 +426,11 @@ runtime's teardown began); it now exits directly once its requests are done.
 
 1. Expert dot products on XMX in integer mode: a decode window (up to 6 tokens) fits one INT8 DPAS (1-8 rows), the
    i-quant grids decode to small integers, the activations are already INT8. Today: scalar dp4a, ALU-bound (77%).
-   **Parked**: three `joint_matrix` versions (opt-in `STRATA_EXPERT_XMX=1`, do not enable) were 1.4x and 2-3x slower
+   **Parked**: three `joint_matrix` versions (opt-in `CORTEX_EXPERT_XMX=1`, do not enable) were 1.4x and 2-3x slower
    than dp4a, and the third (B filled in place with `joint_matrix_apply`) hung the GPU. At 1-6 rows the grid decode
    and the packed-B layout cost more than the DPAS saves.
 2. Experts missing from VRAM read from pinned host memory over PCIe instead of the SSD (the 256K decode collapse).
-   **Done**: at start-up every expert without a VRAM slot is read into a pinned host mirror (`STRATA_MIRROR_MIB`, by
+   **Done**: at start-up every expert without a VRAM slot is read into a pinned host mirror (`CORTEX_MIRROR_MIB`, by
    default free RAM less 4 GiB), and the device-built verify plan points the expert kernels straight at it. Before,
    that plan dropped non-resident experts, so output with misses was wrong. Forced test (`--expert-cache 8000`,
    1,879 experts / 3.6 GiB out of VRAM): decode 2.6 -> 40.9 tok/s (full cache 43.3), prompt 451 -> 640 tok/s
@@ -439,7 +439,7 @@ runtime's teardown began); it now exits directly once its requests are done.
    31 tok/s (from 4-5).
 4. QSA block selection on XMX: every query against every pooled block, a dense product that grows with the context.
 5. The hot decode kernels re-tuned for Xe2's native 16-wide sub-groups (twice the registers per thread).
-   **Tried, no gain**: SIMD16 builds of the multi-column mmvq and the wide Q6_K kernel (`STRATA_MMVQ_SG`: 16 all,
+   **Tried, no gain**: SIMD16 builds of the multi-column mmvq and the wide Q6_K kernel (`CORTEX_MMVQ_SG`: 16 all,
    1 IQ4_XS only, 2 short outputs only; default 32). Alone (`mmvq_sg_bench`) SIMD16 is up to 1.45x faster on IQ4_XS
    and 1.3x on the 640-row shared-expert projections, 10-25% slower on the large K-quant ones; in the engine no
    setting beats SIMD32 beyond run-to-run noise (SIMD32 itself lands at 39 or 45 tok/s). Output tokens identical.
@@ -451,7 +451,7 @@ runtime's teardown began); it now exits directly once its requests are done.
    does two aligned 16-byte loads and a shift (`load16_a2`; both stay inside the block) and takes every Q6_K
    shape and window width (it used to be gated to n_out >= 4096, 1-4 columns): 2560->10240 at 1/2/4/6 columns
    160/145/141/101 -> 493/432/331/273 GB/s, the 248K-row head 150 -> 407 GB/s at 1 column. Output tokens
-   identical. **Coder decode 44.9 -> 54 tok/s** (2k prompt, greedy). `STRATA_MMVQ_A2=0` restores the old path.
+   identical. **Coder decode 44.9 -> 54 tok/s** (2k prompt, greedy). `CORTEX_MMVQ_A2=0` restores the old path.
    Still misaligned: IQ4_XS (136 B, 8-aligned, ~100 GB/s), IQ4_NL (18 B), Q8_0 (34 B); Q4_K/Q5_K are aligned
    but use 4-byte loads in the multi kernel (230-280 GB/s).
 
@@ -472,16 +472,16 @@ runtime's teardown began); it now exits directly once its requests are done.
 The last step changes the output: identical for 146 tokens, then a near-tie after a comma goes the other way (the new
 kernels sum in a different order). Q8_0 kernels 4-6x (189 -> 31 us at 2560 x 10240, 2 columns), IQ4_NL 640 -> 2560
 28 -> 6.6 us. The aligned-load helper only loads its second chunk when the address is unaligned, so it never reads a
-16-byte chunk without a needed byte and cannot cross a page at the end of an allocation. `STRATA_MMVQ_WIDE_32=0`
+16-byte chunk without a needed byte and cannot cross a page at the end of an allocation. `CORTEX_MMVQ_WIDE_32=0`
 restores the old Q8_0/IQ4_NL kernels. The sliced GR down kernel (GR read 108.6 -> 76.5 us at 6 tokens, sums equal to
-~1e-7) flips that near-tie back: its output is the original one. `STRATA_GR_DOWN_SLICED=0` restores the direct kernel.
+~1e-7) flips that near-tie back: its output is the original one. `CORTEX_GR_DOWN_SLICED=0` restores the direct kernel.
 
 Kernel level: IQ4_XS 107 -> 323 GB/s at 2 columns (61 -> 212 at 6), Q4_K/Q5_K 1.3-1.6x; the GR read 135 -> 110 us at
-6 tokens (bitwise equal). Switches to the old paths: `STRATA_PLAN_PARALLEL=0`, `STRATA_GR_DOWN_DIRECT=0`,
-`STRATA_MMVQ_WIDE_K=0`. (`iq_parity` reports 10 "missing fixture" failures with and without the change: the oracle
+6 tokens (bitwise equal). Switches to the old paths: `CORTEX_PLAN_PARALLEL=0`, `CORTEX_GR_DOWN_DIRECT=0`,
+`CORTEX_MMVQ_WIDE_K=0`. (`iq_parity` reports 10 "missing fixture" failures with and without the change: the oracle
 fixtures are not in the port's tree.)
 
-`STRATA_IQ3S_WIDE=1` (opt-in, 2026-10-10) reads the dense IQ3_S matrices (attn_q, attn_gate, ssm_out, attn_k, the
+`CORTEX_IQ3S_WIDE=1` (opt-in, 2026-10-10) reads the dense IQ3_S matrices (attn_q, attn_gate, ssm_out, attn_k, the
 shared experts' gate/up) with a wide kernel shaped like the Q4_K..IQ4_XS ones. unitrace, B70, IQ3_XXS, one card, T=1:
 worst attn_k 77 -> 123 GB/s, best attn_q 114 -> 307 GB/s; these matrices take 0.60 ms of kernel time per token
 instead of 1.36 ms. The greedy output parts from the default at token 198 of 256 (the sub-blocks are summed in
@@ -493,14 +493,14 @@ through a per-byte saturating subtract; it is now four integer ops (bitwise equa
 kernels load the Q8_1 activations as one dword-vector. No switch. mmvq_bench Q6_K, B70: 2560x10240 1 column 44.7 -> 26.5 us,
 4 columns 64.5 -> 46.2; A750: 2560x10240 4 columns 251 -> 102 us. End to end on the B70 (IQ3_S, 5 interleaved pairs, answers
 identical): decode 32.24 -> 33.37 tok/s on a story prompt (+3.5%), 39.11 -> 40.77 after a 4K prompt (+4.2%), prompt rate unchanged.
-`STRATA_MMVQ_LARGE_GRF` (default on for Arc A-series only, `=1` forces it on, `=0` off) launches the 2-8 column wide kernels with
-256 registers per thread, where they spilled at 128 (the same bytes are produced either way). `STRATA_Q6_PLANAR` (default on,
+`CORTEX_MMVQ_LARGE_GRF` (default on for Arc A-series only, `=1` forces it on, `=0` off) launches the 2-8 column wide kernels with
+256 registers per thread, where they spilled at 128 (the same bytes are produced either way). `CORTEX_Q6_PLANAR` (default on,
 `=0` off) converts the Q6_K output head and the MTP draft head to ql / qh / scales / d planes at load (same bytes, no VRAM change,
 bitwise equal): 2560x248320 on a B70 800 -> 662 us (1 column), 1230 -> 1020 us (4 columns); end to end it adds +0.3% on the B70
 (33.16 -> 33.25 tok/s, within noise) on top of the kernel changes above.
 
 **Two-speed runs, explained (2026-09-30).** Identical greedy runs decode at either ~45 or ~39 tok/s. A per-gather
-trace of the PLE reader (`STRATA_PLE_TRACE=1`) shows the slow runs pay one 226 ms PLE read stall in the first
+trace of the PLE reader (`CORTEX_PLE_TRACE=1`) shows the slow runs pay one 226 ms PLE read stall in the first
 decode round, after the window graphs are captured; every other read and round matches the fast runs. Prompt time
 plus decode time is the same in both modes (4.95-5.17 s): the stall lands either in the prompt's PLE wait or in the
 first decode round, so it is a once-per-process cost, not lost throughput. Ruled out: NVMe APST, the I/O scheduler
@@ -548,7 +548,7 @@ part of the procedure now: it caught a dropped mirror hook and four doorbell wai
 - **The expert kernels.** Upstream sends the i-quant experts to new multi kernels (one warp per row, 8 rows a
   group); the port's grid is sized for its own kernels (8 lanes a row, 32 rows a group), so only a quarter of each
   expert's rows were written and the output was end-of-text tokens. The port's kernels stay the default (they also
-  serve upstream's new Q4_K/Q5_K/Q5_1/Q8_0 experts); `STRATA_EXPERT_SPLIT=1` runs upstream's, with their grid.
+  serve upstream's new Q4_K/Q5_K/Q5_1/Q8_0 experts); `CORTEX_EXPERT_SPLIT=1` runs upstream's, with their grid.
 - **Prompt-slot borrowing hung** in the first chunk of any prompt with it on (40K, 128K; GPU busy) - fixed after
   the 0.1.32 merge, see "Prompt-slot borrowing: the hang" below.
 - **Upstream's new tests found three dpct mistranslations from the first migration.** dpct writes `__fadd_rn(a, b)`
@@ -558,9 +558,9 @@ part of the procedure now: it caught a dropped mirror hook and four doorbell wai
   path) and in the s2 activation rounding (every value 0; the Q2_0 s2 pack, unused here). Fixed, and `fixups.py`
   now parenthesises. `qsa_parity`'s batch-vs-sequential test passes; decode output after long prompts changed.
 - **Upstream's new kernels against the port's on the B70** (decode tok/s, Coder 19 / 2,184-token prompts, IQ2_XS
-  19): port defaults 78.1 / 75.7 / 58.6; `STRATA_EXPERT_SPLIT=1` 65.6-69.5 / 67.2 / 49.1 (-11 to -16%);
-  `STRATA_GR_V3=1` 73.2 / 72.4 (-4 to -6%). Both stay opt-in.
-- **Lanes per row of the port's expert kernels** (`STRATA_GU_LANES` / `STRATA_DOWN_LANES`, 4/8/16/32 at run time):
+  19): port defaults 78.1 / 75.7 / 58.6; `CORTEX_EXPERT_SPLIT=1` 65.6-69.5 / 67.2 / 49.1 (-11 to -16%);
+  `CORTEX_GR_V3=1` 73.2 / 72.4 (-4 to -6%). Both stay opt-in.
+- **Lanes per row of the port's expert kernels** (`CORTEX_GU_LANES` / `CORTEX_DOWN_LANES`, 4/8/16/32 at run time):
   gate/up 8 or 16 x down 4 or 8 all decode in 37.7-38.6 ms per verify round (2 runs each, Coder, both prompts); tok/s
   differences between them are draft acceptance (each split rounds differently). The default (8 / 8) stays.
 - **Speed after the merge:** Coder 78.2 / 75.7 tok/s (as before), IQ2_XS 58.6 / 64.2 (from 50.8 / 60.6).
@@ -575,7 +575,7 @@ files with real conflicts. What it needed:
   (`commit(n, err, false)` + `commit_finish`); `wait_commit` is `commit_finish`.
 - **Upstream's new hyper-connection read variants** (split / staged, chosen per card by a bit-for-bit self-test at
   start) are not used by the port, which keeps its sliced down / split norm read; the self-test segfaulted on the
-  B70, so on SYCL it runs only with `STRATA_HC_CHECK=1` (open). The port's split-norm kernel was renamed
+  B70, so on SYCL it runs only with `CORTEX_HC_CHECK=1` (open). The port's split-norm kernel was renamed
   (`gr_norm_split_port_kernel`): upstream now has one of the same name.
 - Two kernel names collided after hash canonicalization (renamed), and fused_gr's per-block shared-memory query is
   a fixup now.
@@ -600,7 +600,7 @@ reuse one, waited on the copy queue's event for the DMA that last read it (the C
 Under the Level Zero v2 adapter that event, once a host thread had waited on it, no longer released the other
 queue's barrier that also listed it, and the GPU waited forever - only once a layer streamed more than 16 experts
 (the ring wrapped). The v1 adapter (`SYCL_UR_USE_LEVEL_ZERO_V2=0`) and a 256-buffer ring both ran; so did a sync
-after every phase (`STRATA_PREFILL_SYNC=1`, kept as a debug switch). The fix: the copy queue writes a sequence
+after every phase (`CORTEX_PREFILL_SYNC=1`, kept as a debug switch). The fix: the copy queue writes a sequence
 number into page-locked host memory after each DMA and the stager polls it - no host thread waits on a queue's
 event. Output is bit-identical to the run without borrowing; borrowing is the default above 32K again.
 
@@ -611,7 +611,7 @@ family, the same GSQ-RCO layout) decoded token 0 forever: NaN logits from layer 
   (`3 * layer + role`; a shard boundary can fall inside a layer). The port's `GgufExpertSource` still indexed it by
   layer, so a layer in shard 2 was read from shard 1 at shard 2's offsets: garbage IQ1_M scales, infinities after the
   fp16 dequantization. The original model keeps every expert in shard 1 and never noticed; Swift's layers 13-47 are
-  in shard 2. `STRATA_DBG_NAN=1` now also reports the experts' fp16 GEMM inputs (activations, dequantized gate/up).
+  in shard 2. `CORTEX_DBG_NAN=1` now also reports the experts' fp16 GEMM inputs (activations, dequantized gate/up).
 - **IQ2_XS products were garbage** (the long-failing `iq_multi_parity` IQ2_XS case): ggml's `vec_dot_iq2_xs` reads
   its four 16-bit codes through a `uint16_t*` to an `int2`, type punning the SYCL device compiler does not honour;
   the dequantizer, which reads the codes directly, was exact. The codes are extracted by shifts now (the dot and the
@@ -626,13 +626,13 @@ three slices, copied the blob and waited for the copy before the next read. It i
 admitted in profile order first (the same placement), the reads go in file order by up to 8 threads into
 page-locked batches of 64, and a batch's copies run while the next one is read. Cold page cache: 76.2 s -> 18.8 s
 (0.33 -> 1.34 GB/s); a whole Coder start from the engine's launch to its first token 82 s -> 26 s, the IQ2_XS
-120 s -> 41 s (its 8.2 GB host mirror is ~9 s of the rest). Output identical. `STRATA_FILL_SERIAL=1` is the old fill.
+120 s -> 41 s (its 8.2 GB host mirror is ~9 s of the rest). Output identical. `CORTEX_FILL_SERIAL=1` is the old fill.
 
 **The stream-all prompt walk is back (2026-10-03).** It copies every expert the VRAM cache does not hold, layer by
 layer ahead of the compute, instead of only the routed ones. It hung on the B70 until the stager and PLE fixes of
 2026-10-02 and runs since. It now runs by default when the VRAM holds more than 90% of the (layer, expert) pairs;
 past that it would copy several times the routed experts (the IQ2_XS keeps a quarter of them in the RAM mirror: a
-2,184-token prompt fell from ~560 to 254 tok/s with it). `STRATA_PREFILL_STREAM_ALL=1` / `=0` force it on or off.
+2,184-token prompt fell from ~560 to 254 tok/s with it). `CORTEX_PREFILL_STREAM_ALL=1` / `=0` force it on or off.
 Coder, outputs identical either way:
 
 | prompt | routed-only | stream-all |
@@ -653,11 +653,11 @@ than the plain kernel it uses for every KV format.
 **The 0.1.38 merge (2026-10-03).** Upstream 0.1.35 -> 0.1.38 (83 commits) merged the seven PRs the port had taken
 early, so their header forks in `sycl/include` are gone; the merge base for the 3-way merge was the port's own "main +
 PRs" migration. New in the port with it: the DeltaNet output norm without its dead FP32 store, two prompt-path
-fixes (the fused layout's buffers, the streamed walk's resident lookup), `STRATA_GR_DOWN_MAX4=1` (opt-in; neutral on
+fixes (the fused layout's buffers, the streamed walk's resident lookup), `CORTEX_GR_DOWN_MAX4=1` (opt-in; neutral on
 the B70: 2,184-token prompt 793 vs 788 tok/s, decode 76.2 vs 76.3). Stubbed in the port: `--peer-device` (a second
 GPU as an expert-cache tier: upstream's code is CUDA calls; `open` refuses with a message) and the fused int8 prompt
 kernels (#136, part of the MMQ library the port does not build). Off on SYCL: the sm_90 thread-block-cluster greedy
-sampler and QSA top-k (no SYCL counterpart; the callers take the plain kernels). `STRATA_GDN_KEYHEAD=1` stays opt-in
+sampler and QSA top-k (no SYCL counterpart; the callers take the plain kernels). `CORTEX_GDN_KEYHEAD=1` stays opt-in
 (still 8% slower here: 727 vs 788 tok/s). `qsa_prompt_attn_parity` now also tests upstream's Q4_0 tensor-core mode
 (#452), which the port does not have: those cases report "refused" (the int8 and fp16 XMX cases pass); a `--kv
 q4_0` prompt takes the older kernel, as before. Outputs identical (Coder, IQ2_XS, 40K); 128K int8 KV streaming
@@ -675,7 +675,7 @@ touch; `sycl/tools/merge_upstream.py`). Their header changes live in `sycl/inclu
 | #374 (sergqwer) | the first chunk's PLE rows read beside layer 0 | part of the 2,184-token prompt's 784 -> 825 tok/s |
 | #363 (BlueKingMuch) | the PCIe expert call: group stride, fused SwiGLU + q8_1 | IQ2_XS decode +1.7%; re-done on the port's lane kernels |
 | #407 (sergqwer) | `--adapt-tuned` (opt-in) | neutral here; stays opt-in |
-| #413 (BlueKingMuch) | DeltaNet recurrence per key head | bit-identical but 8% slower prompt here: off (`STRATA_GDN_KEYHEAD=1`) |
+| #413 (BlueKingMuch) | DeltaNet recurrence per key head | bit-identical but 8% slower prompt here: off (`CORTEX_GDN_KEYHEAD=1`) |
 
 #374 needed two port fixes: its next-chunk read assumed every chunk is the full chunk length (the port's first chunk
 is 256 tokens: the second chunk's rows were read from the wrong place), and its host wait on the PLE upload's event,
@@ -688,7 +688,7 @@ test an SM-holding NVIDIA bench (not built). Outputs identical to 0.1.33 (Coder 
 - Three kernels carry inline PTX (`mma.sync` tensor-core matrix ops, `ldmatrix`, `cp.async`):
   `qsa_prompt_attn`, `qsa_select`'s block scores, `native_qsa_score`. The SYCL build takes the "older card"
   fallback the CUDA build uses below sm_80. `qsa_prompt_attn` also has an XMX version (`joint_matrix`, opt-in
-  `STRATA_PROMPT_ATTN_XMX=1`): correct, but slower than the fallback (see "XMX prompt attention v2").
+  `CORTEX_PROMPT_ATTN_XMX=1`): correct, but slower than the fallback (see "XMX prompt attention v2").
 - The ggml MMQ prefill path (`moe_mmq.cu`) needs llama.cpp's ggml-cuda sources; not built.
 - AOT device code is what runs: `AOT=bmg-g31 BUILD_DIR=.../build-sycl-aot` (the JIT build costs ~47 s of
   compiling on the first window).
@@ -702,67 +702,67 @@ Measured on an Arc A750 (8 GB, `i915`, PCIe 4.0) with the Flash-Next IQ3_XXS in 
 | | Arc Pro B70 (`xe`, 32 GB) | Arc A750 (`i915`, 8 GB) |
 |---|---|---|
 | experts | `--stream-experts`: from the GGUF into VRAM, the rest in a pinned RAM mirror | no `--stream-experts`: all of them in a RAM arena (39.97 GiB for IQ3_XXS), 406 of 24,576 in VRAM, the CPU computes the others |
-| `STRATA_VERIFY_NO_HOST` | 1 (the wrapper's default) | 0, written to the config's `"env"` |
+| `CORTEX_VERIFY_NO_HOST` | 1 (the wrapper's default) | 0, written to the config's `"env"` |
 | `--vram-reserve-mib` | 1024 / 2048 | 300 |
 | `--ple-io` | `ram` (rotational-disk rule of setup) | `ram` |
 | FP64 | native | emulated: `IGC_EnableDPEmulation=1`, `OverrideDefaultFP64Settings=1`, `NEOReadDebugKeys=1` in `"env"` |
 | build | AOT `bmg-g31` | JIT (no `AOT=`) |
 
 - **Why no `--stream-experts`.** The mirror is one pinned host allocation for everything the card does not hold (40 GB here). A
-  single `sycl::malloc_host` above a few GB fails on the A750 (`STRATA_MIRROR_MIB` 3,000 worked, 8,192 and 24,000 did not, also
+  single `sycl::malloc_host` above a few GB fails on the A750 (`CORTEX_MIRROR_MIB` 3,000 worked, 8,192 and 24,000 did not, also
   with `memlock` unlimited and the relaxed-allocation-limit variables), and the engine then refuses to start with
   `24170 experts are neither in VRAM nor mirrored`. Without the flag the engine loads the GGUF's experts into an ordinary RAM
   arena and the CPU computes the experts that are not in the 0.67 GiB cache. That needs the RAM: about 43 GB for IQ3_XXS plus
   the 29 GB n-gram table with `--ple-io ram` (the table is not locked in the container, so it is reclaimable; do not give the
   container `--ulimit memlock=-1`, the locked table and the arena then do not fit in 64 GB and the PC swaps). Setup warns when the RAM is less than the model's.
-- **Why `STRATA_VERIFY_NO_HOST=0`.** With it set the GPU plans each layer itself and the CPU's experts are never asked for:
+- **Why `CORTEX_VERIFY_NO_HOST=0`.** With it set the GPU plans each layer itself and the CPU's experts are never asked for:
   the window hangs (the i915 log says `Fence expiration time out`) or, if the pool is refused, the engine says
   `REFUSED: ... neither in VRAM nor mirrored`. It is the switch of the B70's case, where every expert the card lacks is in the mirror.
-  The engine takes a value of `0` (or empty) as "off", and `strata-sycl.sh` does not pass such a value on.
+  The engine takes a value of `0` (or empty) as "off", and `cortex-sycl.sh` does not pass such a value on.
 - **FP64.** An Alchemist has no FP64 hardware. One kernel on the sampled path declares `double`, and the SYCL runtime refuses it at
   its first launch (`'double' is not supported in 'Intel(R) Arc(TM) A750 Graphics' device`, the engine dies on the first request
   that has a temperature). With the three variables above the driver emulates it; the cost is the sampler's tail
   (see "FP64." in the B70 section).
 - **The first request after a start used to return `!!!!!` (token 0) or crash the engine.** The GPU waits for the CPU's experts at
-  every layer in a spin that is bounded (`strata::kSpinMax`, `sycl/include/strata/sycl_doorbell.hpp`): a spin that never ends
+  every layer in a spin that is bounded (`cortex::kSpinMax`, `sycl/include/cortex/sycl_doorbell.hpp`): a spin that never ends
   hangs the driver. The bound was 20,000 reads, a few tens of milliseconds, which is enough when nothing is waited for (the B70)
   and is not for a CPU layer in the first request (cold pages, 13 s for a 26-token prompt). The GPU gave up, went on with the
   experts' outputs missing, the next layers' routing was garbage (one expert chosen ten times for a token: `nt=10`) and the
   CPU pool wrote past its token arrays and died with a segmentation fault (exit code 139); when it did not die the logits were NaN
   and the sampler's answer was token 0. Later requests ran with warm pages and were right. The bound is now a build option,
-  `STRATA_SYCL_SPIN_MAX` (CMake; `SPIN_MAX=` for `sycl/tools/build.sh`): 2,000,000 reads (a few seconds) unless the build is an
+  `CORTEX_SYCL_SPIN_MAX` (CMake; `SPIN_MAX=` for `sycl/tools/build.sh`): 2,000,000 reads (a few seconds) unless the build is an
   AOT build for a `bmg` card, which keeps 20,000. Before the change 11 of 16 runs of the engine (three requests each, a 26-token prompt) died or gave
   token 0 in the first request; with 2,000,000 reads 4 of 4 were right in all three requests.
 - **Kernels misread memory more than 4 GiB into an allocation (fixed in the build).** On an Arc A770 (16 GB, `xe`, Coder
   IQ1_M, `--stream-experts`, a 4.46 GiB expert cache) every prompt answered `!!!!` (token 0): the experts in the cache's
   last 0.46 GiB dequantized to NaN in the prompt path. A copy of those slots read back equal to the GGUF
-  (`STRATA_VERIFY_ALL_SLOTS` passed) and a fresh device copy of the same bytes dequantized clean; only a kernel reading
+  (`CORTEX_VERIFY_ALL_SLOTS` passed) and a fresh device copy of the same bytes dequantized clean; only a kernel reading
   the slot in place got wrong bytes. In a JIT build IGC addresses a kernel's pointer arguments as a 32-bit offset from
   the allocation's base. The JIT build now passes `-ze-opt-greater-than-4GB-buffer-required` (`sycl/CMakeLists.txt`),
   which keeps the kernels on 64-bit addresses. After the change, prompts of 73 to 542 tokens had 0 non-finite values
-  (`STRATA_DBG_NAN=1`) and the 542-token prompt answered right. The speed cost is not measured. The AOT (`bmg-*`) build is
+  (`CORTEX_DBG_NAN=1`) and the 542-token prompt answered right. The speed cost is not measured. The AOT (`bmg-*`) build is
   unchanged. oneMKL's own precompiled kernels do not get the option; the GEMM stages an operand past 4 GiB for that.
 - **Speed.** About 10 to 15 tok/s decode (76 to 92% of the drafts accepted), a 26-token first prompt in 13 s and later short prompts in 0.2 to
   1.3 s; the A750's PCIe link probes at 10.6 GB/s.
 - **A750 and the xe error counters.** The engine segfaults in a worker thread of the CPU pool when it exits (dmesg only, the server
   has already printed "stopped"); it is not a GPU event.
-- **The prompt's GDN recurrence runs a sub-group kernel on Alchemist** (`sycl/include/strata/prefill/gdn_xe.hpp`,
+- **The prompt's GDN recurrence runs a sub-group kernel on Alchemist** (`sycl/include/cortex/prefill/gdn_xe.hpp`,
   variant 6 of `gdn_recurrence_variant`). It keeps the column kernel's four row groups and their FMA chains in the same
   order, but a 16-lane sub-group holds four columns x four row groups, so the two cross-row-group sums are sub-group
   shuffles instead of SLM round trips and a token needs one work-group barrier instead of five (256 GRFs a thread).
   Measured on an Arc A770 (16 GB, `xe`, oneAPI 2026.1 JIT), 2026-10-13: `gdn_parity --prefill-tokens 8192` 51.0 ->
   24.5 ms, 32,768 tokens 204-236 -> 110-113 ms (48 heads), 0 mismatches; end to end, Coder IQ1_M, `--max-context
   131072 --kv int8 --kv-resident 20480 --vram-reserve-mib 1200 --resident-experts`, prompt 386 -> 396-407 tok/s at
-  8K and 478-480 -> 511-518 tok/s at 32K, the same output tokens. On by default on Alchemist only, the column kernels everywhere else (not measured there). `STRATA_GDN_XE=0`
-  turns it off, `STRATA_GDN_XE=1` turns it on for any Intel GPU with 16-lane sub-groups. To check another Intel card:
-  `STRATA_GDN_XE=1 ./gdn_parity --selftest --prefill-only` (or `ctest -R prefill_gdn_parity`), and `--prefill-tokens
+  8K and 478-480 -> 511-518 tok/s at 32K, the same output tokens. On by default on Alchemist only, the column kernels everywhere else (not measured there). `CORTEX_GDN_XE=0`
+  turns it off, `CORTEX_GDN_XE=1` turns it on for any Intel GPU with 16-lane sub-groups. To check another Intel card:
+  `CORTEX_GDN_XE=1 ./gdn_parity --selftest --prefill-only` (or `ctest -R prefill_gdn_parity`), and `--prefill-tokens
   8192 --prefill-repeat 5` for the time of both kernels. Not taken: the same kernel with its state in SLM (no register
   spills, the same bits, ~4x slower: 13.7 vs 3.1-3.3 ms at T=1000).
 
-### Prompt speed on Alchemist: the grouped XMX expert launch is the default (engine 0.1.45.3, `STRATA_PF_XMX`)
+### Prompt speed on Alchemist: the grouped XMX expert launch is the default (engine 0.1.45.3, `CORTEX_PF_XMX`)
 
-The A750's prompt path decodes and multiplies a group of experts in one fused launch on the XMX units (`STRATA_PF_XMX=2`, `sycl/src/prefill/xmx_moe.dp.cpp`)
-instead of dequantizing each expert to FP16 and calling oneMKL. It is the default on Alchemist cards; `STRATA_PF_XMX=0` turns it off and `=1` is the
+The A750's prompt path decodes and multiplies a group of experts in one fused launch on the XMX units (`CORTEX_PF_XMX=2`, `sycl/src/prefill/xmx_moe.dp.cpp`)
+instead of dequantizing each expert to FP16 and calling oneMKL. It is the default on Alchemist cards; `CORTEX_PF_XMX=0` turns it off and `=1` is the
 variant that dequantizes first and runs one grouped XMX GEMM per product. Battlemage keeps the old path (the same kernels are 7-11% slower there).
 Measured on the A750 (IQ3_XXS, default flags, interleaved rounds against the run before): a 1K-token prompt 35.1 -> 46.4 tok/s, 2K 61.7 -> 83.1, 4K 79.3 -> 110.4
 (+39%, 5 of 5 rounds), 6K 66.3 -> 114.8; decode unchanged (18.7 tok/s), the same number of cache slots. It rounds differently from the FP16 path:
@@ -778,7 +778,7 @@ cause: SYCL has no `cudaHostRegister`, so the expert arena is ordinary pageable 
 pinned. Copying a 2.3 MB expert straight out of it went through the Level Zero driver's staging path on the calling thread,
 and on some prompts that call never returned. Now only experts in USM host memory (the `--stream-experts` pinned mirror)
 are copied directly (the answer is remembered per 2 MiB); every other expert goes through the stager's pinned buffers, like
-an unpinned one. **`STRATA_PF_DMA_PAGEABLE=1` restores the old direct copy.**
+an unpinned one. **`CORTEX_PF_DMA_PAGEABLE=1` restores the old direct copy.**
 
 Checked: the 2,744-token repro finished 3 of 3 times after the fix (0 of 6 before); the first-token logits and the tokens are
 identical old against new on the A750 (1.4K, 2.5K and 4K prompts) and on the Arc Pro B70 (stock config, and without
@@ -790,9 +790,9 @@ the fix).
 ## Not done
 
 - Images on the llama.cpp config: not wired. On the SYCL port pictures are wired but opt-in (`setup --backend sycl --vision yes`):
-  setup compiles the portable CPU reader `strata-vision` (the program the AMD packages carry beside their engine) into `engine-sycl/`,
+  setup compiles the portable CPU reader `cortex-vision` (the program the AMD packages carry beside their engine) into `engine-sycl/`,
   the server runs it on the host, and the engine in the container reads its embeddings from the host's `/dev/shm`, which
-  `strata-sycl.sh` shares (`STRATA_SYCL_SHM=0` keeps a private one). A SYCL GPU reader does not exist yet, so every Arc reads
+  `cortex-sycl.sh` shares (`CORTEX_SYCL_SHM=0` keeps a private one). A SYCL GPU reader does not exist yet, so every Arc reads
   pictures on the CPU (a few seconds each). They are not on by default because the first picture request on the Arc Pro B70
   (engine 0.1.45, IQ3_S, 2026-10-19) hung the GPU: the xe driver logged an engine reset and `Fault response: Unsuccessful -EINVAL`
   and the request ended 503. Text was not affected by this wiring (the reader and the shared `/dev/shm` are only used for pictures);
@@ -811,14 +811,14 @@ the B70 VM (xe driver, kernel 7.0, oneAPI 2026.1, PCIe measured at 13.3 GB/s hos
 - **Aliased pages in big allocations (fixed in the engine).** The xe driver returned the 22 GiB expert-cache arena with two
   of its 2 MiB pages mapped onto the same memory: a write at +2 MiB showed at +1022 MiB. Cache slots there held other
   experts' bytes, and the prompt came out NaN at the first layer that routed to one (layer 4, expert 249); the same run
-  with another `--max-context`, or with an MTP window of 4 instead of 6, was clean. `STRATA_VERIFY_ALL_SLOTS=1`
-  (`STRATA_VERIFY_FIND=1`, `STRATA_VERIFY_DUMP=dir`) reads every filled slot back and compares it with the GGUF; that is how
+  with another `--max-context`, or with an MTP window of 4 instead of 6, was clean. `CORTEX_VERIFY_ALL_SLOTS=1`
+  (`CORTEX_VERIFY_FIND=1`, `CORTEX_VERIFY_DUMP=dir`) reads every filled slot back and compares it with the GGUF; that is how
   the aliasing was found (the wrong bytes were slot 0's blob). Every allocation of 32 MiB or more now goes through
-  `strata::malloc_device_guarded`: it tags every 64 KiB, reads the tags back in a second kernel, and allocates again behind a
+  `cortex::malloc_device_guarded`: it tags every 64 KiB, reads the tags back in a second kernel, and allocates again behind a
   growing spacer until the range is clean (a warning names each retry; the check costs under 0.5 s at startup;
-  `STRATA_ARENA_ALIAS_CHECK=0` skips it). `sycl/probe/arena_rw.cpp` and `alias_scan.cpp` do not reproduce it on their own: it
+  `CORTEX_ARENA_ALIAS_CHECK=0` skips it). `sycl/probe/arena_rw.cpp` and `alias_scan.cpp` do not reproduce it on their own: it
   needs the engine's allocation history.
-- **`STRATA_VERIFY_NO_HOST=1` is required whenever part of the experts is not in VRAM.** `sycl/serve/strata-sycl.sh` sets
+- **`CORTEX_VERIFY_NO_HOST=1` is required whenever part of the experts is not in VRAM.** `sycl/serve/cortex-sycl.sh` sets
   it; a by-hand run must too. Without it the per-layer host/GPU handshake is not visible across the bus on xe and the logits
   turn NaN a few tokens into the answer, differently on every run. With it (and the mirror covering every miss) the run is
   deterministic: two runs gave identical tokens.
@@ -839,7 +839,7 @@ the old default and `--prefill 4096`.)
 
 **Why the prompt is slow here, and the two changes.** Every prompt chunk streams the experts the cache does not hold over
 PCIe, and a 4K prompt touches nearly all 512 experts of every layer: 13.5k missing experts x 1.97 MB = 26 GB, 2 s of the
-bus per chunk. So the prompt reads faster in fewer, bigger chunks, and the short first chunk (`STRATA_PREFILL_FIRST`, 256
+bus per chunk. So the prompt reads faster in fewer, bigger chunks, and the short first chunk (`CORTEX_PREFILL_FIRST`, 256
 tokens, there to start the GPU while the PLE rows are read) cost a whole extra pass of that stream. It is now 256 only when
 the cache holds every expert, else 0. `setup_intel.py` writes `--prefill 4096` for a card with 24 GB or more (the chunk's
 buffers take ~700 cache slots; `--prefill 8192 --prefill-borrow` lends cache slots instead and keeps all of them for decode,
@@ -855,11 +855,11 @@ costs 451 us in double and 20 us in float (`sycl/probe/fp64_cost.cpp`), and a sa
 a greedy one. On the B70 the same kernels cost 3.4 against 2.1 us, so FP64 is not a B70 problem. Of the kernels that use
 double, the native-pack path (the packs setup builds) runs only the sampler (a 16-token greedy run created 173 kernels, the
 double ones among them: `sample_tokens` only; the native router, combine, gate and norm kernels are float). The sampler's tail
-now accumulates in `strata::samp_acc_t`, float by default (`-DSTRATA_SYCL_SAMPLER_FP64=1` keeps double): A750 sampled decode
+now accumulates in `cortex::samp_acc_t`, float by default (`-DCORTEX_SYCL_SAMPLER_FP64=1` keeps double): A750 sampled decode
 7.62 -> 8.10 tok/s (medians of 5 interleaved pairs, runs 7.1-9.2), `sampler_parity` 0 failures on both cards, and the B70 gate's
 sampled cases picked the same tokens.
 
-The sampler's launchers also kept dpct's `aspect::fp64` check, which threw "'double' is not supported" at the first sampled token on an A750 without the emulation keys even though the kernels had been float since the accumulator change; 0.1.41 drops the check (it stays in a `-DSTRATA_SYCL_SAMPLER_FP64=1` build). Measured on the A750 (IQ3_XXS, `--spec 4 --mtp`, sampled, 100 tokens, 4 interleaved pairs, one binary): without `IGC_EnableDPEmulation` / `OverrideDefaultFP64Settings` 11.0 / 11.6 / 12.4 / 12.4 tok/s, with them 9.3 / 9.9 / 9.8 / 9.8 (median 12.0 against 9.8, faster in 4 of 4 pairs). Setup still writes the keys for an A-series card: the kernels other than the sampler's that use double (the oracle router, norms, PLE, QSA indexer) were not exercised without them on long contexts or with vision, so the keys stay the safe default.
+The sampler's launchers also kept dpct's `aspect::fp64` check, which threw "'double' is not supported" at the first sampled token on an A750 without the emulation keys even though the kernels had been float since the accumulator change; 0.1.41 drops the check (it stays in a `-DCORTEX_SYCL_SAMPLER_FP64=1` build). Measured on the A750 (IQ3_XXS, `--spec 4 --mtp`, sampled, 100 tokens, 4 interleaved pairs, one binary): without `IGC_EnableDPEmulation` / `OverrideDefaultFP64Settings` 11.0 / 11.6 / 12.4 / 12.4 tok/s, with them 9.3 / 9.9 / 9.8 / 9.8 (median 12.0 against 9.8, faster in 4 of 4 pairs). Setup still writes the keys for an A-series card: the kernels other than the sampler's that use double (the oracle router, norms, PLE, QSA indexer) were not exercised without them on long contexts or with vision, so the keys stay the safe default.
 
 **XMX.** oneMKL's FP16 GEMMs already run on the matrix engines; per expert the dequant (42 us for a gate/up matrix) costs
 twice the GEMM (20 us), and the fused dequant+XMX kernel (`xmx_gemm_bench`) is 0.22x of the pair on this card. The speed left
@@ -873,28 +873,28 @@ Measured on the B70 (xe, 32 GB, 60 GB RAM, IQ3_S, 11.5k of 24.6k experts in VRAM
 for the kernel timelines). All the changes below leave the tokens as they were (first-token logits compared byte for byte, the 10-prompt
 gate identical in the 32K and the 128K configuration); every one has an off switch.
 
-- **Prompt: the expert copies run on the card's copy engine** (`sycl/include/strata/copy_queue.hpp`). The Level Zero v2 adapter runs every
+- **Prompt: the expert copies run on the card's copy engine** (`sycl/include/cortex/copy_queue.hpp`). The Level Zero v2 adapter runs every
   SYCL queue on the compute engine, a copy-only queue included: the ~10,000 expert DMAs of a 4K prompt (2 MB, ~80 us each) sat between the
   expert kernels and never overlapped one (unitrace: 0 of 2,000 copies overlapped a kernel). An immediate command list on the copy-only queue
   group (ordinal 1) wrapped with `sycl::make_queue` puts them on `Copy Engine<1,0>`; events work across the two queues as before. 4K prompt
-  3.82 -> 3.25 s, 16K 15.5 -> 13.5 s. On by default for a Battlemage card; `STRATA_COPY_ENGINE=1` forces it elsewhere, `=0` turns it off (an A750
+  3.82 -> 3.25 s, 16K 15.5 -> 13.5 s. On by default for a Battlemage card; `CORTEX_COPY_ENGINE=1` forces it elsewhere, `=0` turns it off (an A750
   gained 1.4% and the prompt hung there once the stager's completion flag was a copy-engine memcpy, so Alchemist stays off).
 - **The 128K configuration setup writes** (`--kv-resident 32768`, the prompt borrows cache slots) paid three more costs: `kv_append` wrote the
   host copy of the KV with 1-byte stores (2 s of a 4K prompt, now 4-byte lane stores), every expert GEMM staged two 6.5/3.3 MB operands because they
-  sit past 4 GiB in the borrowed region (an A770 oneMKL bug that did not show on this card: off on Battlemage, `STRATA_SYCL_GEMM_STAGE=1`
+  sit past 4 GiB in the borrowed region (an A770 oneMKL bug that did not show on this card: off on Battlemage, `CORTEX_SYCL_GEMM_STAGE=1`
   brings it back), and the lent slots were refilled by a single-threaded GGUF read (0.9 s for 930 slots, now a DMA from the pinned mirror:
-  the experts in the last 10% of the cache slots are mirrored too, `STRATA_LEND_MIRROR=0` off). 4K prompt incl. the refill 7.2 -> 3.3 s,
+  the experts in the last 10% of the cache slots are mirrored too, `CORTEX_LEND_MIRROR=0` off). 4K prompt incl. the refill 7.2 -> 3.3 s,
   1K 3.1 -> 1.6 s, 16K 25.5 -> 13.5 s, 49K 78 -> 44 s; a 684-token request through the server 2.64 -> 1.59 s, a 3,083-token one 6.1 -> 2.95 s (the same answer).
 - **Decode: `data/expert-profile-sycl.bin`.** The shipped profile ranks the experts for a document summary; a chat, code or non-English prompt finds
   only 60% of its routed experts in the cache (85% for a summary). `tools/make_profile_mix.py` builds a ranking from several routing traces with
   every trace counting the same, `tools/collect_profile_traces.py` records them (`bench/profile_corpus.json`: 45 prompts) through the engine's
-  device-side routing counts (`STRATA_USAGE_DUMP=PATH`). The profile built from the 45 prompts and eight summaries holds 71% / 84%
+  device-side routing counts (`CORTEX_USAGE_DUMP=PATH`). The profile built from the 45 prompts and eight summaries holds 71% / 84%
   (leave-one-out) and gave +5% to +64% decode (mean +21%) on 12 prompts that were in neither set, identical tokens; setup_intel writes it for a
   card on xe (the i915 A750 keeps the shipped one: its CPU computes the misses, so the residency moves roundings).
-- Decode graph without the nodes nobody answers under `STRATA_VERIFY_NO_HOST` (`STRATA_VERIFY_LEAN=0` off): -2%.
-- Tried and not worth it on this card: the grouped XMX expert GEMM for Battlemage (built, `STRATA_PF_XMX=1/2`, correct to 6e-7, 11-15% slower), a
+- Decode graph without the nodes nobody answers under `CORTEX_VERIFY_NO_HOST` (`CORTEX_VERIFY_LEAN=0` off): -2%.
+- Tried and not worth it on this card: the grouped XMX expert GEMM for Battlemage (built, `CORTEX_PF_XMX=1/2`, correct to 6e-7, 11-15% slower), a
   miss-first or hit-first group order in the device plan (-3% / -7%), spreading the expert chains over several queues (one compute engine),
-  `STRATA_LFUSE`, `STRATA_VERIFY_EAGER`.
+  `CORTEX_LFUSE`, `CORTEX_VERIFY_EAGER`.
 
 ## Measured, 2026-10-01, Arc Pro B70, Coder IQ1_M, 32K context, INT8 KV: the SYCL port (engine 0.1.31-sycl)
 
@@ -929,7 +929,7 @@ Arc Pro B70, IQ3_S, setup's 128K flags (`--kv-resident 32768 --vram-reserve-mib 
 | 32K | 1,187 | 1,361-1,383 (+15-16%) | 11,794-11,795 both | 35 / 38.6 |
 
 The lent slots are refilled after the prompt, so the bigger chunk costs the decode nothing. First-token logits against 4096
-(`STRATA_DUMP_FIRST_LOGITS`, whole vocabulary): KL 1.1e-2 nats at 16K and 3.0e-2 at 32K, top-1 the same, largest logit
+(`CORTEX_DUMP_FIRST_LOGITS`, whole vocabulary): KL 1.1e-2 nats at 16K and 3.0e-2 at 32K, top-1 the same, largest logit
 difference 1.0 (the chunk boundary moves where the QSA block selection is made, so a different chunk size is not bit-identical;
 two runs of the same size are, KL 0). With the 32K context (own prompt buffers, no borrowing) a bigger chunk is +20% on a 16K
 prompt (1,236 -> 1,478-1,482) but takes 1,397 cache slots (10,926 -> 9,529) and decode after it falls 9-16%, so 4,096 stays there.
@@ -940,11 +940,11 @@ On a Battlemage GPU (B70, B580, B570: detected by the device architecture id, `b
 registers straight into the s8 DPAS B operand (no FP16 copy of the expert, 2.1 MB of weights read instead of 9.8 MB written and read
 back) and multiply them by q8_1-quantized activations; `sycl/src/prefill/esimd_moe.dp.cpp`, behaviour note and switches in
 [INTEL_INT8_EXPERTS.md](INTEL_INT8_EXPERTS.md). Gate/up IQ3_S, IQ3_XXS, IQ2_S and down IQ4_NL, Q2_0 are covered (47 of the 48 layers of
-the mixed IQ3_S pack; the other layer, IQ4_XS gate/up, and any other format keep the FP16 path). Default (STRATA_PREFILL_MMQ unset) is `auto` on Battlemage and the FP16 chain on every other GPU (Alchemist A750 / A770, Lunar Lake, other vendors); `=0` turns it off, `=1` forces it, `=auto` is the default. The activations are
+the mixed IQ3_S pack; the other layer, IQ4_XS gate/up, and any other format keep the FP16 path). Default (CORTEX_PREFILL_MMQ unset) is `auto` on Battlemage and the FP16 chain on every other GPU (Alchemist A750 / A770, Lunar Lake, other vendors); `=0` turns it off, `=1` forces it, `=auto` is the default. The activations are
 quantized, so the bits differ from the FP16 path. `auto` times both chains on this GPU at the first layer of each format and takes int8
 below the measured crossover (130-250 rows per expert here), per group of experts.
 
-Arc Pro B70, IQ3_S pack, 32K config, `--prefill 4096`, fixed flags (`STRATA_PREFILL_CPU_SHARE=0 STRATA_ROUTE_TAIL_SKIP=0 --pcie-frac 0
+Arc Pro B70, IQ3_S pack, 32K config, `--prefill 4096`, fixed flags (`CORTEX_PREFILL_CPU_SHARE=0 CORTEX_ROUTE_TAIL_SKIP=0 --pcie-frac 0
 --adapt-every 0`), 5 interleaved rounds per size, prefill tok/s (medians; the noise arm is the default run again):
 
 | prompt | default | noise arm | `=1` | `=auto` |
@@ -964,12 +964,12 @@ medians, output tokens identical in every arm):
 
 | change | result |
 |---|---|
-| `STRATA_GDN_XE=1` (variant 6, the sub-group recurrence that is the default on Alchemist; bit-identical) | 1,251 -> 1,207 (-3.5%): stays off on Battlemage |
-| `STRATA_PROMPT_ATTN_XMX=1` / `=32` (the joint_matrix prompt attention, 64- / 32-cell chunks) | 1,258 -> 952 / 913 (-24% / -27%): stays opt-in |
-| QSA prompt attention, probabilities stored `[cell][head]` and read as three vectors per cell in the value phase (`STRATA_ATTN_RS=2`, now the default; first-token logits md5 equal at 4K and 16K) | 1,254 -> 1,265 (+0.9%, 3 of 3 rounds) |
-| the same plus a 16-shuffle reduce-scatter of the 12 heads' score sums (`STRATA_ATTN_RS=1`; also bit-exact) | 1,254 -> 1,236 (-1.5%): the score phase is not shuffle bound |
+| `CORTEX_GDN_XE=1` (variant 6, the sub-group recurrence that is the default on Alchemist; bit-identical) | 1,251 -> 1,207 (-3.5%): stays off on Battlemage |
+| `CORTEX_PROMPT_ATTN_XMX=1` / `=32` (the joint_matrix prompt attention, 64- / 32-cell chunks) | 1,258 -> 952 / 913 (-24% / -27%): stays opt-in |
+| QSA prompt attention, probabilities stored `[cell][head]` and read as three vectors per cell in the value phase (`CORTEX_ATTN_RS=2`, now the default; first-token logits md5 equal at 4K and 16K) | 1,254 -> 1,265 (+0.9%, 3 of 3 rounds) |
+| the same plus a 16-shuffle reduce-scatter of the 12 heads' score sums (`CORTEX_ATTN_RS=1`; also bit-exact) | 1,254 -> 1,236 (-1.5%): the score phase is not shuffle bound |
 | int8 expert groups of 24 or 32 experts instead of 16 | 1,416 -> 1,420 / 1,416: no effect |
-| K-quant / Q5_1 / Q8_0 multi-entry decode kernels (`STRATA_KQ_SPLIT`, on by default; bit-identical to `=0`), `native_grouped_parity --kqbench 16`, synthetic UD-Q4_K_XL-shaped experts | 1 token: 76.4 vs 75.0 us (-1.8%); 2 tokens: 122.5 vs 135.9 us (+10%); 4 tokens (an MTP window): 202.6 vs 233 us (+13%); Q6_K 4 tokens 387 vs 485 (+20%), Q8_0 290 vs 341 (+15%) |
+| K-quant / Q5_1 / Q8_0 multi-entry decode kernels (`CORTEX_KQ_SPLIT`, on by default; bit-identical to `=0`), `native_grouped_parity --kqbench 16`, synthetic UD-Q4_K_XL-shaped experts | 1 token: 76.4 vs 75.0 us (-1.8%); 2 tokens: 122.5 vs 135.9 us (+10%); 4 tokens (an MTP window): 202.6 vs 233 us (+13%); Q6_K 4 tokens 387 vs 485 (+20%), Q8_0 290 vs 341 (+15%) |
 
 The B70's int8 expert kernels also build and pass the parity test as a SPIR-V JIT build and as an AOT build for `bmg-g21` (compile only: no
-G21 card here); an AOT build for another device (Alchemist, Xe-HPC) gets stubs (`STRATA_I8_NO_ESIMD`).
+G21 card here); an AOT build for another device (Alchemist, Xe-HPC) gets stubs (`CORTEX_I8_NO_ESIMD`).

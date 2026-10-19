@@ -1,6 +1,6 @@
 /**
- * Helper agents on a model the person names (server/agent/model-routes.mjs and plugins/strata-models.mjs).
- * Pure tests always run; the real-Harness tests need STRATA_HARNESS_DIR and skip loudly without it.
+ * Helper agents on a model the person names (server/agent/model-routes.mjs and plugins/cortex-models.mjs).
+ * Pure tests always run; the real-Harness tests need CORTEX_HARNESS_DIR and skip loudly without it.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,11 +13,11 @@ import { resolveHarness } from '../server/agent/harness-runtime.mjs';
 import { resolveModel, modelProblem, routeList } from '../server/agent/model-routes.mjs';
 import { AGENT_PROMPT } from '../server/agent/preset.mjs';
 
-const HARNESS = process.env.STRATA_HARNESS_DIR;
-const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'STRATA_HARNESS_DIR is not set to a built Harness' : false;
+const HARNESS = process.env.CORTEX_HARNESS_DIR;
+const skip = !HARNESS || !resolveHarness({ env: process.env }).ok ? 'CORTEX_HARNESS_DIR is not set to a built Harness' : false;
 
 const routes = [
-  { provider: 'strata-local', model: 'gyro-gyro-s', name: 'qwen3.8-flash-next-gyro-gyro-s', connection: 'this computer', local: true },
+  { provider: 'cortex-local', model: 'gyro-gyro-s', name: 'qwen3.8-flash-next-gyro-gyro-s', connection: 'this computer', local: true },
   { provider: 'api-aaaa', model: 'deepseek/deepseek-v3.2', name: 'DeepSeek: DeepSeek V3.2', connection: 'OpenRouter', local: false },
   { provider: 'api-aaaa', model: 'anthropic/claude-sonnet-4.5', name: 'Anthropic: Claude Sonnet 4.5', connection: 'OpenRouter', local: false },
   { provider: 'api-bbbb', model: 'deepseek-chat', name: 'DeepSeek Chat', connection: 'DeepSeek', local: false },
@@ -38,7 +38,7 @@ test('exact route, exact id, provider/id, connection and name, in any letters', 
   want({ model: 'DeepSeek: DeepSeek V3.2' }, 'deepseek/deepseek-v3.2');
   want({ model: 'deepseek chat' }, 'deepseek-chat');
   want({ model: 'Local' }, 'gyro-gyro-s');
-  want({ provider: 'strata-local', model: 'gyro-gyro-s' }, 'gyro-gyro-s');
+  want({ provider: 'cortex-local', model: 'gyro-gyro-s' }, 'gyro-gyro-s');
 });
 
 test('a close guess is checked with the person, several fits are listed, nothing fitting lists the models', () => {
@@ -60,7 +60,7 @@ test('the assistant is told to use the subagent tool when asked for a subagent o
 async function rig(t) {
   const local = await startScriptedWorker();
   const remote = await startScriptedWorker({ model: 'deepseek/deepseek-v3.2' });
-  const dir = mkdtempSync(join(tmpdir(), 'strata-sub-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-sub-'));
   const ws = join(dir, 'ws'); mkdirSync(ws, { recursive: true });
   const bridge = createAgentBridge({
     dataDir: dir, env: process.env, startTimeoutMs: 90_000,
@@ -115,7 +115,7 @@ test('the real Harness: a helper that finishes while the chat model is still ans
   // The chat model answers slowly, the helper's model (a second server) answers at once: the helper reports back while the parent is mid-answer.
   const slow = await startScriptedWorker({ chunkDelayMs: 900 });
   const fast = await startScriptedWorker({ model: 'deepseek/deepseek-v3.2', chunkDelayMs: 5 });
-  const dir = mkdtempSync(join(tmpdir(), 'strata-race-')); const ws = join(dir, 'ws'); mkdirSync(ws, { recursive: true });
+  const dir = mkdtempSync(join(tmpdir(), 'cortex-race-')); const ws = join(dir, 'ws'); mkdirSync(ws, { recursive: true });
   const bridge = createAgentBridge({ dataDir: dir, env: process.env, startTimeoutMs: 90_000,
     localInstances: () => [{ id: 'inst-1', label: 'Slow chat model', baseUrl: slow.url, modelId: 'scripted-model', context: 32768, slots: 2 }],
     connections: () => [{ id: 'conn-1', name: 'OpenRouter', baseUrl: fast.url, protocol: 'openai-chat', apiKey: 'k', models: [{ id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', contextMax: 32768 }] }] });

@@ -12,10 +12,10 @@ function makePackage(root, version, { body = 'engine-' + version, backend = 'cud
   const name = `${version}-${platform}-${backend}-${variant}`;
   const dir = join(root, name);
   mkdirSync(dir, { recursive: true });
-  const files = { 'strata.exe': Buffer.from(body), 'strata_kq.dll': Buffer.from('kq-' + body), 'BUILD.json': Buffer.from('{}') };
+  const files = { 'cortex.exe': Buffer.from(body), 'cortex_kq.dll': Buffer.from('kq-' + body), 'BUILD.json': Buffer.from('{}') };
   for (const [file, data] of Object.entries(files)) writeFileSync(join(dir, file), data);
   writeFileSync(join(dir, 'engine-component.json'), JSON.stringify({
-    schema_version: 2, id: 'strata-engine', name: 'strata-engine', version, platform, backend, archs: ['sm_86'], ...(minDriver ? { min_driver: { nvidia: minDriver } } : {}), build_id: 'x', entrypoint: 'strata.exe',
+    schema_version: 2, id: 'cortex-engine', name: 'cortex-engine', version, platform, backend, archs: ['sm_86'], ...(minDriver ? { min_driver: { nvidia: minDriver } } : {}), build_id: 'x', entrypoint: 'cortex.exe',
     files: Object.entries(files).map(([path, data]) => ({ path, sha256: sha(data), bytes: data.length })), signature: null }));
   return name;
 }
@@ -38,7 +38,7 @@ test('no engine installed: the bundled one is installed, hash-checked, with noth
     const name = makePackage(t.bundle, '0.1.45');
     const result = await installBundledEngine({ bundleDir: t.bundle, components: t.components });
     assert.equal(result.action, 'installed');
-    assert.equal(readFileSync(join(t.engine, name, 'strata.exe'), 'utf8'), 'engine-0.1.45');
+    assert.equal(readFileSync(join(t.engine, name, 'cortex.exe'), 'utf8'), 'engine-0.1.45');
     assert.ok(existsSync(join(t.engine, name, 'engine-component.json')));
     assert.deepEqual(readdirSync(t.engine), [name], 'no temporary folder remains');
     assert.equal((await installBundledEngine({ bundleDir: t.bundle, components: t.components })).action, 'kept', 'a second start does nothing');
@@ -62,11 +62,11 @@ test('a newer or equal engine is never overwritten or touched', async () => {
     makePackage(t.bundle, '0.1.45');
     assert.equal((await installBundledEngine({ bundleDir: t.bundle, components: t.components })).action, 'kept');
     assert.deepEqual(readdirSync(t.engine), [newer]);
-    assert.equal(readFileSync(join(t.engine, newer, 'strata.exe'), 'utf8'), 'mine');
+    assert.equal(readFileSync(join(t.engine, newer, 'cortex.exe'), 'utf8'), 'mine');
     // same version, other build: the installed one stays
     const same = makePackage(t.engine, '0.1.45', { body: 'installed-build' });
     assert.equal((await installBundledEngine({ bundleDir: t.bundle, components: t.components })).action, 'kept');
-    assert.equal(readFileSync(join(t.engine, same, 'strata.exe'), 'utf8'), 'installed-build');
+    assert.equal(readFileSync(join(t.engine, same, 'cortex.exe'), 'utf8'), 'installed-build');
   } finally { t.cleanup(); }
 });
 
@@ -75,9 +75,9 @@ test('a damaged copy of the same package is put right; an engine for another bac
   try {
     const name = makePackage(t.bundle, '0.1.45');
     makePackage(t.engine, '0.1.45');
-    writeFileSync(join(t.engine, name, 'strata.exe'), 'cut');          // wrong size
+    writeFileSync(join(t.engine, name, 'cortex.exe'), 'cut');          // wrong size
     assert.equal((await installBundledEngine({ bundleDir: t.bundle, components: t.components })).action, 'repaired');
-    assert.equal(readFileSync(join(t.engine, name, 'strata.exe'), 'utf8'), 'engine-0.1.45');
+    assert.equal(readFileSync(join(t.engine, name, 'cortex.exe'), 'utf8'), 'engine-0.1.45');
     const t2 = setup();
     try {
       makePackage(t2.engine, '0.1.50', { backend: 'cpu' });
@@ -91,7 +91,7 @@ test('a bundle that does not match its manifest is refused and installs nothing'
   const t = setup();
   try {
     const name = makePackage(t.bundle, '0.1.45');
-    writeFileSync(join(t.bundle, name, 'strata_kq.dll'), 'kq-engine-0.1.4X');   // same size, other bytes
+    writeFileSync(join(t.bundle, name, 'cortex_kq.dll'), 'kq-engine-0.1.4X');   // same size, other bytes
     const result = await installBundledEngine({ bundleDir: t.bundle, components: t.components });
     assert.equal(result.action, 'refused');
     assert.equal(existsSync(join(t.engine, name)), false);

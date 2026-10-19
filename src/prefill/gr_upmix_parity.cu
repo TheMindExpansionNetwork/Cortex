@@ -1,4 +1,4 @@
-// src/prefill/gr_upmix_parity.cu - the hyper-connection read's fused up projection + mix (gr_upmix, STRATA_HC_UPMIX=1)
+// src/prefill/gr_upmix_parity.cu - the hyper-connection read's fused up projection + mix (gr_upmix, CORTEX_HC_UPMIX=1)
 // against the default pair (Gemm::bf16 - cuBLAS - writing `gated`, then gr_mix_r), on synthetic inputs of the model's
 // shapes (N = 2560, 4 streams, K = 320).  Where cuBLAS's kernel sums K in the fused kernel's order the outputs are the
 // same bits (CUDA 13.3 on an RTX 5090 from 33 tokens - the prompt path's default there); elsewhere FP32 rounding: the
@@ -6,8 +6,8 @@
 // against an FP64 reference on sampled tokens (the fused one must be as close to it as cuBLAS).
 //   gr_upmix_parity            the checks (T = 1 .. 32768)
 //   gr_upmix_parity --bench    and the timings of the pair and the fused kernel at T = 2048 / 8192 / 32768
-#include "strata/prefill/gemm.hpp"
-#include "strata/prefill/kernels.hpp"
+#include "cortex/prefill/gemm.hpp"
+#include "cortex/prefill/kernels.hpp"
 
 #include <cuda_runtime.h>
 
@@ -104,12 +104,12 @@ double exact_mixed(const Inputs& in, int64_t t, int d) {
     return s / HC;
 }
 
-int check(strata::prefill::Gemm& gm, cudaStream_t st, float* gated, int64_t T, uint32_t seed) {
+int check(cortex::prefill::Gemm& gm, cudaStream_t st, float* gated, int64_t T, uint32_t seed) {
     Inputs in(T, seed);
     Outputs ref(T), got(T);
     gm.bf16(in.d_lo16, in.d_wu, gated, T, D, LR);
-    strata::prefill::gr_mix_r(in.d_R, in.d_rs, in.d_w, gated, ref.mixed, ref.bf, T, st, ref.h);
-    if (!strata::prefill::gr_upmix(in.d_lo16, in.d_wu, in.d_R, in.d_rs, in.d_w, got.mixed, got.bf, got.h, T, st)) {
+    cortex::prefill::gr_mix_r(in.d_R, in.d_rs, in.d_w, gated, ref.mixed, ref.bf, T, st, ref.h);
+    if (!cortex::prefill::gr_upmix(in.d_lo16, in.d_wu, in.d_R, in.d_rs, in.d_w, got.mixed, got.bf, got.h, T, st)) {
         std::printf("FAIL T=%lld: gr_upmix refused (needs CUDA sm_80+)\n", (long long) T);
         return 1;
     }
@@ -160,7 +160,7 @@ float median(std::vector<float> v) {
     return v[v.size() / 2];
 }
 
-void bench(strata::prefill::Gemm& gm, cudaStream_t st, float* gated, int64_t T) {
+void bench(cortex::prefill::Gemm& gm, cudaStream_t st, float* gated, int64_t T) {
     Inputs in(T, 7);
     Outputs o(T);
     cudaEvent_t e0, e1;
@@ -172,7 +172,7 @@ void bench(strata::prefill::Gemm& gm, cudaStream_t st, float* gated, int64_t T) 
         for (int k = 0; k < 2; ++k) {
             if ((k == 0) == fused_first) {
                 cudaEventRecord(e0, st);
-                strata::prefill::gr_upmix(in.d_lo16, in.d_wu, in.d_R, in.d_rs, in.d_w, o.mixed, o.bf, o.h, T, st);
+                cortex::prefill::gr_upmix(in.d_lo16, in.d_wu, in.d_R, in.d_rs, in.d_w, o.mixed, o.bf, o.h, T, st);
                 cudaEventRecord(e1, st);
                 cudaEventSynchronize(e1);
                 float ms;
@@ -184,7 +184,7 @@ void bench(strata::prefill::Gemm& gm, cudaStream_t st, float* gated, int64_t T) 
                 cudaEventRecord(e0, st);
                 gm.bf16(in.d_lo16, in.d_wu, gated, T, D, LR);
                 cudaEventRecord(em, st);
-                strata::prefill::gr_mix_r(in.d_R, in.d_rs, in.d_w, gated, o.mixed, o.bf, T, st, o.h);
+                cortex::prefill::gr_mix_r(in.d_R, in.d_rs, in.d_w, gated, o.mixed, o.bf, T, st, o.h);
                 cudaEventRecord(e1, st);
                 cudaEventSynchronize(e1);
                 float ms, msg;
@@ -219,7 +219,7 @@ int main(int argc, char** argv) {
     const bool do_bench = argc > 1 && std::string(argv[1]) == "--bench";
     cudaStream_t st = nullptr;
     if (!ck(cudaStreamCreate(&st), "stream")) return 1;
-    strata::prefill::Gemm gm;
+    cortex::prefill::Gemm gm;
     std::string err;
     if (!gm.init(st, 0, err)) { std::printf("FAIL: %s\n", err.c_str()); return 1; }
     const int64_t Tmax = 32768;

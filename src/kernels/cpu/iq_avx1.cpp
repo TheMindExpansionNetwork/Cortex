@@ -1,4 +1,4 @@
-// src/kernels/cpu/iq_avx1.cpp - the i-quant expert rows for CPUs without AVX2 (STRATA_ISA_FLOOR=avx:
+// src/kernels/cpu/iq_avx1.cpp - the i-quant expert rows for CPUs without AVX2 (CORTEX_ISA_FLOOR=avx:
 // Sandy/Ivy Bridge, Xeon E5 v1/v2, Bulldozer).  See iq_avx1.hpp.
 //
 // iq_avx2.cpp's multi-token scheme in 128-bit lanes: each 32-value chunk is decoded once per verify window
@@ -18,7 +18,7 @@
 // This file is compiled for SSE4.2 + AVX with AVX2/FMA/F16C explicitly off (CMakeLists.txt), and the engine
 // calls it only behind cpu_avx1_ok().  No static constructors at namespace scope (#391): the tables below
 // are constexpr, like iq_avx2.cpp's.
-#include "strata/kernels/cpu/iq_avx1.hpp"
+#include "cortex/kernels/cpu/iq_avx1.hpp"
 
 #include "ggml.h"
 
@@ -39,7 +39,7 @@
 #error "iq_avx1.cpp must be compiled without FMA/F16C: it runs on CPUs (Sandy/Ivy Bridge) that lack them"
 #endif
 
-namespace strata::kernels::cpu {
+namespace cortex::kernels::cpu {
 namespace {
 
 // fp16 -> fp32 without F16C (expert.cpp's h2f: the conversion written out, subnormals included).
@@ -132,10 +132,10 @@ inline float hsum4(__m128 v) {
     return _mm_cvtss_f32(s);
 }
 
-// E-2 prefetching, the same knob as the AVX-2/512 kernels: STRATA_IQ_PREFETCH is the distance in bytes.
+// E-2 prefetching, the same knob as the AVX-2/512 kernels: CORTEX_IQ_PREFETCH is the distance in bytes.
 int prefetch_distance() {
     static const int d = [] {
-        const char* v = std::getenv("STRATA_IQ_PREFETCH");
+        const char* v = std::getenv("CORTEX_IQ_PREFETCH");
         return v ? std::atoi(v) : 2048;
     }();
     return d;
@@ -508,4 +508,4 @@ void q8k_quant_avx1(const float* x, void* vy, int64_t k) {
     }
 }
 
-}  // namespace strata::kernels::cpu
+}  // namespace cortex::kernels::cpu

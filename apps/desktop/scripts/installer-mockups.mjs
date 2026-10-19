@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Mock-ups of the Windows installer in Strata's own look: four screens (welcome, where, installing, done), light and dark, drawn with
+ * Mock-ups of the Windows installer in Cortex's own look: four screens (welcome, where, installing, done), light and dark, drawn with
  * the app's built CSS (apps/host/dist) and brand files, then photographed with Chrome. Nothing here is built or shipped: it is what
  * the owner is shown before an installer is chosen.
  *
@@ -17,7 +17,7 @@ const out = resolve(args.out ?? join(here, '../installer-mockups'));
 mkdirSync(out, { recursive: true });
 const dist = join(host, 'dist');
 const css = readdirSync(join(dist, 'assets')).filter(f => f.endsWith('.css')).map(f => readFileSync(join(dist, 'assets', f), 'utf8')).join('\n');
-const logo = theme => readFileSync(join(dist, 'brand', `strata-lockup-${theme}.svg`), 'utf8');
+const logo = theme => readFileSync(join(dist, 'brand', `cortex-lockup-${theme}.svg`), 'utf8');
 const { chromium } = await import(pathToFileURL(join(host, 'node_modules/playwright-core/index.mjs')).href).catch(() => import('playwright-core'));
 const CHROME = process.env.CHROME ?? ['C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/google-chrome'].find(existsSync);
 
@@ -26,22 +26,22 @@ const folder = '<svg class="st-icon" width="20" height="20" viewBox="0 0 24 24" 
 
 const screens = {
   welcome: theme => `<header class="onboard-header"><span class="mock-logo">${logo(theme)}</span></header>
-    <div class="onboard-welcome-copy"><h1>State of the art. At home.</h1><p>Strata runs AI on your own computer.<br>Setting it up takes a few minutes.</p>
+    <div class="onboard-welcome-copy"><h1>State of the art. At home.</h1><p>Cortex runs AI on your own computer.<br>Setting it up takes a few minutes.</p>
     <div class="onboard-benefits"><span>${check}Private</span><span>${check}Fast</span><span>${check}Easy to use</span></div></div>
-    <footer class="onboard-footer onboard-footer--welcome"><button class="st-btn st-btn--primary">Install Strata</button><small>Installs for you only. No administrator needed.</small></footer>`,
+    <footer class="onboard-footer onboard-footer--welcome"><button class="st-btn st-btn--primary">Install Cortex</button><small>Installs for you only. No administrator needed.</small></footer>`,
   where: theme => `<header class="onboard-header"><span class="mock-logo">${logo(theme)}</span></header>
-    <div class="mock-body"><h2 class="mock-title">Where should Strata go?</h2><p class="mock-sub">This is the right place for most people.</p>
-    <div class="onboard-folder">${folder}<div><strong>Your Strata folder</strong><small>C:\\Users\\Alex\\AppData\\Local\\Strata</small></div><button class="st-btn st-btn--sm">Change</button></div>
+    <div class="mock-body"><h2 class="mock-title">Where should Cortex go?</h2><p class="mock-sub">This is the right place for most people.</p>
+    <div class="onboard-folder">${folder}<div><strong>Your Cortex folder</strong><small>C:\\Users\\Alex\\AppData\\Local\\Cortex</small></div><button class="st-btn st-btn--sm">Change</button></div>
     <p class="mock-note">About 310 MB. Your models and chats are kept somewhere else and are never removed by an update.</p></div>
     <footer class="onboard-footer"><button class="st-btn st-btn--ghost">Back</button><span></span><button class="st-btn st-btn--primary">Install</button></footer>`,
   installing: theme => `<header class="onboard-header"><span class="mock-logo">${logo(theme)}</span></header>
-    <div class="mock-body"><h2 class="mock-title">Installing Strata…</h2><p class="mock-sub">Copying the app and its engine room. You can keep working meanwhile.</p>
+    <div class="mock-body"><h2 class="mock-title">Installing Cortex…</h2><p class="mock-sub">Copying the app and its engine room. You can keep working meanwhile.</p>
     <div class="onboard-progress" style="--p:62%"><progress max="100" value="62"></progress></div>
     <div class="onboard-progress-meta"><span>62% · 190 / 310 MB</span><div class="onboard-progress-actions"><span>About 1 min left</span><button>Cancel</button></div></div></div>
-    <footer class="onboard-footer"><span></span><span class="mock-hint">Next: choose your first model inside Strata.</span><button class="st-btn st-btn--primary" disabled>Installing…</button></footer>`,
+    <footer class="onboard-footer"><span></span><span class="mock-hint">Next: choose your first model inside Cortex.</span><button class="st-btn st-btn--primary" disabled>Installing…</button></footer>`,
   done: theme => `<header class="onboard-header"><span class="mock-logo">${logo(theme)}</span></header>
-    <div class="onboard-welcome-copy"><h1>Strata is ready.</h1><p>Open it to pick your first model. Strata downloads it for you and gets it ready.</p></div>
-    <footer class="onboard-footer onboard-footer--welcome"><button class="st-btn st-btn--primary">Open Strata</button><small>A shortcut was added to your Start menu and desktop.</small></footer>`,
+    <div class="onboard-welcome-copy"><h1>Cortex is ready.</h1><p>Open it to pick your first model. Cortex downloads it for you and gets it ready.</p></div>
+    <footer class="onboard-footer onboard-footer--welcome"><button class="st-btn st-btn--primary">Open Cortex</button><small>A shortcut was added to your Start menu and desktop.</small></footer>`,
 };
 
 const page = (name, theme) => `<!doctype html><html data-theme="${theme}"><head><meta charset="utf-8"><style>${css}
@@ -53,7 +53,7 @@ body{background:${theme === 'dark' ? '#0b0d0e' : '#e9edef'};margin:0;display:gri
 .mock-note{color:var(--st-ink-muted);font-size:12px;margin-top:16px;line-height:1.6}.mock-hint{font-size:12px;color:var(--st-ink-muted)}
 .onboard-progress progress{width:100%}
 .guided-onboarding{min-height:430px;display:flex;flex-direction:column}.onboard-footer{margin-top:auto}
-</style></head><body><div class="mock-window"><div class="mock-titlebar"><span>Strata setup</span><span>–  ☐  ✕</span></div>
+</style></head><body><div class="mock-window"><div class="mock-titlebar"><span>Cortex setup</span><span>–  ☐  ✕</span></div>
 <div class="setup guided-onboarding" data-step="${name === 'welcome' || name === 'done' ? 1 : 2}">${screens[name](theme)}</div></div></body></html>`;
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });

@@ -10,8 +10,8 @@ from pathlib import Path
 
 from unittest import mock
 
-from strata_cli.cli import main
-from strata_control import models
+from cortex_cli.cli import main
+from cortex_control import models
 from tests.terminal.test_models import gguf_fixture
 
 
@@ -90,7 +90,7 @@ class ImportProjectorTests(unittest.TestCase):
         plan = self.plan(self.source)
         self.assertEqual(plan["file_set_status"], "invalid_or_incomplete")
         self.assertFalse(plan["reads_pictures"])
-        self.assertEqual(plan["messages"], ["This model type isn't supported by the Strata engine. "
+        self.assertEqual(plan["messages"], ["This model type isn't supported by the Cortex engine. "
                                             "Add it as a Custom model API (llama-server) instead."])
 
     def test_choosing_the_projector_itself_says_so(self):

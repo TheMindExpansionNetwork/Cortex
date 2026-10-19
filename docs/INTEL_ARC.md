@@ -1,6 +1,6 @@
 # Intel Arc (experimental)
 
-Strata 0.1.39 includes an **experimental Intel Arc engine**: Strata's own engine ported to SYCL (Intel oneAPI).
+Cortex 0.1.39 includes an **experimental Intel Arc engine**: Cortex's own engine ported to SYCL (Intel oneAPI).
 maxfridbe wrote it in [#423](https://github.com/Niko1221/Strata/pull/423), with fixes from the people testing it.
 The code is in `sycl/`, and the port's own notes, measurements and maintenance procedure are in
 [docs/INTEL.md](INTEL.md). This page covers what you need, how to build it, and what has been tested.
@@ -12,7 +12,7 @@ are still community reports. The NVIDIA and AMD engines are unchanged: the Intel
 
 **Where the engine comes from.** There is **no Intel engine in the release zips** (the ones `START-HERE.bat` and `setup.sh`
 use): you build it from source on Linux, as described below. A ready-made Intel engine does exist as a Docker image,
-`ghcr.io/niko1221/strata:0.2.0-sycl`, built for the 0.2.0 release (the image needs prepared model files; see
+`ghcr.io/niko1221/cortex:0.2.0-sycl`, built for the 0.2.0 release (the image needs prepared model files; see
 [Docker: Intel Arc](DOCKER.md#intel-arc)). The Mac and Windows builds have no Intel engine.
 
 ## What has been run, and by whom
@@ -25,7 +25,7 @@ use): you build it from source on Linux, as described below. A ready-made Intel 
 | Community | Arc B580 12 GB, WSL2 | IQ2_XS ~21 tok/s, Coder ~15 tok/s; **device loss also seen** | #423 |
 | Community | 2x Arc Pro B60 24 GB, `--layer-split` | Coder IQ1_M: 56.6 tok/s decode, 428 tok/s prompt (2,129 tokens); Flash-Next IQ2_XS: 58.6-61.3 tok/s decode, 436 tok/s prompt; all experts in VRAM; 8K context | [bench/results/2026-10-04-community-2x-arc-pro-b60](../bench/results/2026-10-04-community-2x-arc-pro-b60/README.md) |
 | Community | one Arc Pro B60 24 GB | Coder IQ1_M with 4,042 of 12,288 experts mirrored in RAM: 11.9 tok/s decode (needs the ring-wait fix from the same report) | same |
-| Strata maintainers (0.1.40.2 and later) | Arc Pro B70 32 GB (xe) and Arc A750 8 GB (i915), test machines | Flash-Next IQ3_S on the B70 with 11.5k of 24.6k experts resident: 10-prompt gate passes, prompt 980-1,000 tok/s on 4K tokens, decode 30 (prose) to 41 (code) tok/s; the xe aliased-pages fix and the `NO_HOST` requirement are in [INTEL.md](INTEL.md) | INTEL.md, "Arc Pro B70 with a model that does not fit" |
+| Cortex maintainers (0.1.40.2 and later) | Arc Pro B70 32 GB (xe) and Arc A750 8 GB (i915), test machines | Flash-Next IQ3_S on the B70 with 11.5k of 24.6k experts resident: 10-prompt gate passes, prompt 980-1,000 tok/s on 4K tokens, decode 30 (prose) to 41 (code) tok/s; the xe aliased-pages fix and the `NO_HOST` requirement are in [INTEL.md](INTEL.md) | INTEL.md, "Arc Pro B70 with a model that does not fit" |
 
 The 0.1.39 port re-migrates 0.1.38's port onto the 0.1.39 engine sources (the #606 NaN fix, the #649 verify
 trace, the new prompt paths). 0.1.39's `sycl/` did not compile against 0.1.39's own engine sources (#784: the
@@ -41,8 +41,8 @@ Full flags, per-request timings and engine logs are in the report linked in the 
 ## What was tested here (0.1.39)
 
 - **Compiles:** Ubuntu 24.04 (WSL2), Intel oneAPI DPC++ 2026.1.1 + oneMKL 2026.1. The whole `sycl/` project
-  builds with 0 errors: the `strata` engine plus all 157 targets (the kernel parity tests and benches). The build is
-  SPIR-V (JIT). The AOT build (`STRATA_SYCL_AOT`) was not built here, because it needs `ocloc`.
+  builds with 0 errors: the `cortex` engine plus all 157 targets (the kernel parity tests and benches). The build is
+  SPIR-V (JIT). The AOT build (`CORTEX_SYCL_AOT`) was not built here, because it needs `ocloc`.
 - **Kernel parity tests on a CPU** (`ONEAPI_DEVICE_SELECTOR=opencl:cpu`, Intel's OpenCL CPU runtime, AMD Ryzen 5 7600):
   14 of 25 pass. That is the same set that PR #423's own 0.1.38 port passes on that device: the failures are tight
   float tolerances on the CPU's math (rel 3e-6 against a 1e-6 limit), model fixtures that are not present, and two
@@ -63,28 +63,28 @@ is no picture reader for the Arc engine). The Alchemist A-series was tested late
   Level Zero; on Ubuntu, `intel-opencl-icd libze1 libze-intel-gpu1`, or Intel's
   [client GPU guide](https://dgpu-docs.intel.com/driver/client/overview.html)).
 - **Intel oneAPI**: the DPC++ compiler (`icpx`, 2025.3 or newer; 2026.1 is what was built here) and **oneMKL**. About 5 GB.
-- `cmake` 3.24+, `ninja`, `git` (the build fetches ggml unless you point `STRATA_GGML_DIR` at a llama.cpp checkout),
+- `cmake` 3.24+, `ninja`, `git` (the build fetches ggml unless you point `CORTEX_GGML_DIR` at a llama.cpp checkout),
   Python 3.
 - For `./setup.sh --backend sycl` today: **Docker**, and nothing else from the list above except the GPU driver.
-  `sycl/setup_intel.py` runs the engine in the `strata-sycl-dev` image built from `sycl/tools/Dockerfile`, and the
+  `sycl/setup_intel.py` runs the engine in the `cortex-sycl-dev` image built from `sycl/tools/Dockerfile`, and the
   engine is built in that image too ("Build with Docker" below). On Ubuntu: `sudo apt install docker.io git`, then
   `sudo usermod -aG docker,render $USER` and log in again. Note that the Dockerfile starts from a community
-  llama.cpp SYCL image (`ghcr.io/snailium/...`), not an Intel or Strata image.
+  llama.cpp SYCL image (`ghcr.io/snailium/...`), not an Intel or Cortex image.
 - VRAM: the port keeps the experts on the card (`--stream-experts`). A 32 GB card holds the Coder IQ1_M or IQ2_XS.
   Smaller cards mirror part of the experts in RAM and are slower.
 
 ## Build with Docker (what `setup --backend sycl` uses)
 
 Two commands, the same as in [INTEL.md](INTEL.md), "How to build it" (about 10 minutes the first time). From the checkout,
-called `Strata` here:
+called `Cortex` here:
 
 ```sh
-cd Strata
-docker build -t strata-sycl-dev sycl/tools            # once: ~6 minutes, a 13 GB image
+cd Cortex
+docker build -t cortex-sycl-dev sycl/tools            # once: ~6 minutes, a 13 GB image
 H=$(basename "$PWD")
 # Arc B-series: bmg-g31 (Pro B70), bmg-g21 (B580, B570, Pro B60). Arc A-series (Alchemist): leave out AOT (JIT) and use build-sycl
 docker run --rm -u $(id -u):$(id -g) -v "$PWD/..:/work" -e AOT=bmg-g31 -e REPO=/work/$H \
-    -e BUILD_DIR=/work/$H/build-sycl-aot strata-sycl-dev "cd /work/$H && bash sycl/tools/build.sh strata"
+    -e BUILD_DIR=/work/$H/build-sycl-aot cortex-sycl-dev "cd /work/$H && bash sycl/tools/build.sh cortex"
 ```
 
 Then `./setup.sh --backend sycl` (below). Do not run `python3 sycl/setup_intel.py` by hand: on Ubuntu it fails with
@@ -109,21 +109,21 @@ configures the `sycl/` project directly.
 
 ```sh
 source /opt/intel/oneapi/setvars.sh
-cmake -S . -B build-sycl -G Ninja -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx -DSTRATA_ENABLE_SYCL=ON
+cmake -S . -B build-sycl -G Ninja -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx -DCORTEX_ENABLE_SYCL=ON
 #   or: cmake -S sycl -B build-sycl -G Ninja -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx
-cmake --build build-sycl --target strata
+cmake --build build-sycl --target cortex
 ```
 
 Options:
 
-- `-DSTRATA_SYCL_AOT=bmg-g31` (Arc Pro B70) or `bmg-g21` (B580 / B570 / Pro B60) compiles the GPU code ahead of
+- `-DCORTEX_SYCL_AOT=bmg-g31` (Arc Pro B70) or `bmg-g21` (B580 / B570 / Pro B60) compiles the GPU code ahead of
   time. This needs `ocloc` (Intel's `intel-ocloc` package). Without it, the first start JIT-compiles every kernel,
   which takes about 47 s.
-- `-DSTRATA_SYCL_PARITY=OFF` skips the kernel tests (on by default). Run them with
+- `-DCORTEX_SYCL_PARITY=OFF` skips the kernel tests (on by default). Run them with
   `ctest --test-dir build-sycl` on the card.
 
-`setup_intel.py` looks for `build-sycl-aot/strata` or `build-sycl/strata` in the checkout. With the
-top-level option the engine is at `build-sycl/sycl/strata`, so either use `-S sycl` or set `STRATA_SYCL_BIN`.
+`setup_intel.py` looks for `build-sycl-aot/cortex` or `build-sycl/cortex` in the checkout. With the
+top-level option the engine is at `build-sycl/sycl/cortex`, so either use `-S sycl` or set `CORTEX_SYCL_BIN`.
 
 ## Setup and running
 
@@ -142,29 +142,29 @@ Things that matter on an Arc (details in INTEL.md):
 - **Do not ask for more VRAM than the card has.** On the `xe` driver, an allocation past VRAM can push buffers into
   RAM until the machine runs out of memory and stalls. Leave about 1.5 GB free.
 - `SYCL_CACHE_PERSISTENT=0`: the persistent JIT cache crashed on Xe2 during the first compile.
-- Two cards: `ONEAPI_DEVICE_SELECTOR=level_zero:*` (the image pins `level_zero:0`; `strata-sycl.sh` now passes the
+- Two cards: `ONEAPI_DEVICE_SELECTOR=level_zero:*` (the image pins `level_zero:0`; `cortex-sycl.sh` now passes the
   variable through) and `--layer-split`.
 - **`--layer-split auto` on two equal cards (0.1.44, #1440):** when several splits hold all the experts and predict the
   same speed, the search now takes the one that leaves its fullest card the most VRAM to spare (within 0.2% of the best
-  predicted time, `STRATA_SPLIT_HEADROOM_TOL`). It used to take the first one tried, which filled the second card to its
+  predicted time, `CORTEX_SPLIT_HEADROOM_TOL`). It used to take the first one tried, which filled the second card to its
   last MiB. A full card under `xe` moves buffers to system memory instead of failing: 2x B70 with IQ3_S, auto picked
   K=24 (~11 tok/s) where `--layer-split 30` ran ~54. The startup line names both splits when the choice moves.
-  `STRATA_SPLIT_HEADROOM=0` keeps the old pick.
+  `CORTEX_SPLIT_HEADROOM=0` keeps the old pick.
 - **Arc Pro B60:** the PCI id is `8086:e211` (`lspci -nn`, the kernel's `xe` id list files it with the BMG-G21 cards), `sycl-ls` prints
-  `Intel(R) Arc(TM) Pro B60 Graphics 20.1.0`, and `ocloc ids bmg-g21` prints 20.1.0, so `-DSTRATA_SYCL_AOT=bmg-g21` is the right target.
+  `Intel(R) Arc(TM) Pro B60 Graphics 20.1.0`, and `ocloc ids bmg-g21` prints 20.1.0, so `-DCORTEX_SYCL_AOT=bmg-g21` is the right target.
   `setup_intel.py` knows both B60 ids, `e211` and `e221` (both seen on B60 cards). On a `--layer-split` the startup line "N experts are neither in VRAM nor mirrored"
-  counts the other card's layers; the lines `100% of the experts resident` that follow are the ones to read. Set `STRATA_MIRROR_MIB=0` there,
+  counts the other card's layers; the lines `100% of the experts resident` that follow are the ones to read. Set `CORTEX_MIRROR_MIB=0` there,
   or the pinned mirror is allocated and not used.
 - **`setvars.sh` and `set -u`:** `source /opt/intel/oneapi/setvars.sh` in a shell with `set -u` stops at `OCL_ICD_FILENAMES: unbound variable`
   (oneAPI 2026.1.1). Source it before `set -u`, or run `set +u` around it.
-- **Without Docker:** `sycl/serve/strata-sycl.sh` needs Docker. Natively, `source setvars.sh`, export `SYCL_CACHE_PERSISTENT=0`,
-  `ZES_ENABLE_SYSMAN=1` and `STRATA_VERIFY_DEVICE_PLAN=1`, then run `build-sycl-aot/strata` or `sycl/serve/server_intel.py` with an `exe` that does this.
+- **Without Docker:** `sycl/serve/cortex-sycl.sh` needs Docker. Natively, `source setvars.sh`, export `SYCL_CACHE_PERSISTENT=0`,
+  `ZES_ENABLE_SYSMAN=1` and `CORTEX_VERIFY_DEVICE_PLAN=1`, then run `build-sycl-aot/cortex` or `sycl/serve/server_intel.py` with an `exe` that does this.
   A normal user is not in the `render` group on Ubuntu, and then `sycl-ls` shows only the CPU device.
-- `STRATA_VERIFY_NO_HOST=1` (set by `strata-sycl.sh` unless the config's `"env"` says otherwise) is needed on `xe`
+- `CORTEX_VERIFY_NO_HOST=1` (set by `cortex-sycl.sh` unless the config's `"env"` says otherwise) is needed on `xe`
   cards when part of the experts is not in VRAM (the host-to-GPU flag stores are not visible there, NaN logits
   otherwise) and is left off on the `i915` Arc A-series: see [INTEL.md](INTEL.md). The config's `"env"` block and any
-  `STRATA_*`, `ONEAPI_*`, `UR_*`, `IGC_*`, `SYCL_*` or `ZES_*` variable of the server's environment reach the engine
-  through `strata-sycl.sh` (for example `STRATA_MIRROR_MIB`, `IGC_EnableDPEmulation`).
+  `CORTEX_*`, `ONEAPI_*`, `UR_*`, `IGC_*`, `SYCL_*` or `ZES_*` variable of the server's environment reach the engine
+  through `cortex-sycl.sh` (for example `CORTEX_MIRROR_MIB`, `IGC_EnableDPEmulation`).
 
 ## Windows
 

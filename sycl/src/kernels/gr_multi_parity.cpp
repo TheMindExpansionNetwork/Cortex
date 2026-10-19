@@ -7,7 +7,7 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/kernels/gr.hpp"
+#include "cortex/kernels/gr.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -16,7 +16,7 @@
 #include <random>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 void ck(dpct::err0 e, const char *w) {

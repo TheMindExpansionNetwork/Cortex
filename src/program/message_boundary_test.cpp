@@ -1,9 +1,9 @@
-#include "strata/program/message_boundary.hpp"
+#include "cortex/program/message_boundary.hpp"
 
 #include <cstdio>
 
 int main() {
-    using strata::program::message_checkpoint_boundary;
+    using cortex::program::message_checkpoint_boundary;
     constexpr int64_t token = 248045;
     std::vector<int64_t> ids(33100, 7);
     ids[0] = ids[12] = ids[32800] = ids[33000] = token;

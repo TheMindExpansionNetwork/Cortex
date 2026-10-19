@@ -6,7 +6,7 @@
 // rocBLAS's own 237 solutions for the same shape runs at 32 (E270, 2026-10-05).  This tool enumerates the library's
 // solutions for each shape (rocblas_gemm_ex_get_solutions), times them, checks each against the default kernel's
 // output, and writes the rows where a solution beats the default by at least --min-gain (1.05 = 5%) as a table the
-// engine reads through STRATA_ROCBLAS_TUNING (src/prefill/rocblas_tuning.hpp; Gemm::f16_inplace).
+// engine reads through CORTEX_ROCBLAS_TUNING (src/prefill/rocblas_tuning.hpp; Gemm::f16_inplace).
 //
 // Solution indices are valid only for one GPU architecture and one rocBLAS build (its version string, tweak hash
 // included), so a table is calibrated on the card with the ROCm the engine runs with:
@@ -266,7 +266,7 @@ int main(int argc, char** argv) {
         f << "# rocBLAS solution indices for the prompt path's FP16-out GEMMs; valid for this architecture and rocBLAS build only\n";
         f << "# rows: type N K ldy T solution   (type f16o: FP16 in, FP16 out, FP32 compute; Gemm::f16_inplace)\n";
         f << "# solution: rocBLAS's solution index, or `default` where its own choice measured best at that bucket\n";
-        f << "STRATA_ROCBLAS_TUNING_V1 " << arch << " " << ver << "\n";
+        f << "CORTEX_ROCBLAS_TUNING_V1 " << arch << " " << ver << "\n";
         size_t tuned = 0;
         for (const auto& r : rows) {
             f << "f16o " << r.s.n << " " << r.s.k << " " << r.s.ldy << " " << r.s.t << " ";

@@ -1,4 +1,4 @@
-"""Writes the text previews of every `strata launch` screen to docs/terminal-previews/launch-*.txt (fake computer: RTX 5070 12 GB, 64 GB RAM).
+"""Writes the text previews of every `cortex launch` screen to docs/terminal-previews/launch-*.txt (fake computer: RTX 5070 12 GB, 64 GB RAM).
 
     python tests/terminal/launch_previews.py
 
@@ -20,9 +20,9 @@ sys.path.insert(0, str(ROOT))
 
 from rich.console import Console  # noqa: E402
 
-from strata_cli.launch import access, settings as S, store  # noqa: E402
-from strata_cli.launch.app import Ctx, LaunchApp  # noqa: E402
-from strata_cli.launch.widgets import Glyphs  # noqa: E402
+from cortex_cli.launch import access, settings as S, store  # noqa: E402
+from cortex_cli.launch.app import Ctx, LaunchApp  # noqa: E402
+from cortex_cli.launch.widgets import Glyphs  # noqa: E402
 from tests.terminal import test_overview as ov  # noqa: E402
 from tests.terminal.launch_support import HW_12, HW_2X16, Home, catalog, text_of  # noqa: E402
 
@@ -37,7 +37,7 @@ def ctx_for(hw):
 
 
 def write(name: str, text: str, note: str) -> None:
-    body = f"# strata launch preview: {note}\n# (text of the screen as drawn at the size named in tests/terminal/launch_previews.py)\n\n" + text.rstrip() + "\n"
+    body = f"# cortex launch preview: {note}\n# (text of the screen as drawn at the size named in tests/terminal/launch_previews.py)\n\n" + text.rstrip() + "\n"
     (OUT / f"launch-{name}.txt").write_text(body, encoding="utf-8")
     print("wrote", f"launch-{name}.txt")
 
@@ -56,13 +56,13 @@ def run() -> None:
         store.save(S.LaunchSettings(name="Coder 64K - agents", family="coder", model="IQ1_M", context=65536, parallel=2, last_used="2026-10-14 09:00:00"))
         store.save(S.LaunchSettings(name="Network serving", family="qwen", model="Q2_0", context=32768, parallel=1, tuned_preset="y",
                                     tuned_at="2026-10-15", last_used="2026-10-15 09:00:00"))
-        base = {"exe": "component:strata-engine", "args": ["--max-context", "131072", "--kv", "int8", "--prefill", "auto", "--expert-cache", "auto",
+        base = {"exe": "component:cortex-engine", "args": ["--max-context", "131072", "--kv", "int8", "--prefill", "auto", "--expert-cache", "auto",
                                                           "--spec", "4"]}
         help_text = ("  --max-context N      memory for the conversation (default 4096)\n  --kv fp16|int8       how the conversation memory is stored\n"
                      "  --prefill N          how many prompt tokens are read at once\n  --expert-cache N     experts kept in graphics memory\n"
                      "  --spec N             draft tokens per step (faster replies)\n  --native-rope        experimental pinned rotary arithmetic\n")
-        patches = [mock.patch.object(Ctx, "base_config", lambda self: base), mock.patch.object(Ctx, "engine_exe", lambda self: "/engine/strata"),
-                   mock.patch("strata_cli.launch.params.engine_help_text", return_value=help_text),
+        patches = [mock.patch.object(Ctx, "base_config", lambda self: base), mock.patch.object(Ctx, "engine_exe", lambda self: "/engine/cortex"),
+                   mock.patch("cortex_cli.launch.params.engine_help_text", return_value=help_text),
                    mock.patch.object(access, "lan_ips", return_value=["192.168.88.21"]),
                    mock.patch.object(access, "find_cloudflared", return_value="/usr/bin/cloudflared"),
                    mock.patch.object(access, "tailscale_status", return_value={"installed": False, "running": False, "ip": None, "name": None})]
@@ -97,7 +97,7 @@ def run() -> None:
                 self.s, self.emit = s, kw["emit"]
 
             def run(self, start=True):
-                from strata_cli.launch.runner import Event, Result
+                from cortex_cli.launch.runner import Event, Result
                 self.emit(Event("engine", "Engine 0.1.45 (cuda) is installed.", 100))
                 self.emit(Event("model", "Downloading 41.0 of 75.8 GB", 54.0))
                 time.sleep(1.2)
@@ -113,7 +113,7 @@ def run() -> None:
         async def run_screen():
             ctx = ctx_for(HW_12)
             ctx.settings = S.LaunchSettings(name="Demo", family="qwen", model="IQ3_XXS", context=131072, tune="quick")
-            with mock.patch("strata_cli.launch.app.Runner", Runner):
+            with mock.patch("cortex_cli.launch.app.Runner", Runner):
                 app = LaunchApp(ctx)
                 async with app.run_test(size=SIZE) as pilot:
                     await pilot.pause(0.2)
@@ -124,11 +124,11 @@ def run() -> None:
         asyncio.run(run_screen())
 
         # the monitor: Overview, Connect, quit question
-        from strata_cli.launch.monitor_ext import LaunchMonitor
+        from cortex_cli.launch.monitor_ext import LaunchMonitor
 
         async def monitor():
             src = ov.Source(ov.metrics("reading"))
-            info = {"url": "http://127.0.0.1:8080", "urls": ["http://127.0.0.1:8080", "http://192.168.88.21:8080"], "key": "sk-strata-abcdefghijklmn",
+            info = {"url": "http://127.0.0.1:8080", "urls": ["http://127.0.0.1:8080", "http://192.168.88.21:8080"], "key": "sk-cortex-abcdefghijklmn",
                     "model": "qwen3.8-flash-next-iq3_xxs", "context": 32768, "profile": "launch-x", "name": "Demo"}
             app = LaunchMonitor(src, None, info=info, interval=30)
             async with app.run_test(size=(120, 36)) as pilot:
@@ -145,7 +145,7 @@ def run() -> None:
         for p in patches:
             p.stop()
     Path(OUT / "launch-overview-ascii.txt").write_text(
-        "# strata monitor Overview in the classic Windows console mode (--glyphs ascii, or detected): no characters Consolas lacks\n\n"
+        "# cortex monitor Overview in the classic Windows console mode (--glyphs ascii, or detected): no characters Consolas lacks\n\n"
         + ov.draw(ov.overview.build(ov.metrics("generating")), glyphs="ascii", color=False, connect=True), encoding="utf-8")
 
 

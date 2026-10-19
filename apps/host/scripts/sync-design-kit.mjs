@@ -1,5 +1,5 @@
 /**
- * Sync the Strata UI kit (../ui) into the app's public/ folder.
+ * Sync the Cortex UI kit (../ui) into the app's public/ folder.
  *
  *   node scripts/sync-design-kit.mjs
  *

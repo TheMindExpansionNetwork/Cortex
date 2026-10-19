@@ -7,7 +7,7 @@
 // Defaults: 40 40 (NVFP4), 64 groups (distinct ~2.7 MB blobs: far past L2), 2 tokens each, 50 iterations.  UD-IQ4_XS's
 // experts: 21 20 (IQ3_S gate/up, IQ4_NL down).  Random bytes: the values are meaningless, the timing is not (the
 // kernels have no data-dependent branches but the NVFP4 scale decode), and the hash is stable for a given build.
-#include "strata/kernels/iq_kernels.hpp"
+#include "cortex/kernels/iq_kernels.hpp"
 
 #include <cuda_runtime.h>
 
@@ -19,7 +19,7 @@
 #include <random>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 void ck(cudaError_t e, const char* what) {

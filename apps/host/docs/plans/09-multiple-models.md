@@ -1,6 +1,6 @@
 # Multiple loaded models — UI and integration handover
 
-Implemented 14 October 2026 in the design app at `backups/strata`.
+Implemented 14 October 2026 in the design app at `backups/cortex`.
 
 ## User flow
 
@@ -32,7 +32,7 @@ The native host explicitly reports its current single-engine and automatic-place
 - `POST /api/runtime/plan`: `{ variantId, gpuIds, config, executionMode? }`; returns candidate memory, combined budget, `allowed` and `alreadyLoaded`. No lifecycle mutation.
 - `POST /api/runtime/load`: same body; omitted `executionMode` means `single`, and only explicit `multiple` preserves sibling instances; validates the engine configuration, requires an installed version and returns `{ state, instance }`. Native multi-instance calls are rejected.
 - `POST /api/runtime/:instanceId/unload`: refuses active/queued requests for that instance, removes its queue and releases its reservation; other instances remain.
-- `POST /api/runtime/:instanceId/default`: chooses the default for Strata chat. Explicit API requests retain their selected model.
+- `POST /api/runtime/:instanceId/default`: chooses the default for Cortex chat. Explicit API requests retain their selected model.
 - SSE `runtime`: immutable runtime state after model/queue/phase/default changes.
 - `GET /v1/models`: all loaded instance API IDs. Instance ID, GPU IDs, context and simulation mode appear in metadata.
 - `POST /v1/chat/completions` and `/v1/messages`: route to the exact requested API model ID before entering the instance queue. Unknown IDs and omitted IDs when multiple instances exist return an error before streaming starts. With one loaded instance, an omitted ID remains compatible.

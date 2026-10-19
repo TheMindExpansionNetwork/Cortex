@@ -2,13 +2,13 @@
  * Inference bridge.
  *
  * Preference order:
- *   1. the Strata engine — the C++ engine behind Strata's own Python API worker. This is the
- *      product's inference path and is tried first. `STRATA_SERVER_URL` names it explicitly;
- *      otherwise the Strata worker's default loopback address is probed.
- *   2. the engine Strata supervises itself (llama.cpp), when one is configured
+ *   1. the Cortex engine — the C++ engine behind Cortex's own Python API worker. This is the
+ *      product's inference path and is tried first. `CORTEX_SERVER_URL` names it explicitly;
+ *      otherwise the Cortex worker's default loopback address is probed.
+ *   2. the engine Cortex supervises itself (llama.cpp), when one is configured
  *   3. a *different* OpenAI-compatible server already running on localhost, but only when it
  *      identifies itself as one; a host that merely answers a port is not adopted silently
- *   4. a clearly-labelled demo engine — **development only**. A packaged or `STRATA_REAL_ENGINE=1`
+ *   4. a clearly-labelled demo engine — **development only**. A packaged or `CORTEX_REAL_ENGINE=1`
  *      run never reaches this branch: it raises a typed error instead, so no simulated answer can
  *      enter a production success path.
  */
@@ -16,8 +16,8 @@ import * as supervisor from './supervisor.mjs';
 import { get as getStore } from './store.mjs';
 import { which } from './util.mjs';
 
-/** Where Strata's own API worker listens by default (`serve/server.py`, `--port 8095`). */
-const STRATA_DEFAULT_URL = 'http://127.0.0.1:8095/v1';
+/** Where Cortex's own API worker listens by default (`serve/server.py`, `--port 8095`). */
+const CORTEX_DEFAULT_URL = 'http://127.0.0.1:8095/v1';
 
 const CANDIDATES = [
   { name: 'llama.cpp', url: 'http://127.0.0.1:8080/v1' },
@@ -31,44 +31,44 @@ let checkedAt = 0;
 /**
  * True when this process must not simulate inference.
  *
- * Packaged builds are always real. `STRATA_REAL_ENGINE` can force it either way for development,
+ * Packaged builds are always real. `CORTEX_REAL_ENGINE` can force it either way for development,
  * but it can never turn a packaged build back into demo mode — that is the guarantee acceptance
  * checklist row U12 asks for ("no success path using demo responses/metrics").
  */
 export function requiresRealEngine() {
-  if (process.env.STRATA_FORCE_DEMO === '1' && process.env.STRATA_PACKAGED !== '1') return false;
-  if (process.env.STRATA_REAL_ENGINE === '1') return true;
-  return process.env.STRATA_PACKAGED === '1';
+  if (process.env.CORTEX_FORCE_DEMO === '1' && process.env.CORTEX_PACKAGED !== '1') return false;
+  if (process.env.CORTEX_REAL_ENGINE === '1') return true;
+  return process.env.CORTEX_PACKAGED === '1';
 }
 
-/** Where the Strata API worker is, if it was named explicitly. */
-function strataUrl() {
-  const raw = process.env.STRATA_SERVER_URL?.trim();
-  if (!raw) return STRATA_DEFAULT_URL;
+/** Where the Cortex API worker is, if it was named explicitly. */
+function cortexUrl() {
+  const raw = process.env.CORTEX_SERVER_URL?.trim();
+  if (!raw) return CORTEX_DEFAULT_URL;
   return raw.replace(/\/+$/, '').endsWith('/v1') ? raw.replace(/\/+$/, '') : `${raw.replace(/\/+$/, '')}/v1`;
 }
 
 /**
- * Probe a loopback endpoint and confirm it really is a Strata worker.
+ * Probe a loopback endpoint and confirm it really is a Cortex worker.
  *
- * A bare OpenAI-compatible listener is not enough: Strata's worker answers `/v1/status` with its
- * own shape (it carries `service: "strata"` and the reported context). Adopting an unrelated
+ * A bare OpenAI-compatible listener is not enough: Cortex's worker answers `/v1/status` with its
+ * own shape (it carries `service: "cortex"` and the reported context). Adopting an unrelated
  * server because it happens to hold the port is exactly the silent substitution the architecture
  * forbids, so the identity check is required.
  */
-async function probeStrata(baseUrl) {
+async function probeCortex(baseUrl) {
   try {
     const res = await fetch(`${baseUrl.replace(/\/v1$/, '')}/v1/status`, { signal: AbortSignal.timeout(900) });
     if (!res.ok) return null;
     const status = await res.json().catch(() => null);
     if (!status || typeof status !== 'object') return null;
-    if (status.service !== 'strata') return null;
+    if (status.service !== 'cortex') return null;
     const models = await fetch(`${baseUrl}/models`, { signal: AbortSignal.timeout(900) })
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null);
     return {
-      kind: 'strata',
-      name: 'Strata engine',
+      kind: 'cortex',
+      name: 'Cortex engine',
       baseUrl,
       models: (models?.data ?? []).map((m) => m.id).filter(Boolean),
       modelId: status.model ?? null,
@@ -82,10 +82,10 @@ async function probeStrata(baseUrl) {
 }
 
 export async function detectBackend({ force = false } = {}) {
-  // 1. Strata's own engine, always first: it is the product's inference path.
-  const strata = await probeStrata(strataUrl());
-  if (strata) {
-    backend = strata;
+  // 1. Cortex's own engine, always first: it is the product's inference path.
+  const cortex = await probeCortex(cortexUrl());
+  if (cortex) {
+    backend = cortex;
     checkedAt = Date.now();
     return backend;
   }
@@ -99,7 +99,7 @@ export async function detectBackend({ force = false } = {}) {
     const status = supervisor.status();
     backend = {
       kind: 'engine',
-      name: 'Strata engine · llama.cpp',
+      name: 'Cortex engine · llama.cpp',
       baseUrl: `http://127.0.0.1:${status.port}/v1`,
       models: status.modelId ? [status.modelId] : [],
     };
@@ -131,12 +131,12 @@ export async function detectBackend({ force = false } = {}) {
   if (requiresRealEngine()) {
     backend = {
       kind: 'unavailable',
-      name: 'No Strata engine',
+      name: 'No Cortex engine',
       baseUrl: null,
       models: [],
       error:
-        `No Strata engine answered at ${strataUrl()} and no supervised engine is running. ` +
-        'Start Strata (or load a model) and retry. Simulated output is disabled in this build.',
+        `No Cortex engine answered at ${cortexUrl()} and no supervised engine is running. ` +
+        'Start Cortex (or load a model) and retry. Simulated output is disabled in this build.',
     };
     checkedAt = Date.now();
     return backend;
@@ -145,7 +145,7 @@ export async function detectBackend({ force = false } = {}) {
   const binary = supervisor.findBinary() ?? (await which('llama-server'));
   backend = {
     kind: 'demo',
-    name: binary ? 'llama.cpp (engine not running)' : 'Strata demo engine',
+    name: binary ? 'llama.cpp (engine not running)' : 'Cortex demo engine',
     baseUrl: null,
     models: [],
     binary: binary?.path ?? null,
@@ -161,7 +161,7 @@ export function currentBackend() {
     const status = supervisor.status();
     return {
       kind: 'engine',
-      name: 'Strata engine · llama.cpp',
+      name: 'Cortex engine · llama.cpp',
       baseUrl: `http://127.0.0.1:${status.port}/v1`,
       models: status.modelId ? [status.modelId] : [],
     };
@@ -199,7 +199,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export async function streamChat({ message, history = [], systemPrompt = '', modelLabel, onFrame, signal, engine, candidates = [] }) {
   const be = await detectBackend();
 
-  if (be.kind === 'strata') {
+  if (be.kind === 'cortex') {
     return proxyCompletion({
       baseUrl: be.baseUrl,
       message,
@@ -209,7 +209,7 @@ export async function streamChat({ message, history = [], systemPrompt = '', mod
       signal,
       supervised: false,
       engine,
-      modelId: be.modelId || 'strata',
+      modelId: be.modelId || 'cortex',
     });
   }
 
@@ -228,7 +228,7 @@ export async function streamChat({ message, history = [], systemPrompt = '', mod
 
   if (be.kind === 'unavailable') {
     // Fail loudly and specifically. This is a real, non-simulated error path.
-    throw new Error(be.error ?? 'No Strata engine is available.');
+    throw new Error(be.error ?? 'No Cortex engine is available.');
   }
 
   return demoCompletion({ message, modelLabel, onFrame, signal, engine, candidates });
@@ -314,7 +314,7 @@ export async function proxyCompletion({ baseUrl, message, history = [], systemPr
           continue;
         }
         if (parsed.error) throw new Error(parsed.error.message ?? 'Inference failed.');
-        if(parsed.strata_mcp)onFrame({type:'native-tool',event:parsed.strata_mcp});
+        if(parsed.cortex_mcp)onFrame({type:'native-tool',event:parsed.cortex_mcp});
         if(parsed.timings)timings=parsed.timings;
         if(parsed.choices?.[0]?.finish_reason)finishReason=parsed.choices[0].finish_reason;
 

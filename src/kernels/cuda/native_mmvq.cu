@@ -23,17 +23,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "strata/kernels/native_mmvq.hpp"
-#include "strata/kernels/dp4a.hpp"
-#include "strata/kernels/q8_1_finite.hpp"
-#include "strata/kernels/iq_kernels.hpp"
-#include "strata/kernels/gfx_arch.hpp"
-#include "strata/core/sm75_series.hpp"
+#include "cortex/kernels/native_mmvq.hpp"
+#include "cortex/kernels/dp4a.hpp"
+#include "cortex/kernels/q8_1_finite.hpp"
+#include "cortex/kernels/iq_kernels.hpp"
+#include "cortex/kernels/gfx_arch.hpp"
+#include "cortex/core/sm75_series.hpp"
 #include "s26_tsum.cuh"
 #if !defined(__HIPCC__)
 #include "q8_1_il.cuh"
 #endif
-#include "strata/kernels/pdl.hpp"
+#include "cortex/kernels/pdl.hpp"
 
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
@@ -50,7 +50,7 @@
 #include <cstdio>
 #include <vector>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
 constexpr int QK = 256;
@@ -154,8 +154,8 @@ __device__ __forceinline__ float warp_max(float x) {
 
 __launch_bounds__(QUANT_THREADS, 1)
 __global__ void native_quantize_q8_1_kernel(const float* x_, Q81Block* y_, int n_in) {
-    const float* STRATA_PDL_RESTRICT x = x_;   // __restrict__ below sm_70 only (pdl.hpp, #1469)
-    Q81Block* STRATA_PDL_RESTRICT y = y_;
+    const float* CORTEX_PDL_RESTRICT x = x_;   // __restrict__ below sm_70 only (pdl.hpp, #1469)
+    Q81Block* CORTEX_PDL_RESTRICT y = y_;
     pdl_trigger();   // PDL (pdl.hpp): the projection after this one may start loading its weights
     pdl_wait();
     const int i = int(blockIdx.x) * QUANT_THREADS + int(threadIdx.x);
@@ -200,8 +200,8 @@ __device__ __forceinline__ float q5_q8_dot_impl(
         const int vh1i = ((vh[1] >> i) << 4) & 0x10101010;
         const int v0i = vl0i | vh0i;
         const int v1i = vl1i | vh1i;
-        const int dot1 = STRATA_DP4A(v0i, u[2 * i], STRATA_DP4A(v1i, u[2 * i + 1], 0));
-        const int dot2 = STRATA_DP4A(0x01010101, u[2 * i], STRATA_DP4A(0x01010101, u[2 * i + 1], 0));
+        const int dot1 = CORTEX_DP4A(v0i, u[2 * i], CORTEX_DP4A(v1i, u[2 * i + 1], 0));
+        const int dot2 = CORTEX_DP4A(0x01010101, u[2 * i], CORTEX_DP4A(0x01010101, u[2 * i + 1], 0));
         sumf_d += d8[i] * (dot1 * sc[i]);
         sumf_m += d8[i] * (dot2 * m[i]);
     }
@@ -309,8 +309,8 @@ __device__ __forceinline__ float q2_q8_dot(const Q20Block* __restrict__ w,
         const int qo = __byte_perm(0x020100ff, 0x020100ff, q >> 2);
         const int qx = __byte_perm(qe, qo, 0x5140);
         const int qy = __byte_perm(qe, qo, 0x7362);
-        sumi = STRATA_DP4A(u, qx, sumi);
-        sumi = STRATA_DP4A(v, qy, sumi);
+        sumi = CORTEX_DP4A(u, qx, sumi);
+        sumi = CORTEX_DP4A(v, qy, sumi);
     }
     const float d8 = __low2float(chunk->ds);
     return d2 * d8 * sumi;
@@ -383,7 +383,7 @@ __device__ __forceinline__ float q3_q8_dot_impl(int vl, int vh, const int* __res
         const int vil = (vl >> (2 * i)) & 0x03030303;
         const int vih = ((vh >> i) << 2) & 0x04040404;
         const int vi = __vsubss4(vil, vih);
-        sumf += d8[i] * (STRATA_DP4A(vi, u[i], 0) * sc);
+        sumf += d8[i] * (CORTEX_DP4A(vi, u[i], 0) * sc);
     }
     return d3 * sumf;
 }
@@ -451,7 +451,7 @@ __device__ __align__(4) int8_t iq4nl_values[16] = {
 };
 
 __device__ __forceinline__ int2 iq4_table_lookup(int q4) {
-#if defined(STRATA_HIP_GFX906)
+#if defined(CORTEX_HIP_GFX906)
     // AMD: llama.cpp's HIP lookup (see iq_kernels.cu get_int_from_table_16): 4 v_perm_b32 per 8 values
     const uint32_t* v32 = reinterpret_cast<const uint32_t*>(iq4nl_values);
     const uint32_t q_even = (uint32_t) q4, q_odd = (uint32_t) q4 >> 4;
@@ -488,8 +488,8 @@ __device__ __forceinline__ float iq4_xs_q8_dot(const IQ4XSBlock* __restrict__ w,
         const int2 v = iq4_table_lookup(aux_q4);
         const int u0 = reinterpret_cast<const int*>(x[iqs / 4].qs)[j];
         const int u1 = reinterpret_cast<const int*>(x[iqs / 4].qs)[j + 4];
-        sumi = STRATA_DP4A(v.x, u0, sumi);
-        sumi = STRATA_DP4A(v.y, u1, sumi);
+        sumi = CORTEX_DP4A(v.x, u0, sumi);
+        sumi = CORTEX_DP4A(v.y, u1, sumi);
     }
     const int ls = ((w->scales_l[iqs / 8] >> (iqs & 0x04)) & 0x0f) |
                    (((w->scales_h >> (iqs / 2)) & 0x03) << 4);
@@ -548,8 +548,8 @@ __device__ __forceinline__ float q4_q8_dot_impl(
     for (int i = 0; i < 2; ++i) {
         const int v0i = (v[0] >> (4 * i)) & 0x0f0f0f0f;
         const int v1i = (v[1] >> (4 * i)) & 0x0f0f0f0f;
-        const int dot1 = STRATA_DP4A(v1i, u[2 * i + 1], STRATA_DP4A(v0i, u[2 * i], 0));
-        const int dot2 = STRATA_DP4A(0x01010101, u[2 * i + 1], STRATA_DP4A(0x01010101, u[2 * i], 0));
+        const int dot1 = CORTEX_DP4A(v1i, u[2 * i + 1], CORTEX_DP4A(v0i, u[2 * i], 0));
+        const int dot2 = CORTEX_DP4A(0x01010101, u[2 * i + 1], CORTEX_DP4A(0x01010101, u[2 * i], 0));
         sumf_d += d8[i] * (dot1 * sc[i]);
         sumf_m += d8[i] * (dot2 * m[i]);
     }
@@ -646,7 +646,7 @@ __device__ __forceinline__ float q6_q8_dot_impl(int vl, int vh, const int* __res
         const int vil = (vl >> (4 * i)) & 0x0f0f0f0f;
         const int vih = ((vh >> (4 * i)) << 4) & 0x30303030;
         const int vi = __vsubss4(vil | vih, 0x20202020);
-        sumf += d8[i] * (STRATA_DP4A(vi, u[i], 0) * sc);
+        sumf += d8[i] * (CORTEX_DP4A(vi, u[i], 0) * sc);
     }
     return d * sumf;
 }
@@ -718,8 +718,8 @@ __device__ __forceinline__ float small_q8_dot(const Q40Block* __restrict__ w,
         const int v = load_int_b2(w->qs, iqs + i);
         const int vi0 = (v >> 0) & 0x0f0f0f0f;
         const int vi1 = (v >> 4) & 0x0f0f0f0f;
-        sumi = STRATA_DP4A(vi0, reinterpret_cast<const int*>(x->qs)[iqs + i], sumi);
-        sumi = STRATA_DP4A(vi1, reinterpret_cast<const int*>(x->qs)[iqs + i + 4], sumi);
+        sumi = CORTEX_DP4A(vi0, reinterpret_cast<const int*>(x->qs)[iqs + i], sumi);
+        sumi = CORTEX_DP4A(vi1, reinterpret_cast<const int*>(x->qs)[iqs + i + 4], sumi);
     }
     const float2 ds = __half22float2(x->ds);
     const float d = w->d;
@@ -738,13 +738,13 @@ __device__ __forceinline__ float small_q8_dot(const Q50Block* __restrict__ w,
         vi0 |= (vh << 11) & 0x00001000;
         vi0 |= (vh << 18) & 0x00100000;
         vi0 |= (vh << 25) & 0x10000000;
-        sumi = STRATA_DP4A(vi0, reinterpret_cast<const int*>(x->qs)[iqs + i], sumi);
+        sumi = CORTEX_DP4A(vi0, reinterpret_cast<const int*>(x->qs)[iqs + i], sumi);
         int vi1 = (vl >> 4) & 0x0f0f0f0f;
         vi1 |= (vh >> 12) & 0x00000010;
         vi1 |= (vh >> 5) & 0x00001000;
         vi1 |= (vh << 2) & 0x00100000;
         vi1 |= (vh << 9) & 0x10000000;
-        sumi = STRATA_DP4A(vi1, reinterpret_cast<const int*>(x->qs)[iqs + i + 4], sumi);
+        sumi = CORTEX_DP4A(vi1, reinterpret_cast<const int*>(x->qs)[iqs + i + 4], sumi);
     }
     const float2 ds = __half22float2(x->ds);
     const float d = w->d;
@@ -758,7 +758,7 @@ __device__ __forceinline__ float small_q8_dot(const Q80Block* __restrict__ w,
     for (int i = 0; i < 2; ++i) {
         const int v = load_int_b2(w->qs, iqs + i);
         const int u = reinterpret_cast<const int*>(x->qs)[iqs + i];
-        sumi = STRATA_DP4A(v, u, sumi);
+        sumi = CORTEX_DP4A(v, u, sumi);
     }
     const float d0 = w->d;
     const float d1 = __low2float(x->ds);
@@ -772,8 +772,8 @@ __device__ __forceinline__ float small_q8_dot(const IQ4NLBlock* __restrict__ w,
 #pragma unroll
     for (int i = 0; i < 2; ++i) {
         const int2 v = iq4_table_lookup(load_int_b2(w->qs, iqs + i));
-        sumi = STRATA_DP4A(v.x, q8[i], sumi);
-        sumi = STRATA_DP4A(v.y, q8[i + 4], sumi);
+        sumi = CORTEX_DP4A(v.x, q8[i], sumi);
+        sumi = CORTEX_DP4A(v.y, q8[i + 4], sumi);
     }
     const float d = __half2float(w->d) * __low2float(x->ds);
     return d * sumi;
@@ -937,8 +937,8 @@ struct Q20Traits {
         int sumi = 0;
 #pragma unroll
         for (int j = 0; j < 4; ++j) {
-            sumi = STRATA_DP4A(q8[j * 2], r.qx[j], sumi);
-            sumi = STRATA_DP4A(q8[j * 2 + 1], r.qy[j], sumi);
+            sumi = CORTEX_DP4A(q8[j * 2], r.qx[j], sumi);
+            sumi = CORTEX_DP4A(q8[j * 2 + 1], r.qy[j], sumi);
         }
         const float d8 = __low2float(chunk->ds);
         return r.d2 * d8 * sumi;
@@ -1016,8 +1016,8 @@ struct IQ4XSTraits {
         for (int j = 0; j < 4; ++j) {
             const int u0 = reinterpret_cast<const int*>(x[iqs / 4].qs)[j];
             const int u1 = reinterpret_cast<const int*>(x[iqs / 4].qs)[j + 4];
-            sumi = STRATA_DP4A(r.v[j].x, u0, sumi);
-            sumi = STRATA_DP4A(r.v[j].y, u1, sumi);
+            sumi = CORTEX_DP4A(r.v[j].x, u0, sumi);
+            sumi = CORTEX_DP4A(r.v[j].y, u1, sumi);
         }
         sumi *= r.ls - 32;
         const float d = r.dw * __low2float(x[iqs / 4].ds);
@@ -1025,7 +1025,7 @@ struct IQ4XSTraits {
     }
 };
 // The four 32-element formats: `load` decodes the two 32-bit weight chunks and block scale once per (row, block),
-// and `apply` runs the exact same STRATA_DP4A and scale arithmetic per activation column as `small_q8_dot`.
+// and `apply` runs the exact same CORTEX_DP4A and scale arithmetic per activation column as `small_q8_dot`.
 template<typename Weight, int Qi>
 struct SmallTraits;
 
@@ -1050,8 +1050,8 @@ struct SmallTraits<Q40Block, 4> {
         int sumi = 0;
 #pragma unroll
         for (int i = 0; i < 2; ++i) {
-            sumi = STRATA_DP4A(r.vi0[i], reinterpret_cast<const int*>(x->qs)[iqs + i], sumi);
-            sumi = STRATA_DP4A(r.vi1[i], reinterpret_cast<const int*>(x->qs)[iqs + i + 4], sumi);
+            sumi = CORTEX_DP4A(r.vi0[i], reinterpret_cast<const int*>(x->qs)[iqs + i], sumi);
+            sumi = CORTEX_DP4A(r.vi1[i], reinterpret_cast<const int*>(x->qs)[iqs + i + 4], sumi);
         }
         const float2 ds = __half22float2(x->ds);
         return r.d * (sumi * ds.x - 4 * ds.y);
@@ -1091,8 +1091,8 @@ struct SmallTraits<Q50Block, 4> {
         int sumi = 0;
 #pragma unroll
         for (int i = 0; i < 2; ++i) {
-            sumi = STRATA_DP4A(r.vi0[i], reinterpret_cast<const int*>(x->qs)[iqs + i], sumi);
-            sumi = STRATA_DP4A(r.vi1[i], reinterpret_cast<const int*>(x->qs)[iqs + i + 4], sumi);
+            sumi = CORTEX_DP4A(r.vi0[i], reinterpret_cast<const int*>(x->qs)[iqs + i], sumi);
+            sumi = CORTEX_DP4A(r.vi1[i], reinterpret_cast<const int*>(x->qs)[iqs + i + 4], sumi);
         }
         const float2 ds = __half22float2(x->ds);
         return r.d * (sumi * ds.x - 8 * ds.y);
@@ -1117,7 +1117,7 @@ struct SmallTraits<Q80Block, 8> {
 #pragma unroll
         for (int i = 0; i < 2; ++i) {
             const int u = reinterpret_cast<const int*>(x->qs)[iqs + i];
-            sumi = STRATA_DP4A(r.v[i], u, sumi);
+            sumi = CORTEX_DP4A(r.v[i], u, sumi);
         }
         const float d1 = __low2float(x->ds);
         return r.d0 * d1 * float(sumi);
@@ -1142,8 +1142,8 @@ struct SmallTraits<IQ4NLBlock, 4> {
         int sumi = 0;
 #pragma unroll
         for (int i = 0; i < 2; ++i) {
-            sumi = STRATA_DP4A(r.v[i].x, q8[i], sumi);
-            sumi = STRATA_DP4A(r.v[i].y, q8[i + 4], sumi);
+            sumi = CORTEX_DP4A(r.v[i].x, q8[i], sumi);
+            sumi = CORTEX_DP4A(r.v[i].y, q8[i + 4], sumi);
         }
         const float d = r.dw * __low2float(x->ds);
         return d * sumi;
@@ -1155,26 +1155,26 @@ struct SmallTraits<IQ4NLBlock, 4> {
 // llama.cpp's generic multi-column table (ncols 2-4: 4 warps; 5-8: 2 warps; always 2 rows per block): faster,
 // equal to ncols = 1 only to float rounding (the cross-warp reduction groups partial sums differently).
 bool g_multi_exact = true;   // until the upstream layout is timed on an idle GPU (plan rule: default only what is measured)
-// B6 STRATA_B6_MMVQ_ROWS (lab, default 0 = off): see native_mmvq_set_b6_rows
+// B6 CORTEX_B6_MMVQ_ROWS (lab, default 0 = off): see native_mmvq_set_b6_rows
 // read at first use (not at load): a per-architecture default set at start (nv_defaults.hpp) must be seen
 int g_b6_rows = -1;
-int b6_rows_mode() { if (g_b6_rows < 0) { const char* v = std::getenv("STRATA_B6_MMVQ_ROWS"); g_b6_rows = v ? std::atoi(v) : 0; } return g_b6_rows; }
+int b6_rows_mode() { if (g_b6_rows < 0) { const char* v = std::getenv("CORTEX_B6_MMVQ_ROWS"); g_b6_rows = v ? std::atoi(v) : 0; } return g_b6_rows; }
 
-// S26 STRATA_TSUM=1 (TS): warp 0's NCOLS x ROWS sums as one transposed butterfly (s26_tsum.cuh), bitwise the same
+// S26 CORTEX_TSUM=1 (TS): warp 0's NCOLS x ROWS sums as one transposed butterfly (s26_tsum.cuh), bitwise the same
 static bool s26_tsum_on() {
-    static const bool on = [] { const char* v = std::getenv("STRATA_TSUM"); return v && v[0] == '1'; }();
+    static const bool on = [] { const char* v = std::getenv("CORTEX_TSUM"); return v && v[0] == '1'; }();
     return on;
 }
 
-// S26 STRATA_LFUSE (PAIR): blocks n_out.. compute the same rows of w2 into y2 (two matrices of one shape on one
+// S26 CORTEX_LFUSE (PAIR): blocks n_out.. compute the same rows of w2 into y2 (two matrices of one shape on one
 // input in one launch; each output's code is the single matrix's)
 template<typename F, int NCOLS, int NW, int ROWS, bool TS = false, bool PAIR = false>
 __launch_bounds__(NW * WARP, (ROWS <= 2 ? 4 : 1))
 __global__ void native_mmvq_multi_kernel(const typename F::Block* __restrict__ w, const Q81Block* x_, float* y_,
                                          int n_in, int n_out,
                                          const typename F::Block* __restrict__ w2 = nullptr, float* __restrict__ y2 = nullptr) {
-    const Q81Block* STRATA_PDL_RESTRICT x = x_;   // __restrict__ below sm_70 only (pdl.hpp, #1469)
-    float* STRATA_PDL_RESTRICT y = y_;
+    const Q81Block* CORTEX_PDL_RESTRICT x = x_;   // __restrict__ below sm_70 only (pdl.hpp, #1469)
+    float* CORTEX_PDL_RESTRICT y = y_;
     constexpr int BPI = F::BPI * NW / WARPS;           // blocks per iteration scale with the warp count
     const int tid = WARP * int(threadIdx.y) + int(threadIdx.x);
     int bxi = int(blockIdx.x);
@@ -1271,7 +1271,7 @@ __global__ void native_mmvq_multi_kernel(const typename F::Block* __restrict__ w
 //   gfx1201 (R9700): n_in <= 4096 with n_out >= 4096 (qkv 2560->10240 73-79% -> 83-84% of the 644 GB/s, gate 2560->6144
 //     51-68% -> 76-78%, q 2560->12288 74-80% -> 85-86%); 6144->2560 is slower there (79% -> 55-59%) and keeps two rows.
 //   sm_86 (RTX A4000): every n_out >= 2048 (+1-4% at 2-4 columns, 6144->2560 at 6 columns 70% -> 76%).
-// Other cards keep two rows until measured (STRATA_NO_MMVQ_ROWS2=1 forces one row everywhere; =0 keeps two everywhere).
+// Other cards keep two rows until measured (CORTEX_NO_MMVQ_ROWS2=1 forces one row everywhere; =0 keeps two everywhere).
 int dev_class() {   // 1 = gfx12, 2 = sm_86, 0 = the rest; per device
     static int cls[16];   // 0 unknown, else class + 1
     int dev = 0;
@@ -1280,7 +1280,7 @@ int dev_class() {   // 1 = gfx12, 2 = sm_86, 0 = the rest; per device
         int c = 0;
 #if defined(__HIPCC__)
         cudaDeviceProp p;
-        if (cudaGetDeviceProperties(&p, dev) == cudaSuccess && strata::kernels::gfx_arch_is_gfx12(p.gcnArchName)) c = 1;
+        if (cudaGetDeviceProperties(&p, dev) == cudaSuccess && cortex::kernels::gfx_arch_is_gfx12(p.gcnArchName)) c = 1;
 #else
         int major = 0, minor = 0;
         if (cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, dev) == cudaSuccess &&
@@ -1299,7 +1299,7 @@ bool q8_0_rows1(int n_in, int n_out) {
         return false;
     } else {
         static const int env = [] {
-            const char* v = std::getenv("STRATA_NO_MMVQ_ROWS2");
+            const char* v = std::getenv("CORTEX_NO_MMVQ_ROWS2");
             return v == nullptr || v[0] == '\0' ? -1 : v[0] != '0';
         }();
         if (env == 0) return false;
@@ -1308,7 +1308,7 @@ bool q8_0_rows1(int n_in, int n_out) {
     }
 }
 
-// ---- B6 STRATA_B6_MMVQ_ROWS (lab, opt-in): the exact multi-column layout with each column's activation fragment
+// ---- B6 CORTEX_B6_MMVQ_ROWS (lab, opt-in): the exact multi-column layout with each column's activation fragment
 // loaded ONCE per weight block and reused across ROWS rows of the block (the default kernel reloads it for every row
 // it applies it to, and the K-quant scales once per column).  A thread keeps the same blocks (kbx = tid / T, stride
 // BPI with WARPS warps), each (row, column) sum adds the same per-block values in the same order, and the cross-warp
@@ -1346,7 +1346,7 @@ template<> struct B6X<Q6KTraits> {
             const int vil = (w.vl >> (4 * i)) & 0x0f0f0f0f;
             const int vih = ((w.vh >> (4 * i)) << 4) & 0x30303030;
             const int vi = __vsubss4(vil | vih, 0x20202020);
-            sumf += x.d8[i] * (STRATA_DP4A(vi, x.u[i], 0) * w.sc[i]);
+            sumf += x.d8[i] * (CORTEX_DP4A(vi, x.u[i], 0) * w.sc[i]);
         }
         return w.d * sumf;
     }
@@ -1396,8 +1396,8 @@ template<> struct B6X<IQ4XSTraits> {
         int sumi = 0;
 #pragma unroll
         for (int j = 0; j < 4; ++j) {
-            sumi = STRATA_DP4A(w.v[j].x, x.u0[j], sumi);
-            sumi = STRATA_DP4A(w.v[j].y, x.u1[j], sumi);
+            sumi = CORTEX_DP4A(w.v[j].x, x.u0[j], sumi);
+            sumi = CORTEX_DP4A(w.v[j].y, x.u1[j], sumi);
         }
         sumi *= w.ls - 32;
         const float d = w.dw * x.dx;
@@ -1475,7 +1475,7 @@ template<typename F, int NCOLS>
 void launch_multi_n(const void* weights, const void* x_q8_1, float* y, int n_in, int n_out, cudaStream_t s) {
     const auto* w = static_cast<const typename F::Block*>(weights);
     const auto* x = static_cast<const Q81Block*>(x_q8_1);
-    if (b6_launch<F, NCOLS>(w, x, y, n_in, n_out, s)) return;   // STRATA_B6_MMVQ_ROWS
+    if (b6_launch<F, NCOLS>(w, x, y, n_in, n_out, s)) return;   // CORTEX_B6_MMVQ_ROWS
     if (!g_multi_exact) {
         constexpr int NW = NCOLS <= 4 ? 4 : 2;
         const unsigned blocks = unsigned((std::size_t(n_out) + 1) / 2);
@@ -1488,9 +1488,9 @@ void launch_multi_n(const void* weights, const void* x_q8_1, float* y, int n_in,
     const typename F::Block* const no_w2 = nullptr;
     float* const no_y2 = nullptr;
     // #783 PR-h (stuchapin909): two rows per block for every K, not only small K - each row keeps its own partial sums and
-    // reduction, so a row's result does not depend on its neighbour; STRATA_NO_MMVQ_ROWS2=1 keeps one row for large K
+    // reduction, so a row's result does not depend on its neighbour; CORTEX_NO_MMVQ_ROWS2=1 keeps one row for large K
     static const bool rows1 = [] {
-        const char* v = std::getenv("STRATA_NO_MMVQ_ROWS2");
+        const char* v = std::getenv("CORTEX_NO_MMVQ_ROWS2");
         return v != nullptr && v[0] != '\0' && v[0] != '0';
     }();
     if ((rows1 || q8_0_rows1<F>(n_in, n_out)) && n_in / F::DIV >= F::BPI) {
@@ -1548,8 +1548,8 @@ struct IlIQ4XS {
             int sumi = 0;
 #pragma unroll
             for (int j = 0; j < 4; ++j) {
-                sumi = STRATA_DP4A(r.v[j].x, u0[j][c], sumi);
-                sumi = STRATA_DP4A(r.v[j].y, u1[j][c], sumi);
+                sumi = CORTEX_DP4A(r.v[j].x, u0[j][c], sumi);
+                sumi = CORTEX_DP4A(r.v[j].y, u1[j][c], sumi);
             }
             sumi *= r.ls - 32;
             const float d = r.dw * d8[c];
@@ -1638,7 +1638,7 @@ struct IlQ3K {
         for (int c = 0; c < NC; ++c) {
             float sumf = 0.0f;
 #pragma unroll
-            for (int i = 0; i < 4; ++i) sumf += d8[i][c] * (STRATA_DP4A(vi[i], u[i][c], 0) * sc[i]);
+            for (int i = 0; i < 4; ++i) sumf += d8[i][c] * (CORTEX_DP4A(vi[i], u[i][c], 0) * sc[i]);
             out[c] = r.d * sumf;
         }
     }
@@ -1729,13 +1729,13 @@ void launch_il(const void* weights, const void* x_il, float* y, int n_in, int n_
     const int* xq = I::PM ? parts.pm : parts.bm;
     const float* xd = parts.d;
     switch (ncols) {
-#define STRATA_IL_CASE(N) case N: native_mmvq_il_kernel<I, N, R><<<blocks, 4 * WARP, 0, s>>>(w, xq, xd, y, n_in, n_out); break;
-        STRATA_IL_CASE(2) STRATA_IL_CASE(3) STRATA_IL_CASE(4)
-#undef STRATA_IL_CASE
+#define CORTEX_IL_CASE(N) case N: native_mmvq_il_kernel<I, N, R><<<blocks, 4 * WARP, 0, s>>>(w, xq, xd, y, n_in, n_out); break;
+        CORTEX_IL_CASE(2) CORTEX_IL_CASE(3) CORTEX_IL_CASE(4)
+#undef CORTEX_IL_CASE
         // 147-verify: 5..8 columns (the cp = 8 copy) at 1 or 2 rows a warp; launch_il_rows maps 4 rows to 2 there
-#define STRATA_IL_CASE(N) case N: if constexpr (R <= 2) native_mmvq_il_kernel<I, N, R><<<blocks, 4 * WARP, 0, s>>>(w, xq, xd, y, n_in, n_out); break;
-        STRATA_IL_CASE(5) STRATA_IL_CASE(6) STRATA_IL_CASE(7) STRATA_IL_CASE(8)
-#undef STRATA_IL_CASE
+#define CORTEX_IL_CASE(N) case N: if constexpr (R <= 2) native_mmvq_il_kernel<I, N, R><<<blocks, 4 * WARP, 0, s>>>(w, xq, xd, y, n_in, n_out); break;
+        CORTEX_IL_CASE(5) CORTEX_IL_CASE(6) CORTEX_IL_CASE(7) CORTEX_IL_CASE(8)
+#undef CORTEX_IL_CASE
         default: throw std::invalid_argument("native_mmvq_il requires 1 <= ncols <= 8");
     }
 }
@@ -1815,13 +1815,13 @@ void launch_check() {
 }
 
 
-#if defined(STRATA_HIP_GFX906)
+#if defined(CORTEX_HIP_GFX906)
 // ---- AMD (wave64) layout: one wavefront per R rows, four wavefronts per block, the row's blocks strided over the
 // 64 lanes exactly as the CUDA kernels stride them over a block (kbx = lane / T, stride 64 / T), and a 64-lane
 // butterfly instead of the LDS partials and __syncthreads of the one-block-per-row layout: on gfx906 a block per
 // 2 KB row spent most of its time being launched and joined.  The SAME kernel serves every column count 1..8, so a
-// column's sums do not depend on how many columns (verify tokens) ride along.  STRATA_MMVQ_WAVE=0: the CUDA layout.
-bool g_wave_off = std::getenv("STRATA_MMVQ_WAVE") && std::string(std::getenv("STRATA_MMVQ_WAVE")) == "0";
+// column's sums do not depend on how many columns (verify tokens) ride along.  CORTEX_MMVQ_WAVE=0: the CUDA layout.
+bool g_wave_off = std::getenv("CORTEX_MMVQ_WAVE") && std::string(std::getenv("CORTEX_MMVQ_WAVE")) == "0";
 template<typename F, int NCOLS, int R>
 __launch_bounds__(256)
 __global__ void native_mmvq_wave_kernel(const typename F::Block* __restrict__ w, const Q81Block* __restrict__ x,
@@ -1879,10 +1879,10 @@ void wave_launch(const void* weights, const void* x_q8_1, float* y, int n_in, in
         default: throw std::invalid_argument("native MMVQ (wave) requires 1 <= ncols <= 8");
     }
 }
-#define STRATA_WAVE_MMVQ(...) \
+#define CORTEX_WAVE_MMVQ(...) \
     if (!g_wave_off) { wave_launch<__VA_ARGS__>(weights, x_q8_1, y, n_in, n_out, ncols, stream); launch_check(); return; }
 #else
-#define STRATA_WAVE_MMVQ(...)
+#define CORTEX_WAVE_MMVQ(...)
 #endif
 
 template<typename Weight, int Qi>
@@ -1894,7 +1894,7 @@ void small_mmvq(const void* weights, const void* x_q8_1, float* y,
     validate_pointer(x_q8_1);
     validate_pointer(y);
     validate_stream(stream);
-    STRATA_WAVE_MMVQ(SmallTraits<Weight, Qi>)
+    CORTEX_WAVE_MMVQ(SmallTraits<Weight, Qi>)
     if (ncols > 1) {
         launch_multi<SmallTraits<Weight, Qi>>(weights, x_q8_1, y, n_in, n_out, ncols, stream);
         launch_check();
@@ -1927,16 +1927,16 @@ void small_f32(const void* weights, const float* x, void* scratch_q8_1,
     small_mmvq<Weight, Qi>(weights, scratch_q8_1, y, n_in, n_out, ncols, stream);
 }
 
-// STRATA_Q8_SM60=1 (opt-in, written for Pascal GP100): every Q8_0 dense matrix and the head get the packed planes
+// CORTEX_Q8_SM60=1 (opt-in, written for Pascal GP100): every Q8_0 dense matrix and the head get the packed planes
 // below and run q8sm60::kernel on them (q8_sm60.cuh) instead of the exact kernels.
 bool q8_sm60_on() {
 #if defined(__HIPCC__)
     return false;   // a CUDA kernel for one NVIDIA chip: HIP builds never compile it
 #else
     static const bool on = [] {
-        const char* v = std::getenv("STRATA_Q8_SM60");
+        const char* v = std::getenv("CORTEX_Q8_SM60");
         const bool yes = v && v[0] == '1' && v[1] == '\0';
-        if (yes) std::fprintf(stderr, "strata q8 sm60: Q8_0 decode GEMVs on the Pascal kernel (STRATA_Q8_SM60=1)\n");
+        if (yes) std::fprintf(stderr, "cortex q8 sm60: Q8_0 decode GEMVs on the Pascal kernel (CORTEX_Q8_SM60=1)\n");
         return yes;
     }();
     return on;
@@ -1946,7 +1946,7 @@ bool q8_sm60_on() {
 #include "q8_sm60.cuh"
 #endif
 
-// ============================ STRATA_Q8_PACKED=1: the packed Q8_0 decode layout (opt-in) ============================
+// ============================ CORTEX_Q8_PACKED=1: the packed Q8_0 decode layout (opt-in) ============================
 //
 // A lossless load-time repack of a Q8_0 matrix: the SAME int8 values in a qs plane (row-major, n_in bytes per row)
 // followed by the SAME fp16 scales in a d plane (row-major, n_in / 32 per row) - no requantization, same bytes.
@@ -1960,9 +1960,9 @@ bool q8_sm60_on() {
 // 6144/10240/12288 +10-12% per call (engine trace: -10.7% on those calls). 6144 -> 2560 (one workgroup per row)
 // was +2-4% standalone but -3% in the engine, and rows < 2048 lose: neither is packed.
 #if defined(__HIPCC__)
-#define STRATA_Q8P_LOAD(p) __builtin_nontemporal_load(p)
+#define CORTEX_Q8P_LOAD(p) __builtin_nontemporal_load(p)
 #else
-#define STRATA_Q8P_LOAD(p) __ldcs(p)
+#define CORTEX_Q8P_LOAD(p) __ldcs(p)
 #endif
 constexpr int Q8P_PERSIST_GRID = 640;
 constexpr int Q8P_PERSIST_MAX_IN = 4096;
@@ -1982,16 +1982,16 @@ __global__ void native_q8_0_packed_kernel(const int8_t* __restrict__ qs, const h
         for (int kbx = tid / 4; kbx < nb; kbx += 2 * WARPS * WARP / 8) {
             const std::size_t block = std::size_t(row) * nb + kbx;
             const int* p = reinterpret_cast<const int*>(qs + block * 32) + kqs;
-            const int v0 = STRATA_Q8P_LOAD(p);
-            const int v1 = STRATA_Q8P_LOAD(p + 1);
+            const int v0 = CORTEX_Q8P_LOAD(p);
+            const int v1 = CORTEX_Q8P_LOAD(p + 1);
             const float d0 = dpl[block];
 #pragma unroll
             for (int j = 0; j < NCOLS; ++j) {
                 const Q81Block* xb = x + std::size_t(j) * nb + kbx;
                 const int* u = reinterpret_cast<const int*>(xb->qs);
                 int sumi = 0;
-                sumi = STRATA_DP4A(v0, u[kqs], sumi);
-                sumi = STRATA_DP4A(v1, u[kqs + 1], sumi);
+                sumi = CORTEX_DP4A(v0, u[kqs], sumi);
+                sumi = CORTEX_DP4A(v1, u[kqs + 1], sumi);
                 const float d1 = __low2float(xb->ds);
                 tmp[j] += d0 * d1 * float(sumi);
             }
@@ -2001,7 +2001,7 @@ __global__ void native_q8_0_packed_kernel(const int8_t* __restrict__ qs, const h
             for (int j = 0; j < NCOLS; ++j) partial[buf][threadIdx.y - 1][j][threadIdx.x] = tmp[j];
         }
         __syncthreads();
-        if (TS && threadIdx.y == 0) {   // S26 STRATA_TSUM=1: one transposed butterfly, bitwise the same sums
+        if (TS && threadIdx.y == 0) {   // S26 CORTEX_TSUM=1: one transposed butterfly, bitwise the same sums
             constexpr int P = s26ts::pow2_ceil(NCOLS);
             float v[P];
 #pragma unroll
@@ -2094,7 +2094,7 @@ bool q8_packed_mmvq(const void* weights, const void* x_q8_1, float* y, int n_in,
 }
 
 
-// ============================ STRATA_Q6_PACKED=1: the packed Q6_K head layout (opt-in) ============================
+// ============================ CORTEX_Q6_PACKED=1: the packed Q6_K head layout (opt-in) ============================
 //
 // The output heads (the main head, 248320 rows, and the MTP draft head's row subset) are Q6_K matrices of 2560-wide
 // rows: 10 blocks of 210 bytes each, so every int load is 2-byte aligned and a row is 2100 bytes. The packed copy
@@ -2102,11 +2102,11 @@ bool q8_packed_mmvq(const void* weights, const void* x_q8_1, float* y, int n_in,
 // two words are aligned dword loads (non-temporal). Thread ownership (block tid / 32 + 4 i, word tid % 32), the
 // q6_q8_dot_impl expression, the per-thread order and the reduction are those of native_q6_k_mmvq_kernel<false> /
 // native_mmvq_multi_kernel<Q6KTraits, NC, 4, 1>: every output is bitwise equal. Persistent workgroups.
-int g_q6p_grid_override = 0;   // the self-test's grid sweep (STRATA_Q6P_SELFTEST=2)
+int g_q6p_grid_override = 0;   // the self-test's grid sweep (CORTEX_Q6P_SELFTEST=2)
 int q6p_grid() {
     if (g_q6p_grid_override > 0) return g_q6p_grid_override;
     static const int grid = [] {
-        const char* v = std::getenv("STRATA_Q6P_GRID");
+        const char* v = std::getenv("CORTEX_Q6P_GRID");
         const int g = v ? std::atoi(v) : 0;
         return g > 0 ? g : 640;
     }();
@@ -2133,8 +2133,8 @@ __global__ void native_q6_k_packed_kernel(const int* __restrict__ ql, const int*
         float tmp[NCOLS] = {};
         for (int kbx = tid / 32; kbx < nb; kbx += WARPS * WARP / 32) {
             const std::size_t block = std::size_t(row) * nb + kbx;
-            const int vl = STRATA_Q8P_LOAD(ql + block * 32 + iqs);
-            const int vh = STRATA_Q8P_LOAD(qh + block * 16 + qh_word) >> vh_shift;
+            const int vl = CORTEX_Q8P_LOAD(ql + block * 32 + iqs);
+            const int vh = CORTEX_Q8P_LOAD(qh + block * 16 + qh_word) >> vh_shift;
             const int8_t* scales = sc + block * 16 + scale_offset;
             const float d = dpl[block];
             const int kby = kbx * 8;
@@ -2156,7 +2156,7 @@ __global__ void native_q6_k_packed_kernel(const int* __restrict__ ql, const int*
             for (int j = 0; j < NCOLS; ++j) partial[buf][threadIdx.y - 1][j][threadIdx.x] = tmp[j];
         }
         __syncthreads();
-        if (TS && threadIdx.y == 0) {   // S26 STRATA_TSUM=1: one transposed butterfly, bitwise the same sums
+        if (TS && threadIdx.y == 0) {   // S26 CORTEX_TSUM=1: one transposed butterfly, bitwise the same sums
             constexpr int P = s26ts::pow2_ceil(NCOLS);
             float v[P];
 #pragma unroll
@@ -2231,7 +2231,7 @@ bool q6_packed_mmvq(const void* weights, const void* x_q8_1, float* y, int n_in,
 
 bool native_q8_0_packed_enabled() {
     static const bool enabled = [] {
-        const char* v = std::getenv("STRATA_Q8_PACKED");
+        const char* v = std::getenv("CORTEX_Q8_PACKED");
         return v && v[0] == '1' && v[1] == '\0';
     }();
     return enabled || q8_sm60_on();
@@ -2261,7 +2261,7 @@ bool native_q8_0_sm60_pack(const void* weights, int n_in, int n_out, const char*
     void* packed = nullptr;
     if (cudaMalloc(&packed, bytes) != cudaSuccess) {
         cudaGetLastError();
-        std::fprintf(stderr, "strata q8 sm60: no VRAM for the packed %s (%.0f MiB); it keeps the GGUF layout\n", what,
+        std::fprintf(stderr, "cortex q8 sm60: no VRAM for the packed %s (%.0f MiB); it keeps the GGUF layout\n", what,
                      double(bytes) / 1048576.0);
         return false;
     }
@@ -2271,12 +2271,12 @@ bool native_q8_0_sm60_pack(const void* weights, int n_in, int n_out, const char*
     if (cudaDeviceSynchronize() != cudaSuccess) {
         cudaGetLastError();
         cudaFree(packed);
-        std::fprintf(stderr, "strata q8 sm60: packing the %s failed; it keeps the GGUF layout\n", what);
+        std::fprintf(stderr, "cortex q8 sm60: packing the %s failed; it keeps the GGUF layout\n", what);
         return false;
     }
     q8_packed_registry()[weights] = Q8Packed{qs, d, n_in, n_out};
     q8_sm60_owned()[weights] = packed;
-    std::fprintf(stderr, "strata q8 sm60: packed %s (%d x %d, %.0f MiB more VRAM)\n", what, n_out, n_in,
+    std::fprintf(stderr, "cortex q8 sm60: packed %s (%d x %d, %.0f MiB more VRAM)\n", what, n_out, n_in,
                  double(bytes) / 1048576.0);
     return true;
 #endif
@@ -2315,7 +2315,7 @@ void native_q8_0_packed_unregister(const void* gguf_weights) { q8_packed_registr
 
 bool native_q6_k_packed_enabled() {
     static const bool enabled = [] {
-        const char* v = std::getenv("STRATA_Q6_PACKED");
+        const char* v = std::getenv("CORTEX_Q6_PACKED");
         return v && v[0] == '1' && v[1] == '\0';
     }();
     return enabled;
@@ -2350,10 +2350,10 @@ bool native_q6_k_pack(const void* weights, int n_in, int n_out, const char* what
                                              reinterpret_cast<const int*>(base + o_qh),
                                              reinterpret_cast<const int8_t*>(base + o_sc),
                                              reinterpret_cast<const half*>(base + o_d), n_in, n_out};
-    std::fprintf(stderr, "strata: STRATA_Q6_PACKED=1 packed the %s (%d x %d, +%.1f MiB)\n", what, n_out, n_in,
+    std::fprintf(stderr, "cortex: CORTEX_Q6_PACKED=1 packed the %s (%d x %d, +%.1f MiB)\n", what, n_out, n_in,
                  total / 1048576.0);
-    // STRATA_Q6P_SELFTEST=1: bitwise check against the GGUF-layout kernels (1..4 columns) and paired timings
-    if (const char* v = std::getenv("STRATA_Q6P_SELFTEST"); v && (v[0] == '1' || v[0] == '2')) {
+    // CORTEX_Q6P_SELFTEST=1: bitwise check against the GGUF-layout kernels (1..4 columns) and paired timings
+    if (const char* v = std::getenv("CORTEX_Q6P_SELFTEST"); v && (v[0] == '1' || v[0] == '2')) {
         cudaStream_t s = nullptr;
         cudaStreamCreateWithFlags(&s, cudaStreamNonBlocking);
         const int nq = n_in / Q8K;
@@ -2399,10 +2399,10 @@ bool native_q6_k_pack(const void* weights, int n_in, int n_out, const char* what
             }
             g_q6_bypass = false;
             std::sort(tb.begin(), tb.end()); std::sort(tc.begin(), tc.end());
-            std::fprintf(stderr, "strata: Q6_K packed self-test %s ncols %d: GGUF %.1f us (%.1f-%.1f), packed %.1f us "
+            std::fprintf(stderr, "cortex: Q6_K packed self-test %s ncols %d: GGUF %.1f us (%.1f-%.1f), packed %.1f us "
                          "(%.1f-%.1f), 11 paired samples\n", what, nc, tb[5], tb[0], tb[10], tc[5], tc[0], tc[10]);
         }
-        std::fprintf(stderr, "strata: Q6_K packed self-test %s: outputs %s (1-4 columns)\n", what,
+        std::fprintf(stderr, "cortex: Q6_K packed self-test %s: outputs %s (1-4 columns)\n", what,
                      same ? "BITWISE EQUAL" : "DIFFER");
         if (v[0] == '2') {   // grid sweep of the packed kernel
             for (int grid : {160, 320, 640, 1280, 2560, 5120, 20480}) {
@@ -2418,7 +2418,7 @@ bool native_q6_k_pack(const void* weights, int n_in, int n_out, const char* what
                         tc.push_back(ms * 1000.0f / 5);
                     }
                     std::sort(tc.begin(), tc.end());
-                    std::fprintf(stderr, "strata: Q6_K packed grid sweep %s grid %d ncols %d: %.1f us (%.1f-%.1f)\n",
+                    std::fprintf(stderr, "cortex: Q6_K packed grid sweep %s grid %d ncols %d: %.1f us (%.1f-%.1f)\n",
                                  what, grid, nc, tc[3], tc[0], tc[6]);
                 }
             }
@@ -2487,7 +2487,7 @@ void native_q5_k_mmvq(const void* weights, const void* x_q8_1, float* y,
     validate_pointer(x_q8_1);
     validate_pointer(y);
     validate_stream(stream);
-    STRATA_WAVE_MMVQ(Q5KTraits)
+    CORTEX_WAVE_MMVQ(Q5KTraits)
     if (ncols > 1) {
         launch_multi<Q5KTraits>(weights, x_q8_1, y, n_in, n_out, ncols, stream);
         launch_check();
@@ -2527,7 +2527,7 @@ namespace {
 // an RTX 2080 Ti).  Here lane l runs the chunks of the exact kernel's threads l, 32+l, 64+l and 96+l in their loop
 // order, adds the four sums as warp 0 adds the other warps' partials, then the same warp_sum: every output is bit for
 // bit native_q2_0_mmvq_kernel's (one column) and launch_multi's exact layout (two to four).  80 -> 31 us at three
-// columns, 37 -> 25 us at one.  STRATA_Q2_WARP=0 keeps the old kernels; =1 takes this one on any CUDA card.
+// columns, 37 -> 25 us at one.  CORTEX_Q2_WARP=0 keeps the old kernels; =1 takes this one on any CUDA card.
 constexpr int kQ20WarpRows = 4;
 template <int NCOLS>
 __global__ void __launch_bounds__(WARPS * WARP) q2_0_warp_rows_kernel(const Q20Block* __restrict__ w,
@@ -2572,7 +2572,7 @@ __global__ void __launch_bounds__(WARPS * WARP) q2_0_warp_rows_kernel(const Q20B
 }
 bool q2_0_warp_rows_on() {
     static int on[16] = {};   // by device ordinal: 0 unknown, 1 yes, -1 no
-    static const int env = [] { const char* v = std::getenv("STRATA_Q2_WARP"); return v ? (v[0] == '0' ? 0 : 1) : -1; }();
+    static const int env = [] { const char* v = std::getenv("CORTEX_Q2_WARP"); return v ? (v[0] == '0' ? 0 : 1) : -1; }();
     if (env >= 0) return env == 1;
     int dev = 0;
     if (cudaGetDevice(&dev) != cudaSuccess || dev < 0 || dev >= 16) return false;
@@ -2581,7 +2581,7 @@ bool q2_0_warp_rows_on() {
         const bool ok = cudaDeviceGetAttribute(&maj, cudaDevAttrComputeCapabilityMajor, dev) == cudaSuccess &&
                         cudaDeviceGetAttribute(&mnr, cudaDevAttrComputeCapabilityMinor, dev) == cudaSuccess;
         if (!ok) cudaGetLastError();
-        on[dev] = ok && strata::sm75_default(maj, mnr) ? 1 : -1;   // Turing only, with STRATA_SM75_PERF=1
+        on[dev] = ok && cortex::sm75_default(maj, mnr) ? 1 : -1;   // Turing only, with CORTEX_SM75_PERF=1
     }
     return on[dev] > 0;
 }
@@ -2595,7 +2595,7 @@ void native_q2_0_mmvq(const void* weights, const void* x_q8_1, float* y,
     validate_pointer(x_q8_1);
     validate_pointer(y);
     validate_stream(stream);
-    STRATA_WAVE_MMVQ(Q20Traits)
+    CORTEX_WAVE_MMVQ(Q20Traits)
 #if !defined(__HIPCC__)
     // one column always (bitwise the single-column kernel); two to four only where the exact layout is the one in use
     if (ncols <= 4 && (ncols == 1 || g_multi_exact) && q2_0_warp_rows_on()) {
@@ -2653,7 +2653,7 @@ void native_q3_k_mmvq(const void* weights, const void* x_q8_1, float* y,
     validate_pointer(x_q8_1);
     validate_pointer(y);
     validate_stream(stream);
-    STRATA_WAVE_MMVQ(Q3KTraits)
+    CORTEX_WAVE_MMVQ(Q3KTraits)
     if (ncols > 1) {
         launch_multi<Q3KTraits>(weights, x_q8_1, y, n_in, n_out, ncols, stream);
         launch_check();
@@ -2693,7 +2693,7 @@ void native_iq4_xs_mmvq(const void* weights, const void* x_q8_1, float* y,
     validate_pointer(x_q8_1);
     validate_pointer(y);
     validate_stream(stream);
-    STRATA_WAVE_MMVQ(IQ4XSTraits)
+    CORTEX_WAVE_MMVQ(IQ4XSTraits)
     if (ncols > 1) {
         launch_multi<IQ4XSTraits>(weights, x_q8_1, y, n_in, n_out, ncols, stream);
         launch_check();
@@ -2733,7 +2733,7 @@ void native_q4_k_mmvq(const void* weights, const void* x_q8_1, float* y,
     validate_pointer(x_q8_1);
     validate_pointer(y);
     validate_stream(stream);
-    STRATA_WAVE_MMVQ(Q4KTraits)
+    CORTEX_WAVE_MMVQ(Q4KTraits)
     if (ncols > 1) {
         launch_multi<Q4KTraits>(weights, x_q8_1, y, n_in, n_out, ncols, stream);
         launch_check();
@@ -2767,14 +2767,14 @@ void native_q4_k_f32(const void* weights, const float* x, void* scratch_q8_1,
 
 void native_q6_k_mmvq(const void* weights, const void* x_q8_1, float* y,
                       int n_in, int n_out, int ncols, void* stream) {
-    if (q6_packed_mmvq(weights, x_q8_1, y, n_in, n_out, ncols, stream)) return;   // STRATA_Q6_PACKED=1 heads
+    if (q6_packed_mmvq(weights, x_q8_1, y, n_in, n_out, ncols, stream)) return;   // CORTEX_Q6_PACKED=1 heads
     validate_shape(n_in, ncols, 256);
     if (n_out <= 0) throw std::invalid_argument("native MMVQ requires n_out > 0");
     validate_pointer(weights);
     validate_pointer(x_q8_1);
     validate_pointer(y);
     validate_stream(stream);
-    STRATA_WAVE_MMVQ(Q6KTraits)
+    CORTEX_WAVE_MMVQ(Q6KTraits)
     if (ncols > 1) {
         launch_multi<Q6KTraits>(weights, x_q8_1, y, n_in, n_out, ncols, stream);
         launch_check();
@@ -2865,7 +2865,7 @@ bool native_mmvq_pair(int ggml_type, const void* w1, const void* w2, const void*
 
 void native_q8_0_mmvq(const void* weights, const void* x_q8_1, float* y,
                        int n_in, int n_out, int ncols, void* stream) {
-    if (q8_packed_mmvq(weights, x_q8_1, y, n_in, n_out, ncols, stream)) return;   // STRATA_Q8_PACKED=1 tensors
+    if (q8_packed_mmvq(weights, x_q8_1, y, n_in, n_out, ncols, stream)) return;   // CORTEX_Q8_PACKED=1 tensors
     small_mmvq<Q80Block, 8>(weights, x_q8_1, y, n_in, n_out, ncols, stream);
 }
 
@@ -2995,7 +2995,7 @@ constexpr IlRows kIlRowsShared[] = {   // sm_86 + sm_120, and the fallback for e
 // it takes the shared table, which sits between the measured sm_86 and sm_120.  To add one, run
 // `mmvq_il_parity --bench --emit-table` on the card (docs/MMVQ_IL_TABLE.md), paste the printed block as a
 // `constexpr IlRows kIlRows_89[]` and add {89, kIlRows_89, sizeof(kIlRows_89) / sizeof(IlRows)} below.  Each choice
-// is bitwise the same output, so a table is only speed.  Without a rebuild: STRATA_MMVQ_IL_ROWS (see il_env_rows).
+// is bitwise the same output, so a table is only speed.  Without a rebuild: CORTEX_MMVQ_IL_ROWS (see il_env_rows).
 // Volta (sm_70): read off mmvq_il_parity --bench on a V100-SXM2-32GB (two runs, mean), the same rule - per cell the
 // rows count whose every measured shape takes at least 3% off native_mmvq's time (e.g. the Q5_K head at 3 columns
 // 1094 -> 821 us, Q6_K 12288 rows 68.9 -> 47.9 us), else 0; unmeasured classes take a neighbour's value (PR 1401)
@@ -3006,7 +3006,7 @@ constexpr IlRows kIlRows_70[] = {
     {14, {{0, 1, 1, 1, 1}, {0, 2, 2, 2, 2}, {0, 2, 2, 4, 2}}},   // Q6_K
 };
 // Pascal (sm_60), read off mmvq_il_parity --bench --emit-table on a Tesla P100-PCIE-16GB (three runs, identical
-// tables), the same 3% rule.  Pascal has no dp4a (strata_dp4a: four vmad), so the kernels are compute-bound and more rows a
+// tables), the same 3% rule.  Pascal has no dp4a (cortex_dp4a: four vmad), so the kernels are compute-bound and more rows a
 // warp (weights and activations reused across rows) win 15-35% on the large shapes.  Bitwise equal to native_mmvq.
 constexpr IlRows kIlRows_60[] = {
     {23, {{0, 4, 4, 4, 4}, {2, 4, 2, 4, 4}, {1, 1, 1, 1, 1}}},   // IQ4_XS
@@ -3059,7 +3059,7 @@ constexpr IlRows kIlRows_75[] = {
 // 147-verify: 5-8 columns (a verify window of 5+ rows) by n_out class, per architecture; 0 = native_mmvq's kernels.  Every
 // choice is bitwise native_mmvq's output (mmvq_il_parity, T 1-8), so a table is only speed.  Measured on an RTX PRO 5000
 // Blackwell (sm_120) with mmvq_il_parity --bench --emit-table; other cards have no table yet and keep native_mmvq's
-// kernels at 5+ columns.  STRATA_MMVQ_IL_WIDE=0 turns the 5-8 column path off.
+// kernels at 5+ columns.  CORTEX_MMVQ_IL_WIDE=0 turns the 5-8 column path off.
 struct IlRows58 { int type; uint8_t r[4][5]; };
 constexpr IlRows58 kIlRows58_120[] = {   // 4 = 2 rows a warp here (launch_il_rows)
     {23, {{0, 4, 4, 4, 4}, {0, 4, 2, 4, 2}, {0, 4, 2, 4, 2}, {0, 4, 2, 2, 2}}},   // IQ4_XS
@@ -3073,7 +3073,7 @@ constexpr Il58Arch kIl58Arch[] = {
     {120, kIlRows58_120, sizeof(kIlRows58_120) / sizeof(IlRows58)},
     {1201, kIlRows58_120, sizeof(kIlRows58_120) / sizeof(IlRows58)},   // a 12.0 card with 80+ SMs (il_cc)
 };
-// One column: rows a warp by n_out class, 0 = native_mmvq's single-column kernels (STRATA_MMVQ_IL_T1=0 turns this off).
+// One column: rows a warp by n_out class, 0 = native_mmvq's single-column kernels (CORTEX_MMVQ_IL_T1=0 turns this off).
 struct Il1Rows { int type; uint8_t r[5]; };
 constexpr Il1Rows kIl1Rows_86[] = {
     {11, {0, 1, 1, 1, 1}},   // Q3_K: 2560x10240 60 -> 43 us, 6144x2560 30 -> 26 us on the A4000
@@ -3093,8 +3093,8 @@ bool il_env_on(const char* name) {
     const char* v = std::getenv(name);
     return v == nullptr || v[0] != '0';
 }
-bool il_t1_on() { static const bool on = il_env_on("STRATA_MMVQ_IL_T1"); return on; }
-bool il_q3k_on() { static const bool on = il_env_on("STRATA_MMVQ_IL_Q3K"); return on; }
+bool il_t1_on() { static const bool on = il_env_on("CORTEX_MMVQ_IL_T1"); return on; }
+bool il_q3k_on() { static const bool on = il_env_on("CORTEX_MMVQ_IL_Q3K"); return on; }
 struct IlArch { int cc; const IlRows* t; size_t n; };
 constexpr IlArch kIlArch[] = {
     {60, kIlRows_60, sizeof(kIlRows_60) / sizeof(IlRows)},   // Pascal GP100: measured on a Tesla P100
@@ -3106,13 +3106,13 @@ constexpr IlArch kIlArch[] = {
     // was measured on an RTX 5070 (48 SMs) and stays that card's
     {1201, kIlRows_120, sizeof(kIlRows_120) / sizeof(IlRows)},
 };
-// STRATA_MMVQ_IL_ROWS="type:ncols:r0,r1,r2,r3,r4;..." overrides single rows of the table for every card (type = ggml
+// CORTEX_MMVQ_IL_ROWS="type:ncols:r0,r1,r2,r3,r4;..." overrides single rows of the table for every card (type = ggml
 // type 23/12/13/14, ncols 2-4, r* = rows a warp 0/1/2/4 for the five n_out classes).  Parsed once.
 struct IlEnvRow { int type, ncols; uint8_t r[5]; };
 const std::vector<IlEnvRow>& il_env_rows() {
     static const std::vector<IlEnvRow> v = [] {
         std::vector<IlEnvRow> out;
-        const char* e = std::getenv("STRATA_MMVQ_IL_ROWS");
+        const char* e = std::getenv("CORTEX_MMVQ_IL_ROWS");
         if (!e) return out;
         std::string str(e);
         size_t pos = 0;
@@ -3126,9 +3126,9 @@ const std::vector<IlEnvRow>& il_env_rows() {
                 bool ok = true;
                 for (int i = 0; i < 5; ++i) { ok = ok && (r[i] == 0 || r[i] == 1 || r[i] == 2 || r[i] == 4); x.r[i] = (uint8_t) r[i]; }
                 if (ok) out.push_back(x);
-                else std::fprintf(stderr, "strata: STRATA_MMVQ_IL_ROWS: rows must be 0/1/2/4 - entry ignored\n");
+                else std::fprintf(stderr, "cortex: CORTEX_MMVQ_IL_ROWS: rows must be 0/1/2/4 - entry ignored\n");
             } else {
-                std::fprintf(stderr, "strata: STRATA_MMVQ_IL_ROWS: cannot read '%s' (type:ncols:r0,r1,r2,r3,r4) - ignored\n",
+                std::fprintf(stderr, "cortex: CORTEX_MMVQ_IL_ROWS: cannot read '%s' (type:ncols:r0,r1,r2,r3,r4) - ignored\n",
                              str.substr(pos, end - pos).c_str());
             }
             pos = end + 1;
@@ -3144,7 +3144,7 @@ int native_mmvq_il_rows_for(int cc, int type, int ncols, int n_out) {
     if (ncols < 1 || ncols > 8) return 0;
     const int cls = n_out < 2048 ? 0 : n_out < 4096 ? 1 : n_out < 8192 ? 2 : n_out < 12288 ? 3 : 4;
     if (ncols > 4) {   // 147-verify: 5..8 columns, only where a card measured its table
-        static const bool wide = il_env_on("STRATA_MMVQ_IL_WIDE");
+        static const bool wide = il_env_on("CORTEX_MMVQ_IL_WIDE");
         if (!wide) return 0;
         if (type == 11 && !il_q3k_on()) return 0;
         for (const Il58Arch& a : kIl58Arch)
@@ -3155,7 +3155,7 @@ int native_mmvq_il_rows_for(int cc, int type, int ncols, int n_out) {
     }
     for (const IlEnvRow& e : il_env_rows())
         if (e.type == type && e.ncols == ncols) return e.r[cls];
-    if (ncols == 1) {   // 143-dense: one column (the plain q8_1 blocks, no interleaved copy); STRATA_MMVQ_IL_T1=0 turns it off
+    if (ncols == 1) {   // 143-dense: one column (the plain q8_1 blocks, no interleaved copy); CORTEX_MMVQ_IL_T1=0 turns it off
         if (!il_t1_on()) return 0;
         for (const Il1Arch& a : kIl1Arch)
             if (a.cc == cc)
@@ -3163,10 +3163,10 @@ int native_mmvq_il_rows_for(int cc, int type, int ncols, int n_out) {
                     if (a.t[i].type == type) return a.t[i].r[cls];
         return 0;
     }
-    if (type == 11 && !il_q3k_on()) return 0;   // STRATA_MMVQ_IL_Q3K=0: Q3_K keeps native_mmvq's kernels
+    if (type == 11 && !il_q3k_on()) return 0;   // CORTEX_MMVQ_IL_Q3K=0: Q3_K keeps native_mmvq's kernels
     const IlRows* t = kIlRowsShared;
     size_t n = sizeof(kIlRowsShared) / sizeof(IlRows);
-    static const bool own120 = il_env_on("STRATA_MMVQ_IL_120");   // 147-verify: =0 gives a big 12.0 card the shared table again
+    static const bool own120 = il_env_on("CORTEX_MMVQ_IL_120");   // 147-verify: =0 gives a big 12.0 card the shared table again
     for (const IlArch& a : kIlArch)
         if (a.cc == cc && a.t != nullptr && (cc != 1201 || own120)) { t = a.t; n = a.n; }
     for (size_t i = 0; i < n; ++i)
@@ -3199,17 +3199,17 @@ void native_mmvq_il_tune(int rows) { g_tune_rows = rows; }
 
 namespace {
 // sm_80 and newer (measured on sm_86 and sm_120), Volta (sm_70) and Pascal (sm_60, sm_61), each with its own table
-// above; Turing keeps native_mmvq's kernels unless STRATA_SM75_PERF=1 (kIlRows_75)
-// Volta (PR 1401): opt-in with STRATA_SM70_TABLE=1 until the author confirms on a V100 with the final code
-bool sm70_opt_in() { const char* v = std::getenv("STRATA_SM70_TABLE"); return v != nullptr && std::atoi(v) != 0; }
+// above; Turing keeps native_mmvq's kernels unless CORTEX_SM75_PERF=1 (kIlRows_75)
+// Volta (PR 1401): opt-in with CORTEX_SM70_TABLE=1 until the author confirms on a V100 with the final code
+bool sm70_opt_in() { const char* v = std::getenv("CORTEX_SM70_TABLE"); return v != nullptr && std::atoi(v) != 0; }
 // Pascal (sm_60, GP100): the same interleaved kernels (bitwise equal to native_mmvq's, mmvq_il_parity), its own table
-// kIlRows_60.  STRATA_SM60_TABLE=0 keeps native_mmvq's kernels on a P100; any other value (or unset) uses the table.
-// STRATA_SM75_IL=0 / 1 forces the table off / on; unset it follows STRATA_SM75_PERF=1 (Turing only)
-bool sm75_il_on(int major, int minor) { return strata::sm75_switch("STRATA_SM75_IL", major, minor); }
-bool sm60_table_on() { const char* v = std::getenv("STRATA_SM60_TABLE"); return v == nullptr || std::atoi(v) != 0; }
+// kIlRows_60.  CORTEX_SM60_TABLE=0 keeps native_mmvq's kernels on a P100; any other value (or unset) uses the table.
+// CORTEX_SM75_IL=0 / 1 forces the table off / on; unset it follows CORTEX_SM75_PERF=1 (Turing only)
+bool sm75_il_on(int major, int minor) { return cortex::sm75_switch("CORTEX_SM75_IL", major, minor); }
+bool sm60_table_on() { const char* v = std::getenv("CORTEX_SM60_TABLE"); return v == nullptr || std::atoi(v) != 0; }
 // Pascal (sm_61: Tesla P40 / P4, GTX 10 series; native dp4a): the same interleaved kernels (bitwise equal to
-// native_mmvq's, mmvq_il_parity), its own table kIlRows_61.  STRATA_SM61_TABLE=0 keeps native_mmvq's kernels.
-bool sm61_table_on() { const char* v = std::getenv("STRATA_SM61_TABLE"); return v == nullptr || std::atoi(v) != 0; }
+// native_mmvq's, mmvq_il_parity), its own table kIlRows_61.  CORTEX_SM61_TABLE=0 keeps native_mmvq's kernels.
+bool sm61_table_on() { const char* v = std::getenv("CORTEX_SM61_TABLE"); return v == nullptr || std::atoi(v) != 0; }
 bool il_arch_ok() {
     static int ok[16] = {};   // 0 unknown, 1 yes, -1 no, by device ordinal
     int dev = 0;
@@ -3273,4 +3273,4 @@ void native_mmvq_il(int ggml_type, const void* weights, const void* x_q8_1, cons
 void native_mmvq_il_tune(int) {}
 #endif  // !__HIPCC__
 
-} // namespace strata::kernels
+} // namespace cortex::kernels

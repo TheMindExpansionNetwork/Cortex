@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from strata_control import feed as feedmod, signing, transfer
+from cortex_control import feed as feedmod, signing, transfer
 from tests.terminal import update_fixture as fx
 
 SEED1 = bytes.fromhex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
@@ -80,7 +80,7 @@ def entry(version="0.1.46", backend="cuda", variant="cuda13", archs=("sm_86", "c
 
 
 def document(**over):
-    doc = {"schema_version": 1, "feed": "strata-updates", "channel": "stable", "sequence": 5,
+    doc = {"schema_version": 1, "feed": "cortex-updates", "channel": "stable", "sequence": 5,
            "generated_at": "2026-10-15T00:00:00Z", "expires_at": None, "engine": {"packages": [entry()]}}
     doc.update(over)
     return doc
@@ -299,19 +299,19 @@ class AppPlatform(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.public, self.secret = fx.minisign_pair()
-        self.archive = self.root / "Strata.app.tar.gz"
+        self.archive = self.root / "Cortex.app.tar.gz"
         with tarfile.open(self.archive, "w:gz") as tar:
-            for name, data in (("Strata.app/Contents/Info.plist", b"<plist/>"), ("Strata.app/Contents/MacOS/strata-desktop", b"bin")):
+            for name, data in (("Cortex.app/Contents/Info.plist", b"<plist/>"), ("Cortex.app/Contents/MacOS/cortex-desktop", b"bin")):
                 info = tarfile.TarInfo(name)
                 info.size = len(data)
                 tar.addfile(info, io.BytesIO(data))
-        self.sig = self.root / "Strata.app.tar.gz.sig"
+        self.sig = self.root / "Cortex.app.tar.gz.sig"
         self.sig.write_text(fx.minisign_sign(self.archive.read_bytes(), self.secret) + "\n")
         self.app_json = self.root / "latest.json"
 
     def run_tool(self, **extra):
         from feed_tool import set_app_platform
-        args = dict(target="darwin-aarch64", archive=self.archive, signature_file=self.sig, url="https://example.invalid/Strata.app.tar.gz",
+        args = dict(target="darwin-aarch64", archive=self.archive, signature_file=self.sig, url="https://example.invalid/Cortex.app.tar.gz",
                     version="0.2.0", pubkey=self.public)
         args.update(extra)
         return set_app_platform(self.app_json, **args)
@@ -357,7 +357,7 @@ class AppPlatform(unittest.TestCase):
         import io
         import tarfile
         with tarfile.open(self.archive, "w:gz") as tar:
-            info = tarfile.TarInfo("build/Strata.app/Contents/Info.plist")
+            info = tarfile.TarInfo("build/Cortex.app/Contents/Info.plist")
             info.size = 1
             tar.addfile(info, io.BytesIO(b"x"))
         self.sig.write_text(fx.minisign_sign(self.archive.read_bytes(), self.secret))

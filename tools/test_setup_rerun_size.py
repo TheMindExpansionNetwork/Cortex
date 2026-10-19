@@ -24,7 +24,7 @@ PC64 = (63.7, [g.card(0, "NVIDIA GeForce RTX 5070", 11.9, "120")])
 
 def earlier(model: str, family_tag: str = "") -> tuple:
     tag = f"{family_tag}{model.lower()}"
-    return (f"strata-{tag}.json", {"exe": "x", "args": ["--pack", f"p/{tag}", "--max-context", "32768"], "cwd": ".",
+    return (f"cortex-{tag}.json", {"exe": "x", "args": ["--pack", f"p/{tag}", "--max-context", "32768"], "cwd": ".",
                                    "tokenizer": "t", "model_name": f"qwen3.8-flash-next-{tag}", "log": "l", "port": 8080})
 
 
@@ -80,24 +80,24 @@ class RerunKeepsSize(unittest.TestCase):
 
 
 class RerunKeepsOwnEnv(unittest.TestCase):
-    """0.1.44 put STRATA_MMQ_KQ / STRATA_HC_Q8 / STRATA_ROUTE_TAIL_SKIP into SETUP_ENV (the entries setup writes, which a
-    setup run again does not carry over): a GSQ-RCO config of the user's own STRATA_ROUTE_TAIL_SKIP=0 was dropped with them.
+    """0.1.44 put CORTEX_MMQ_KQ / CORTEX_HC_Q8 / CORTEX_ROUTE_TAIL_SKIP into SETUP_ENV (the entries setup writes, which a
+    setup run again does not carry over): a GSQ-RCO config of the user's own CORTEX_ROUTE_TAIL_SKIP=0 was dropped with them.
     Those three are setup's only in an Unsloth config."""
 
-    OLD = {"env": {"STRATA_ROUTE_TAIL_SKIP": "0", "STRATA_MMQ_KQ": "1", "STRATA_HC_Q8": "0", "STRATA_RESIDENT_PIN": "0",
+    OLD = {"env": {"CORTEX_ROUTE_TAIL_SKIP": "0", "CORTEX_MMQ_KQ": "1", "CORTEX_HC_Q8": "0", "CORTEX_RESIDENT_PIN": "0",
                    "MY_VAR": "1"}}
 
     def test_a_gsq_rco_config_keeps_the_users_values(self):
         new = {"model_name": "qwen3.8-flash-next-iq3_xxs"}
         kept = setup.carry_over(dict(self.OLD), new)
-        self.assertEqual(new["env"], {"STRATA_ROUTE_TAIL_SKIP": "0", "STRATA_MMQ_KQ": "1", "STRATA_HC_Q8": "0", "MY_VAR": "1"})
-        self.assertIn("env STRATA_ROUTE_TAIL_SKIP", kept)
-        self.assertNotIn("env STRATA_RESIDENT_PIN", kept)             # the older entries stay setup's own
+        self.assertEqual(new["env"], {"CORTEX_ROUTE_TAIL_SKIP": "0", "CORTEX_MMQ_KQ": "1", "CORTEX_HC_Q8": "0", "MY_VAR": "1"})
+        self.assertIn("env CORTEX_ROUTE_TAIL_SKIP", kept)
+        self.assertNotIn("env CORTEX_RESIDENT_PIN", kept)             # the older entries stay setup's own
 
     def test_an_unsloth_config_gets_setups_values_not_the_old_ones(self):
-        new = {"model_name": "qwen3.8-flash-next-unsloth-ud-q4_k_xl", "env": {"STRATA_HC_Q8": "1"}}
+        new = {"model_name": "qwen3.8-flash-next-unsloth-ud-q4_k_xl", "env": {"CORTEX_HC_Q8": "1"}}
         setup.carry_over(dict(self.OLD), new)
-        self.assertEqual(new["env"], {"STRATA_HC_Q8": "1", "MY_VAR": "1"})
+        self.assertEqual(new["env"], {"CORTEX_HC_Q8": "1", "MY_VAR": "1"})
 
 
 if __name__ == "__main__":

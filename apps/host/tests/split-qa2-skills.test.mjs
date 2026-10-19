@@ -12,7 +12,7 @@ const root = resolve(import.meta.dirname, '..');
 async function startHost(home) {
   const socket = createServer(); await new Promise(r => socket.listen(0, '127.0.0.1', r));
   const port = socket.address().port; await new Promise(r => socket.close(r));
-  const child = spawn(process.execPath, ['server/index.mjs'], { cwd: root, env: { ...process.env, STRATA_HOME: home, STRATA_MODELS_DIR: join(home, 'models'), STRATA_PORT: String(port), STRATA_REAL_ENGINE: '0', STRATA_WORKSPACE: join(home, 'work') }, stdio: 'ignore', windowsHide: true });
+  const child = spawn(process.execPath, ['server/index.mjs'], { cwd: root, env: { ...process.env, CORTEX_HOME: home, CORTEX_MODELS_DIR: join(home, 'models'), CORTEX_PORT: String(port), CORTEX_REAL_ENGINE: '0', CORTEX_WORKSPACE: join(home, 'work') }, stdio: 'ignore', windowsHide: true });
   const base = `http://127.0.0.1:${port}`;
   const call = async (path, method = 'GET', body) => {
     const response = await fetch(base + path, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
@@ -24,7 +24,7 @@ async function startHost(home) {
 }
 
 test('a skill created with Skill enabled off is saved off, kept after a restart, and an enabled one stays on', { timeout: 60000 }, async () => {
-  const home = await mkdtemp(join(tmpdir(), 'strata-qa2-skill-'));
+  const home = await mkdtemp(join(tmpdir(), 'cortex-qa2-skill-'));
   let host = await startHost(home);
   try {
     const off = await host.call('/api/skills', 'POST', { name: 'QA disabled creation check', description: 'a', body: 'Harmless test instructions.', enabled: false, triggers: ['qa check', ' ', 'qa check', 'disabled'] });
@@ -47,7 +47,7 @@ test('a skill created with Skill enabled off is saved off, kept after a restart,
 });
 
 test('F05: the host refuses an output limit below 0 or above its maximum, and keeps the saved one', { timeout: 60000 }, async () => {
-  const home = await mkdtemp(join(tmpdir(), 'strata-qa2-tokens-'));
+  const home = await mkdtemp(join(tmpdir(), 'cortex-qa2-tokens-'));
   const host = await startHost(home);
   try {
     const value = async () => (await host.call('/api/engine')).data.expert.find(p => p.id === 'sample.maxTokens').value;

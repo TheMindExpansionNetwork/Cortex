@@ -1,15 +1,15 @@
-// src/kernels/cuda/iq_kernels.cu - see include/strata/kernels/iq_kernels.hpp.
+// src/kernels/cuda/iq_kernels.cu - see include/cortex/kernels/iq_kernels.hpp.
 //
 // The dot products (vec_dot_*_q8_1), the dequantizers and the q8_1 quantizer are transcribed from llama.cpp
 // (ggml/src/ggml-cuda/vecdotq.cuh, dequantize.cuh, quantize.cu at the commit in third_party/ggml/VERSION.txt;
 // MIT license, third_party/ggml/LICENSE).  The block structs and codebook grids come from its ggml-common.h,
 // included unchanged.
-#include "strata/kernels/iq_kernels.hpp"
-#include "strata/core/sm75_series.hpp"
-#include "strata/core/sm120_series.hpp"
-#include "strata/kernels/gfx_arch.hpp"
-#include "strata/kernels/dp4a.hpp"
-#include "strata/kernels/q8_1_finite.hpp"
+#include "cortex/kernels/iq_kernels.hpp"
+#include "cortex/core/sm75_series.hpp"
+#include "cortex/core/sm120_series.hpp"
+#include "cortex/kernels/gfx_arch.hpp"
+#include "cortex/kernels/dp4a.hpp"
+#include "cortex/kernels/q8_1_finite.hpp"
 #include "s26_tsum.cuh"
 
 #include <cuda_fp16.h>
@@ -31,7 +31,7 @@
 #include <tuple>
 #include <type_traits>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
 void check(const char* what) {
@@ -53,7 +53,7 @@ __device__ __forceinline__ uint32_t unpack_ksigns(const uint8_t v) {
     return s * 0x01010101;
 }
 __device__ __forceinline__ int2 get_int_from_table_16(const int& q4, const int8_t* table) {
-#if defined(STRATA_HIP_GFX906)
+#if defined(CORTEX_HIP_GFX906)
     // AMD: llama.cpp's HIP lookup (vecdotq.cuh) - v_perm_b32 takes 3-bit byte indices, so the low and high halves
     // of the table are looked up and the index MSB picks between them: 4 perms per 8 values.
     const uint32_t* v32 = reinterpret_cast<const uint32_t*>(table);
@@ -78,7 +78,7 @@ __device__ __forceinline__ int2 get_int_from_table_16(const int& q4, const int8_
     return make_int2(__byte_perm(tmp[0], tmp[1], 0x6420), __byte_perm(tmp[0], tmp[1], 0x7531));
 #endif
 }
-#define ggml_cuda_dp4a(a, b, c) STRATA_DP4A((a), (b), (c))
+#define ggml_cuda_dp4a(a, b, c) CORTEX_DP4A((a), (b), (c))
 
 // ---------------------------------------------------------------- the dot products (vecdotq.cuh)
 __device__ __forceinline__ float vec_dot_q2_0_q8_1(const void* __restrict__ vbq, const block_q8_1* __restrict__ bq8_1,
@@ -470,7 +470,7 @@ __device__ __forceinline__ float vec_dot_q5_0_q8_1(const void* __restrict__ vbq,
 // centring is the same idea as the Q5_1 min term above: the offset is applied to the activations' own int8 codes.
 __device__ __forceinline__ int q4_0_centred(const int v) {
     // Unsigned: (b & 0x08080808) * 0x1E reaches 0xF0F0F0F0, which overflows a signed int - undefined behaviour the
-    // sm_60 build (no __dp4a, strata_dp4a fallback) optimised into a wrong value (native_expert_parity gpu rel 1.7e4).
+    // sm_60 build (no __dp4a, cortex_dp4a fallback) optimised into a wrong value (native_expert_parity gpu rel 1.7e4).
     const uint32_t b = (uint32_t) v ^ 0x08080808u;   // per byte: 0..15 -> (q - 8) as a 4-bit two's complement value
     return (int) (b | ((b & 0x08080808u) * 0x1Eu));  // sign-extend each nibble into its byte (0x08 * 0x1E = 0xF0)
 }
@@ -544,7 +544,7 @@ __device__ __forceinline__ float vec_dot_q6_K_q8_1_impl_mmvq(const int vl, const
         const int vil = (vl >> (4 * i)) & 0x0F0F0F0F;
         const int vih = ((vh >> (4 * i)) << 4) & 0x30303030;
         const int vi = __vsubss4(vil | vih, 0x20202020);   // vi = (vil | vih) - 32
-        sumf += d8[i] * (STRATA_DP4A(vi, u[i], 0) * sc);
+        sumf += d8[i] * (CORTEX_DP4A(vi, u[i], 0) * sc);
     }
     return d * sumf;
 }
@@ -747,18 +747,18 @@ template<> struct Fmt<146> { static constexpr int qk = 128, ipb = 8, step = 4;
 
 // The formats of each role, one list each so a type cannot be in one switch and missing from another.  Every
 // entry is a kernel template for each CUDA architecture of the build, hence two lists rather than one.
-#ifdef STRATA_Q6K_EXPERTS   // opt-in build (-DSTRATA_Q6K_EXPERTS=ON): one more instance per kernel, loaded at start
-#define STRATA_GU_FMTS(X) X(16) X(17) X(18) X(21) X(22) X(23) X(29) X(42) X(12) X(13) X(14) X(6) X(2) X(3) X(8) X(40) X(144) X(145)
+#ifdef CORTEX_Q6K_EXPERTS   // opt-in build (-DCORTEX_Q6K_EXPERTS=ON): one more instance per kernel, loaded at start
+#define CORTEX_GU_FMTS(X) X(16) X(17) X(18) X(21) X(22) X(23) X(29) X(42) X(12) X(13) X(14) X(6) X(2) X(3) X(8) X(40) X(144) X(145)
 #else
-#define STRATA_GU_FMTS(X) X(16) X(17) X(18) X(21) X(22) X(23) X(29) X(42) X(12) X(13) X(6) X(2) X(3) X(8) X(40) X(144) X(145)
+#define CORTEX_GU_FMTS(X) X(16) X(17) X(18) X(21) X(22) X(23) X(29) X(42) X(12) X(13) X(6) X(2) X(3) X(8) X(40) X(144) X(145)
 #endif
 // Q5_K / Q6_K downs: Qwen3.6-35B-A3B (FF 512, whole 256-blocks per row); Flash-Next's FF 640 never selects them
-#ifdef STRATA_Q6K_EXPERTS
-#define STRATA_D_FMTS(X) X(20) X(23) X(42) X(7) X(6) X(2) X(3) X(8) X(13) X(14) X(40) X(144) X(146)
+#ifdef CORTEX_Q6K_EXPERTS
+#define CORTEX_D_FMTS(X) X(20) X(23) X(42) X(7) X(6) X(2) X(3) X(8) X(13) X(14) X(40) X(144) X(146)
 #else
-#define STRATA_D_FMTS(X) X(20) X(23) X(42) X(7) X(6) X(2) X(3) X(8) X(13) X(40) X(144) X(146)
+#define CORTEX_D_FMTS(X) X(20) X(23) X(42) X(7) X(6) X(2) X(3) X(8) X(13) X(40) X(144) X(146)
 #endif
-#define STRATA_MMVQ_FMTS(X) X(16) X(17) X(18) X(20) X(21) X(22) X(23) X(29) X(42) X(12) X(13) X(7) X(6) X(2) X(3) X(8) X(40) X(144) X(145) X(146)
+#define CORTEX_MMVQ_FMTS(X) X(16) X(17) X(18) X(20) X(21) X(22) X(23) X(29) X(42) X(12) X(13) X(7) X(6) X(2) X(3) X(8) X(40) X(144) X(145) X(146)
 template<> struct Fmt<40> { static constexpr int qk = 64, ipb = 2, step = 4;     // NVFP4: 2 calls of 32 values
     __device__ static float dot(const void* v, const block_q8_1* y, int kbx, int iqs) { return vec_dot_nvfp4_q8_1(v, y, kbx, iqs); } };
 
@@ -802,16 +802,16 @@ __global__ void __launch_bounds__(128) mmvq_kernel(const uint8_t* __restrict__ w
 // scale as a float) and `apply` (the activation loads, the dp4a chain in the same order, the same integer scale
 // step and the same float expression).  `apply(load(...))` does the dot's integer and float operations in the same
 // order on the same values, so a column of the kernels below is BITWISE equal to the same column of mmvq_kernel /
-// native_gu_kernel / native_down_kernel (iq_multi_parity checks it; STRATA_OLD_IQ_MMVQ=1 keeps the old kernels).
+// native_gu_kernel / native_down_kernel (iq_multi_parity checks it; CORTEX_OLD_IQ_MMVQ=1 keeps the old kernels).
 template<int TY> struct Split;
 // Formats with a Split below take the decode-once kernels; the others (Q4_K, Q5_K, Q5_1, Q8_0: UD-Q4_K_XL) the
 // per-entry ones, which call Fmt<TY>::dot per column exactly as before #242 (the launchers test kSplit at compile
 // time, so the multi kernels are never instantiated for a type without a Split).
 template<int TY> inline constexpr bool kSplit = false;
 // The K-quant / Q8_0 / Q5_1 formats (UD-Q4_K_XL) have Split traits (SplitK below), but their decode-once multi kernels
-// run only with STRATA_KQ_SPLIT=1 until the A/B on the measured cards decides (bitwise the old kernels either way).
+// run only with CORTEX_KQ_SPLIT=1 until the A/B on the measured cards decides (bitwise the old kernels either way).
 template<int TY> inline constexpr bool kq_type = (TY == 12 || TY == 13 || TY == 8);   // not Q5_1: its Split apply is not bitwise the old dot (FMA contraction), see notes-151-amd
-inline bool g_kq_split = [] { const char* v = std::getenv("STRATA_KQ_SPLIT"); return v != nullptr && v[0] == '1'; }();
+inline bool g_kq_split = [] { const char* v = std::getenv("CORTEX_KQ_SPLIT"); return v != nullptr && v[0] == '1'; }();
 template<int TY> inline bool split_off() { return kq_type<TY> && !g_kq_split; }
 template<int TY> inline constexpr bool kStageIqGrid = (TY == 16 || TY == 17 || TY == 18 || TY == 21 || TY == 22 || TY == 29);
 
@@ -1312,7 +1312,7 @@ template<> struct S27<8> {   // Q8_0
 // K-quants and Q5_1 / Q8_0 (UD-Q4_K_XL): the S27 load / apply (below the same file used them first for the V2K
 // grouped kernels) as Split traits, so the generic multi-column kernels decode a weight once per call for these
 // formats too.  Bitwise the old per-column Fmt<TY>::dot (the S27 apply is that dot's own expression; iq_multi_parity).
-// STRATA_OLD_IQ_MMVQ=1 keeps the old kernels; STRATA_KQ_SPLIT=0 keeps them for these four formats only.
+// CORTEX_OLD_IQ_MMVQ=1 keeps the old kernels; CORTEX_KQ_SPLIT=0 keeps them for these four formats only.
 template<int TY> struct SplitK : S27<TY> {
     template<bool STAGE_GRID = false>
     __device__ static typename S27<TY>::W load(const void* __restrict__ vbq, int kbx, int iqs, const uint32_t* __restrict__ = nullptr) {
@@ -1625,7 +1625,7 @@ __device__ __forceinline__ void row_dot2_80_sub16(const uint8_t* ra, const uint8
 // The sign-mask tables that follow the codebook words in a staged IQ3_XXS / IQ3_S table (see stage_iq_grid): the byte
 // masks of every 7-bit sign field (IQ3_XXS, 2 x 128 words at +256) and of a sign byte's bits 0-3 and 4-7 (IQ3_S, 2 x 256
 // words at +512).  Split<18>::load<true> and Split<21>::load<true> read them, so every kernel that stages these two
-// codebooks (the default kernels through stage_iq_grid, the STRATA_EXPDEC window kernels through EdGrid) fills them too.
+// codebooks (the default kernels through stage_iq_grid, the CORTEX_EXPDEC window kernels through EdGrid) fills them too.
 __device__ __forceinline__ void stage_iq3xxs_masks(uint32_t* s_buf, int tid, int nthreads) {
     for (int u = tid; u < 128; u += nthreads) {
         const uint32_t s = (uint32_t) u | ((__popc((uint32_t) u) & 1u) << 7);   // 8th sign = parity of the 7
@@ -1714,15 +1714,15 @@ struct IqGridWords {
 // #778: `__shared__ alignas(16)` does not compile for gfx1030 (HIP); the attribute after the declarator does, but nvcc
 // with MSVC as host does not take it.  Same layout either way.
 #if defined(__HIPCC__)
-#define STRATA_SHARED_ALIGN16_U32(name, ...) __shared__ uint32_t name[__VA_ARGS__] __attribute__((aligned(16)))
+#define CORTEX_SHARED_ALIGN16_U32(name, ...) __shared__ uint32_t name[__VA_ARGS__] __attribute__((aligned(16)))
 #else
-#define STRATA_SHARED_ALIGN16_U32(name, ...) __shared__ alignas(16) uint32_t name[__VA_ARGS__]
+#define CORTEX_SHARED_ALIGN16_U32(name, ...) __shared__ alignas(16) uint32_t name[__VA_ARGS__]
 #endif
 template<int TY, int NC, bool STAGE_GRID = kStageIqGrid<TY>, bool EXACT_N = false>
 __global__ void __launch_bounds__(128) mmvq_multi_kernel(const uint8_t* __restrict__ w, size_t row_bytes,
                                                          const block_q8_1* __restrict__ x, float* __restrict__ y,
                                                          int n_in, int n_out, int ncols) {
-    STRATA_SHARED_ALIGN16_U32(s_grid_buf, IqGridWords<TY, STAGE_GRID>::value);
+    CORTEX_SHARED_ALIGN16_U32(s_grid_buf, IqGridWords<TY, STAGE_GRID>::value);
     const uint32_t* s_grid = stage_iq_grid<TY, STAGE_GRID>(s_grid_buf, threadIdx.y * 32 + threadIdx.x, 128);
     const int row = blockIdx.x * 4 + threadIdx.y;
     if (row >= n_out) return;
@@ -1809,7 +1809,7 @@ __global__ void __launch_bounds__(256) native_gu_multi_kernel(const unsigned lon
                                                               float* __restrict__ gate, float* __restrict__ up) {
     const int ng = *n_groups;
     if (blockIdx.y >= ng) return;
-    STRATA_SHARED_ALIGN16_U32(s_grid_buf, IqGridWords<TG, STAGE_GRID>::value);
+    CORTEX_SHARED_ALIGN16_U32(s_grid_buf, IqGridWords<TG, STAGE_GRID>::value);
     const uint32_t* s_grid = stage_iq_grid<TG, STAGE_GRID>(s_grid_buf, threadIdx.x, 256);
     const int nb = (int) (L.n_embd / Fmt<TG>::qk), xb = (int) (L.n_embd / 32);
     if constexpr (SUB16) {
@@ -2121,7 +2121,7 @@ __global__ void __launch_bounds__(256) native_down_multi_kernel(const unsigned l
     }
 }
 
-// ---------------------------------------------------------------- EXPDEC (STRATA_EXPDEC=1): the group's activations
+// ---------------------------------------------------------------- EXPDEC (CORTEX_EXPDEC=1): the group's activations
 // in shared memory, R rows per lane
 //
 // native_gu_multi_kernel / native_down_multi_kernel decode each weight part once and apply it to every entry of the
@@ -2132,12 +2132,12 @@ __global__ void __launch_bounds__(256) native_down_multi_kernel(const unsigned l
 // words are two 16-byte loads (gate/up, Q2_0 down: the block's two halves in separate planes, conflict-free) or two
 // 8-byte loads (IQ4_NL down), the fp16 block scale already a float; every lane computes R rows at once, so the
 // activation words are loaded once per R rows; the IQ3_XXS / IQ3_S codebooks are staged too (IQ2_* already were),
-// and a block takes `rb` rows (auto: the most that keep ~STRATA_EXPDEC_MINBLK blocks in flight) instead of 16.
+// and a block takes `rb` rows (auto: the most that keep ~CORTEX_EXPDEC_MINBLK blocks in flight) instead of 16.
 // Each (row, entry) sum is the default kernel's sum tree (row_dot_80_sub16 / row_dot_40_sub8 / row_dot_20_sub16: the
 // same lane does the same calls in the same order with the same operations, `apply_u` = `apply` on the block's
 // words), so the output is bitwise the same (expdec_bench checks it; docs/EXPERTDEC.md).
-#ifndef STRATA_EXPDEC_MINB
-#define STRATA_EXPDEC_MINB 4   // gate/up __launch_bounds__ min blocks per SM by default (STRATA_EXPDEC_MINB at runtime): 4 = up to 64
+#ifndef CORTEX_EXPDEC_MINB
+#define CORTEX_EXPDEC_MINB 4   // gate/up __launch_bounds__ min blocks per SM by default (CORTEX_EXPDEC_MINB at runtime): 4 = up to 64
                                // registers, as the default kernels (bench: equal on the 2080 Ti, 0.87-0.95 on the 3060); 2 = up to 128
 #endif
 constexpr int ED_NC = GRP_NC;   // entries staged at once
@@ -2262,7 +2262,7 @@ __global__ void __launch_bounds__(256, MINB) expdec_gu_kernel(const unsigned lon
     if (blockIdx.y >= ng) return;
     __shared__ alignas(16) int4 s_u[ED_NC * 2 * ED_XB];
     __shared__ float s_ds[ED_NC * ED_XB];
-    STRATA_SHARED_ALIGN16_U32(s_grid_buf, EdGrid<TG>::words);
+    CORTEX_SHARED_ALIGN16_U32(s_grid_buf, EdGrid<TG>::words);
     const int tid = threadIdx.x;
     EdGrid<TG>::copy(s_grid_buf, tid);   // visible after the staging's __syncthreads
     const int sw = tid >> 4, t = tid & 15;
@@ -2437,7 +2437,7 @@ __device__ __forceinline__ void ed_d42_rows(const uint8_t* const* wr, const int4
 // down (IQ4_NL: 32 sub-warps of 8 lanes; Q2_0: 16 of 16), R rows per lane, `rb` rows per block (a multiple of the
 // rows per pass; n_embd too).  The entries' h rows are contiguous in hq (entry e at e * ED_HB).
 template<int TD, int R>
-__global__ void __launch_bounds__(256, STRATA_EXPDEC_MINB) expdec_down_kernel(const unsigned long long* __restrict__ grp_ptr,
+__global__ void __launch_bounds__(256, CORTEX_EXPDEC_MINB) expdec_down_kernel(const unsigned long long* __restrict__ grp_ptr,
                                                                               const int32_t* __restrict__ grp_start,
                                                                               const int32_t* __restrict__ n_groups,
                                                                               const int32_t* __restrict__ ent_dst,
@@ -2541,7 +2541,7 @@ __global__ void __launch_bounds__(256) swiglu_q8_1_entries_kernel(const float* _
     }
 }
 
-// 147-verify (STRATA_GU_SWIGLU=1): native_gu_multi_kernel's 16-lane gate and up rows, SwiGLU and the q8_1 blocks in ONE
+// 147-verify (CORTEX_GU_SWIGLU=1): native_gu_multi_kernel's 16-lane gate and up rows, SwiGLU and the q8_1 blocks in ONE
 // launch.  A block owns 32 consecutive hidden columns r of a group: its 32 sub-warps each compute gate row r and up row
 // r (the same row_dot_80_sub16 calls, entries GRP_NC at a time, the same NVFP4 tail scale), so the product
 // h = silu(gate) * up is formed in the block and warp k quantizes entry k's 32 values with q8_1_store - the q8_1 block
@@ -2560,7 +2560,7 @@ __global__ void __launch_bounds__(512) native_gu_swiglu_kernel(const unsigned lo
 #endif
     const int ng = *n_groups;
     if ((int) blockIdx.y >= ng) return;
-    STRATA_SHARED_ALIGN16_U32(s_grid_buf, IqGridWords<TG, STAGE_GRID>::value);
+    CORTEX_SHARED_ALIGN16_U32(s_grid_buf, IqGridWords<TG, STAGE_GRID>::value);
     const uint32_t* s_grid = stage_iq_grid<TG, STAGE_GRID>(s_grid_buf, threadIdx.x, 512);
     __shared__ float sh[GRP_NC][32];
     const int sw = threadIdx.x >> 4, t = threadIdx.x & 15, warp = threadIdx.x >> 5, lane = threadIdx.x & 31;
@@ -3024,7 +3024,7 @@ __global__ void dequant_gu_kernel(int ty, const void* __restrict__ gate, const v
 // the types dq_dispatch dequantizes
 bool is_iq(int t) {
     return t == 16 || t == 17 || t == 18 || t == 20 || t == 21 || t == 22 || t == 23 || t == 29 || t == 42 || t == 11 ||
-#ifdef STRATA_Q6K_EXPERTS
+#ifdef CORTEX_Q6K_EXPERTS
            t == 12 || t == 13 || t == 14 || t == 7 || t == 6 || t == 2 || t == 3 || t == 8 || t == 40 || t == 144 || t == 145 || t == 146;
 #else
            t == 12 || t == 13 || t == 7 || t == 6 || t == 2 || t == 3 || t == 8 || t == 40 || t == 144 || t == 145 || t == 146;
@@ -3033,25 +3033,25 @@ bool is_iq(int t) {
 // values per block of the types the grouped expert kernels take (0 = none)
 int gu_qk(int t) {
     switch (t) {
-#define STRATA_QK(T) case T: return Fmt<T>::qk;
-        STRATA_GU_FMTS(STRATA_QK)
-#undef STRATA_QK
+#define CORTEX_QK(T) case T: return Fmt<T>::qk;
+        CORTEX_GU_FMTS(CORTEX_QK)
+#undef CORTEX_QK
         default: return 0;
     }
 }
 int d_qk(int t) {
     switch (t) {
-#define STRATA_QK(T) case T: return Fmt<T>::qk;
-        STRATA_D_FMTS(STRATA_QK)
-#undef STRATA_QK
+#define CORTEX_QK(T) case T: return Fmt<T>::qk;
+        CORTEX_D_FMTS(CORTEX_QK)
+#undef CORTEX_QK
         default: return 0;
     }
 }
 bool gu_split(int t) {
     switch (t) {
-#define STRATA_SP(T) case T: return kSplit<T> && !split_off<T>();
-        STRATA_GU_FMTS(STRATA_SP)
-#undef STRATA_SP
+#define CORTEX_SP(T) case T: return kSplit<T> && !split_off<T>();
+        CORTEX_GU_FMTS(CORTEX_SP)
+#undef CORTEX_SP
         default: return false;
     }
 }
@@ -3060,30 +3060,30 @@ bool env_on(const char* name) {
     const char* v = std::getenv(name);
     return v != nullptr && v[0] != '\0' && v[0] != '0';
 }
-// STRATA_OLD_IQ_MMVQ=1 keeps the per-column kernels (bitwise equal to the new ones; kept for A/B timing)
-bool g_old_kernels = env_on("STRATA_OLD_IQ_MMVQ");
-bool g_no_sub16_gu = env_on("STRATA_NO_SUB16_GU");
-// STRATA_IQ_STAGE_GRID=0 disables staging 64-bit i-quant codebook tables into shared memory
+// CORTEX_OLD_IQ_MMVQ=1 keeps the per-column kernels (bitwise equal to the new ones; kept for A/B timing)
+bool g_old_kernels = env_on("CORTEX_OLD_IQ_MMVQ");
+bool g_no_sub16_gu = env_on("CORTEX_NO_SUB16_GU");
+// CORTEX_IQ_STAGE_GRID=0 disables staging 64-bit i-quant codebook tables into shared memory
 bool g_stage_grid = [] {
-    const char* v = std::getenv("STRATA_IQ_STAGE_GRID");
+    const char* v = std::getenv("CORTEX_IQ_STAGE_GRID");
     return v == nullptr || v[0] == '\0' || v[0] != '0';
 }();
 // The single-matrix mmvq (128-thread blocks, one per 4 rows) pays the 2-8 KB staging per block: on the RTX 5070 its
 // IQ2_XS / IQ2_S / IQ1_M calls were 10-20% slower staged at 3-8 columns (iq_multi_parity --bench), while the grouped
-// expert kernels gain.  So mmvq stages only with STRATA_IQ_STAGE_GRID_MMVQ=1 (bitwise the same either way).
+// expert kernels gain.  So mmvq stages only with CORTEX_IQ_STAGE_GRID_MMVQ=1 (bitwise the same either way).
 bool g_stage_grid_mmvq = g_stage_grid && [] {
-    const char* v = std::getenv("STRATA_IQ_STAGE_GRID_MMVQ");
+    const char* v = std::getenv("CORTEX_IQ_STAGE_GRID_MMVQ");
     return v != nullptr && v[0] == '1';
 }();
 // IQ3_XXS's and IQ3_S's codebooks and sign-mask tables staged in shared memory by the grouped expert kernels (the
-// single-matrix mmvq does not): bitwise the same either way.  OPT-IN: STRATA_IQ_STAGE_TABLES=1.  The PR (#1424) made it
+// single-matrix mmvq does not): bitwise the same either way.  OPT-IN: CORTEX_IQ_STAGE_TABLES=1.  The PR (#1424) made it
 // the default on compute capability 6.0 (GP100: no __dp4a, these kernels decode-bound at 70-140 GB/s); on a Tesla P100
 // (IQ3_XXS and IQ3_S packs, 5-6 interleaved pairs each) the decode was 0.97-1.03x of the unstaged kernels, noise, so
 // it is not on by default.  On an RTX 3090 Ti, forced on, the IQ3_S layers took 3-13% longer.
 bool stage_tables_on() {
     if (!g_stage_grid) return false;
     static const bool on = [] {
-        const char* v = std::getenv("STRATA_IQ_STAGE_TABLES");
+        const char* v = std::getenv("CORTEX_IQ_STAGE_TABLES");
         return v && v[0] && v[0] != '0';
     }();
     return on;
@@ -3124,17 +3124,17 @@ void launch_mmvq(const uint8_t* W, size_t rb, const block_q8_1* X, float* y, int
 }
 
 
-// ---------------------------------------------------------------- S26 STRATA_EXPERT_V2=1 (opt-in): IQ3_S gate/up + IQ4_NL down
+// ---------------------------------------------------------------- S26 CORTEX_EXPERT_V2=1 (opt-in): IQ3_S gate/up + IQ4_NL down
 // Bitwise equal to native_gu_multi_kernel / native_down_multi_kernel (S26 harness, real UD-IQ4_XS expert blobs, T 1-3,
 // memcmp of every output): each row's lane sums and warp_sum are the same; a warp interleaves RPW rows (more loads in
 // flight) and reads the chunk's activation rows from LDS and, for IQ3_S, the grid table from LDS (the same values).
 #if defined(__HIPCC__)
-#define STRATA_NT_LOAD(p) __builtin_nontemporal_load(p)
+#define CORTEX_NT_LOAD(p) __builtin_nontemporal_load(p)
 #else   // (opt-in S26 kernels, AMD-tuned: a CUDA build compiles them with plain loads)
-#define STRATA_NT_LOAD(p) (*(p))
+#define CORTEX_NT_LOAD(p) (*(p))
 #endif
 template<bool NT> __device__ __forceinline__ int ld16i(const uint16_t* p) {
-    if constexpr (NT) return (int) STRATA_NT_LOAD(p); else return (int) *p;
+    if constexpr (NT) return (int) CORTEX_NT_LOAD(p); else return (int) *p;
 }
 template<bool NT> __device__ __forceinline__ int ldb2(const void* x, int i32) {
     const uint16_t* x16 = (const uint16_t*) x;
@@ -3143,7 +3143,7 @@ template<bool NT> __device__ __forceinline__ int ldb2(const void* x, int i32) {
     return x32;
 }
 template<bool NT> __device__ __forceinline__ int ld8i(const uint8_t* p) {
-    if constexpr (NT) return (int) STRATA_NT_LOAD(p); else return (int) *p;
+    if constexpr (NT) return (int) CORTEX_NT_LOAD(p); else return (int) *p;
 }
 template<bool NT> __device__ __forceinline__ float ldhalf(const half* p) {
     return __half2float(__ushort_as_half((unsigned short) ld16i<NT>(reinterpret_cast<const uint16_t*>(p))));
@@ -3467,8 +3467,8 @@ void s26_launch_l(const NativeExpertLayout& L, int64_t cap_groups, cudaStream_t 
     s26_down_l_kernel<LX, RD, SL, TS, BD><<<gd, 256, 0, s>>>(grp_ptr, grp_start, n_groups, ent_dst, hq, L, out);
 }
 // ---------------------------------------------------------------- stream B: UD-Q4_K_XL grouped decode experts
-// STRATA_EXPERT_V2K=1: s26_gu_l_kernel / s26_down_l_kernel's structure (4 interleaved rows per warp, the chunk's q8_1
-// activation rows in LDS, SwiGLU + q8_1 fused, optionally STRATA_TSUM's transposed butterfly) for Q4_K / Q5_K gate/up
+// CORTEX_EXPERT_V2K=1: s26_gu_l_kernel / s26_down_l_kernel's structure (4 interleaved rows per warp, the chunk's q8_1
+// activation rows in LDS, SwiGLU + q8_1 fused, optionally CORTEX_TSUM's transposed butterfly) for Q4_K / Q5_K gate/up
 // and Q5_1 / Q8_0 down, which otherwise run native_gu_kernel / native_down_kernel (one entry at a time, the weight
 // words re-read per column).  Each Fmt<TY>::dot is split into S27<TY>::load (everything that depends on the weight) and
 // apply (the activation words and the same integer / float expression), the same impl functions, so a row's lane-strided
@@ -3672,18 +3672,18 @@ int env_int_or(const char* name, int dflt) {
 }
 // read at first use (not at load), so a per-architecture default set at start (nv_defaults.hpp) is seen; native_expert_set_expdec overrides
 int g_expdec = -1;
-int expdec_mode() { if (g_expdec < 0) g_expdec = env_on("STRATA_EXPDEC") ? 1 : 0; return g_expdec; }
-int g_expdec_r = env_int_or("STRATA_EXPDEC_R", 1);          // gate/up rows per lane: 1, 2 (bench: R=1 wins on the 2080 Ti)
-int g_expdec_dr = env_int_or("STRATA_EXPDEC_DR", 4);        // down rows per lane: 1, 2, 4 (Q2_0: R=4 wins on both cards)
-int g_expdec_minb = env_int_or("STRATA_EXPDEC_MINB", STRATA_EXPDEC_MINB);   // gate/up __launch_bounds__ min blocks: 2 (<= 128 regs) or 4 (<= 64)
-int g_expdec_d20 = env_int_or("STRATA_EXPDEC_D20", 0);      // 1: EXPDEC also for the IQ4_NL down (bench: no gain, default kernel)
+int expdec_mode() { if (g_expdec < 0) g_expdec = env_on("CORTEX_EXPDEC") ? 1 : 0; return g_expdec; }
+int g_expdec_r = env_int_or("CORTEX_EXPDEC_R", 1);          // gate/up rows per lane: 1, 2 (bench: R=1 wins on the 2080 Ti)
+int g_expdec_dr = env_int_or("CORTEX_EXPDEC_DR", 4);        // down rows per lane: 1, 2, 4 (Q2_0: R=4 wins on both cards)
+int g_expdec_minb = env_int_or("CORTEX_EXPDEC_MINB", CORTEX_EXPDEC_MINB);   // gate/up __launch_bounds__ min blocks: 2 (<= 128 regs) or 4 (<= 64)
+int g_expdec_d20 = env_int_or("CORTEX_EXPDEC_D20", 0);      // 1: EXPDEC also for the IQ4_NL down (bench: no gain, default kernel)
 // 1: EXPDEC for the down too (Q2_0; IQ4_NL with _D20).  Default 0: in the engine (nsys of a 131k decode) the Q2_0 down
 // with EXPDEC was ~10% slower than the default kernel although the bench alone had it at 0.78, so by default EXPDEC
 // takes the gate/up only (-20/-23% at T >= 2 on an RTX 2080 Ti in the engine).
-int g_expdec_down = env_int_or("STRATA_EXPDEC_DOWN", 0);
-int g_expdec_rb = env_int_or("STRATA_EXPDEC_RB", 0);        // gate/up rows per block (0 = auto)
-int g_expdec_drb = env_int_or("STRATA_EXPDEC_DRB", 0);      // down rows per block (0 = auto)
-int g_expdec_minblk = env_int_or("STRATA_EXPDEC_MINBLK", 800);   // auto: the most rows per block that keep this many blocks
+int g_expdec_down = env_int_or("CORTEX_EXPDEC_DOWN", 0);
+int g_expdec_rb = env_int_or("CORTEX_EXPDEC_RB", 0);        // gate/up rows per block (0 = auto)
+int g_expdec_drb = env_int_or("CORTEX_EXPDEC_DRB", 0);      // down rows per block (0 = auto)
+int g_expdec_minblk = env_int_or("CORTEX_EXPDEC_MINBLK", 800);   // auto: the most rows per block that keep this many blocks
 int expdec_r() { return g_expdec_r == 2 ? 2 : 1; }
 int expdec_dr() { return g_expdec_dr == 1 || g_expdec_dr == 2 ? g_expdec_dr : 4; }
 
@@ -3730,7 +3730,7 @@ void expdec_gu_t(int64_t gy, int64_t cap_groups, cudaStream_t s, const unsigned 
         else expdec_gu_r<TG, 1, 2>(gy, cap_groups, s, grp_ptr, grp_start, n_groups, ent_tok, X, L, gate, up);
     }
 }
-// One line on stderr per (role, format, taken or not), the first time STRATA_EXPDEC=1 meets it: the proof in the
+// One line on stderr per (role, format, taken or not), the first time CORTEX_EXPDEC=1 meets it: the proof in the
 // engine's log that the EXPDEC kernels are the ones launched (or captured into the window's graph), with the
 // choices in force.
 void expdec_note(const NativeExpertLayout& L, bool gu, bool taken, cudaStream_t s, int64_t gy, int64_t cap_groups) {
@@ -3743,19 +3743,19 @@ void expdec_note(const NativeExpertLayout& L, bool gu, bool taken, cudaStream_t 
     int dev = -1;
     cudaGetDevice(&dev);
     if (!taken) {
-        std::fprintf(stderr, "strata expdec: CUDA%d %s type %d (n_embd %lld, n_ff %lld) not covered: the default kernel runs\n", dev,
+        std::fprintf(stderr, "cortex expdec: CUDA%d %s type %d (n_embd %lld, n_ff %lld) not covered: the default kernel runs\n", dev,
                      gu ? "gate/up" : "down", ty, (long long) L.n_embd, (long long) L.n_ff);
         return;
     }
     if (gu) {
         const int R = expdec_r(), rb = expdec_rows_per_block(2 * (int) L.n_ff, 16 * R, cap_groups, g_expdec_rb);
-        std::fprintf(stderr, "strata expdec: CUDA%d gate/up type %d: expdec_gu_kernel R %d MINB %d, %d rows per block, grid %d x %lld "
+        std::fprintf(stderr, "cortex expdec: CUDA%d gate/up type %d: expdec_gu_kernel R %d MINB %d, %d rows per block, grid %d x %lld "
                              "(cap %lld groups)%s\n", dev, ty, R, g_expdec_minb >= 4 ? 4 : 2, rb, (2 * (int) L.n_ff + rb - 1) / rb,
                      (long long) gy, (long long) cap_groups, cs != cudaStreamCaptureStatusNone ? ", captured into a graph" : "");
     } else {
         const int R = expdec_dr(), lanes = ty == 20 ? 8 : 16;
         const int rb = expdec_rows_per_block((int) L.n_embd, (256 / lanes) * R, cap_groups, g_expdec_drb);
-        std::fprintf(stderr, "strata expdec: CUDA%d down type %d: expdec_down_kernel R %d, %d rows per block, grid %d x %lld "
+        std::fprintf(stderr, "cortex expdec: CUDA%d down type %d: expdec_down_kernel R %d, %d rows per block, grid %d x %lld "
                              "(cap %lld groups)%s\n", dev, ty, R, rb, ((int) L.n_embd + rb - 1) / rb, (long long) gy,
                      (long long) cap_groups, cs != cudaStreamCaptureStatusNone ? ", captured into a graph" : "");
     }
@@ -3811,7 +3811,7 @@ void launch_gu(dim3 grid, cudaStream_t s, const unsigned long long* grp_ptr, con
                float* gate, float* up) {
     // the sub-16 rows (row_dot_80_sub16) assume 80 dots per row: (n_embd / qk) * ipb == 80. The APR trellis types
     // (qk 128, ipb 8: 160 dots at n_embd 2560) take the full-warp multi kernel, as before the sub-16 kernels.
-    const bool g_no_sub16_gu = ::strata::kernels::g_no_sub16_gu || (L.n_embd / Fmt<TG>::qk) * Fmt<TG>::ipb != 80;
+    const bool g_no_sub16_gu = ::cortex::kernels::g_no_sub16_gu || (L.n_embd / Fmt<TG>::qk) * Fmt<TG>::ipb != 80;
     if constexpr (!kSplit<TG>) native_gu_kernel<TG><<<grid, 256, 0, s>>>(grp_ptr, grp_start, n_groups, ent_tok, X, L, gate, up);
     else if (g_old_kernels || split_off<TG>()) native_gu_kernel<TG><<<grid, 256, 0, s>>>(grp_ptr, grp_start, n_groups, ent_tok, X, L, gate, up);
     else if constexpr (kStageIqGrid<TG>) {
@@ -3828,12 +3828,12 @@ void launch_gu(dim3 grid, cudaStream_t s, const unsigned long long* grp_ptr, con
     }
 }
 
-// 147-verify: STRATA_GU_SWIGLU=1 runs gate/up, SwiGLU and the q8_1 blocks as native_gu_swiglu_kernel, where launch_gu would
+// 147-verify: CORTEX_GU_SWIGLU=1 runs gate/up, SwiGLU and the q8_1 blocks as native_gu_swiglu_kernel, where launch_gu would
 // run native_gu_multi_kernel's 16-lane path (n_embd 2560, the split formats); bitwise the same hq.  Unset: on for a compute
 // capability 12.0 card (sm120_series.hpp; RTX PRO 5000, 6 pairs: decode +0.6% story, +0.9% code, +0.5% 8K, 6/6 each, the
-// same tokens), off elsewhere; STRATA_GU_SWIGLU=0 turns it off.
+// same tokens), off elsewhere; CORTEX_GU_SWIGLU=0 turns it off.
 bool gu_swiglu_on() {
-    static const int env = [] { const char* v = std::getenv("STRATA_GU_SWIGLU"); return v != nullptr ? (std::atoi(v) != 0 ? 1 : 0) : -1; }();
+    static const int env = [] { const char* v = std::getenv("CORTEX_GU_SWIGLU"); return v != nullptr ? (std::atoi(v) != 0 ? 1 : 0) : -1; }();
     if (env >= 0) return env != 0;
 #if defined(__HIPCC__)
     return false;
@@ -3846,7 +3846,7 @@ bool gu_swiglu_on() {
         const bool ok = cudaDeviceGetAttribute(&maj, cudaDevAttrComputeCapabilityMajor, dev) == cudaSuccess &&
                         cudaDeviceGetAttribute(&mnr, cudaDevAttrComputeCapabilityMinor, dev) == cudaSuccess;
         if (!ok) cudaGetLastError();
-        per_dev[dev] = ok && strata::sm120_default(maj, mnr) ? 2 : 1;
+        per_dev[dev] = ok && cortex::sm120_default(maj, mnr) ? 2 : 1;
     }
     return per_dev[dev] == 2;
 #endif
@@ -3937,9 +3937,9 @@ void iq_mmvq(int t, const void* w, const void* x_q8_1, float* y, int n_in, int n
     const auto* W = (const uint8_t*) w;
     const auto* X = (const block_q8_1*) x_q8_1;
     switch (t) {
-#define STRATA_MMVQ(T) case T: launch_mmvq<T>(W, rb, X, y, n_in, n_out, ncols, s); break;
-        STRATA_MMVQ_FMTS(STRATA_MMVQ)
-#undef STRATA_MMVQ
+#define CORTEX_MMVQ(T) case T: launch_mmvq<T>(W, rb, X, y, n_in, n_out, ncols, s); break;
+        CORTEX_MMVQ_FMTS(CORTEX_MMVQ)
+#undef CORTEX_MMVQ
         default: std::fprintf(stderr, "iq_mmvq: type %d is not supported\n", t); std::exit(1);
     }
     check("iq_mmvq");
@@ -4076,14 +4076,14 @@ size_t native_expert_scratch_bytes(int64_t cap, int64_t n_ff) {
 }
 
 
-// The AMD layouts below (STRATA_EXP_MODE) also build for CUDA: Volta takes mode 8 by default (exp_mode), every
+// The AMD layouts below (CORTEX_EXP_MODE) also build for CUDA: Volta takes mode 8 by default (exp_mode), every
 // other CUDA card keeps mode 0, the CUDA layout above.
-#if defined(STRATA_HIP_GFX906) || !defined(__HIPCC__)
-#define STRATA_EXP_LAYOUTS 1
+#if defined(CORTEX_HIP_GFX906) || !defined(__HIPCC__)
+#define CORTEX_EXP_LAYOUTS 1
 #else
-#define STRATA_EXP_LAYOUTS 0
+#define CORTEX_EXP_LAYOUTS 0
 #endif
-#if defined(STRATA_HIP_GFX906)
+#if defined(CORTEX_HIP_GFX906)
 constexpr int kExpModeDefault = 7;
 constexpr int kExpFallback = 2;   // modes 5-8 on a format without an LDS kernel: R2
 constexpr bool kExpLds16 = false; // IQ2_XXS gate/up: R2 as measured on gfx906
@@ -4092,8 +4092,8 @@ constexpr int kExpModeDefault = 0;
 constexpr int kExpFallback = 0;   // ... the CUDA layout (V100, IQ2_XXS gate/up: R2 183 us vs 113)
 constexpr bool kExpLds16 = true;  // IQ2_XXS gate/up in LDS too
 #endif
-#if STRATA_EXP_LAYOUTS
-// ---- AMD layouts for the grouped native experts (STRATA_EXP_MODE; 0 = the CUDA one above).
+#if CORTEX_EXP_LAYOUTS
+// ---- AMD layouts for the grouped native experts (CORTEX_EXP_MODE; 0 = the CUDA one above).
 // 1 (W64): a row per 64-lane wavefront - 4x the wavefronts, ~1-2 calls per lane, a 64-lane butterfly.
 // 2 (R2):  a 32-lane logical warp computes TWO rows in one loop - two independent load chains in flight.
 // Either way a (row, entry) sum does not depend on the window size.
@@ -4268,7 +4268,7 @@ template<> struct GridOf<18> { using T = uint32_t; static constexpr int N = 256;
 template<> struct GridOf<21> { using T = uint32_t; static constexpr int N = 512; __device__ static const T* src() { return iq3s_grid; } };
 template<> struct GridOf<23> { using T = uint32_t; static constexpr int N = 1; __device__ static const T* src() { return iq3s_grid; } };   // IQ4_XS: no grid
 
-// SG = 1 (mode 6): the signs without byte-SIMD ops, which gfx906 lacks (strata_vcmpne4 / strata_vsub4 unpack to
+// SG = 1 (mode 6): the signs without byte-SIMD ops, which gfx906 lacks (cortex_vcmpne4 / cortex_vsub4 unpack to
 // ~12 word ops each).  m = the sign nibble as 0x00/0xff bytes; (g ^ m) is g or -g-1 per byte, so
 // dp4a(g ^ m, u) - dp4a(m, u) = sum(s g u) exactly - the same integers, the same floats.
 __device__ __forceinline__ int nib_mask(uint32_t n) {
@@ -4666,12 +4666,12 @@ __global__ void __launch_bounds__(256) native_gu_fused_kernel(const unsigned lon
     }
 }
 
-int g_exp_mode = -1;   // native_expert_set_mode (the bench); -1 = STRATA_EXP_MODE, else the card's default
+int g_exp_mode = -1;   // native_expert_set_mode (the bench); -1 = CORTEX_EXP_MODE, else the card's default
 int exp_mode() {
-    static const int m = [] { const char* v = std::getenv("STRATA_EXP_MODE"); return v ? std::atoi(v) : -1; }();
+    static const int m = [] { const char* v = std::getenv("CORTEX_EXP_MODE"); return v ? std::atoi(v) : -1; }();
     if (g_exp_mode >= 0) return g_exp_mode;
     if (m >= 0) return m;
-#if defined(STRATA_HIP_GFX906)
+#if defined(CORTEX_HIP_GFX906)
     return kExpModeDefault;
 #else
     // Volta (sm_70): mode 8, the grid and the group's activations in shared memory with SwiGLU + q8_1 fused
@@ -4683,21 +4683,21 @@ int exp_mode() {
         int major = 0, minor = 0;
         cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, dev);
         cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, dev);
-        const char* sm70 = std::getenv("STRATA_SM70_TABLE");   // PR 1401: Volta's mode 8 is opt-in until confirmed on a V100
+        const char* sm70 = std::getenv("CORTEX_SM70_TABLE");   // PR 1401: Volta's mode 8 is opt-in until confirmed on a V100
         // Pascal GP100 (sm_60): mode 8 too, on by default (Tesla P100: bitwise equal on the model's layers, the down
-        // projection 116 -> 94 us and IQ3_S gate/up 360 -> 229 us in a 28-group VRAM call); STRATA_SM60_TABLE=0 keeps the CUDA layout
-        const char* sm60 = std::getenv("STRATA_SM60_TABLE");
+        // projection 116 -> 94 us and IQ3_S gate/up 360 -> 229 us in a 28-group VRAM call); CORTEX_SM60_TABLE=0 keeps the CUDA layout
+        const char* sm60 = std::getenv("CORTEX_SM60_TABLE");
         const bool p100 = major == 6 && minor == 0 && (sm60 == nullptr || std::atoi(sm60) != 0);
         // Pascal with dp4a (sm_61): mode 8 as well, on by default (Tesla P40, native_expert_bench on the IQ3_S pack's
         // layers, an 18-group call at 2 tokens: IQ3_S 390 -> 255 us, IQ3_XXS 345 -> 252 us, IQ2_S 290 -> 238 us,
-        // IQ4_XS 328 -> 261 us, bitwise equal); STRATA_SM61_TABLE=0 keeps the CUDA layout
-        const char* sm61 = std::getenv("STRATA_SM61_TABLE");
+        // IQ4_XS 328 -> 261 us, bitwise equal); CORTEX_SM61_TABLE=0 keeps the CUDA layout
+        const char* sm61 = std::getenv("CORTEX_SM61_TABLE");
         const bool p40 = major == 6 && minor == 1 && (sm61 == nullptr || std::atoi(sm61) != 0);
         // Turing (sm_75): mode 4 (native_expert_bench, real Q2_0 rows of Flash-Next, bitwise equal to mode 0 on an RTX
         // 2080 Ti: 10 experts x 1 entry 47.3 -> 41.4 us, 30 x 1 120.2 -> 100.2 us); the down projection keeps the CUDA
-        // layout in windows of 4+ tokens (sm75_down_em below).  STRATA_SM75_EXP=0 keeps the CUDA layout.
-        // (off unless STRATA_SM75_PERF=1; STRATA_SM75_EXP=0 / 1 forces it off / on)
-        const bool turing = strata::sm75_switch("STRATA_SM75_EXP", major, minor);
+        // layout in windows of 4+ tokens (sm75_down_em below).  CORTEX_SM75_EXP=0 keeps the CUDA layout.
+        // (off unless CORTEX_SM75_PERF=1; CORTEX_SM75_EXP=0 / 1 forces it off / on)
+        const bool turing = cortex::sm75_switch("CORTEX_SM75_EXP", major, minor);
         per_dev[dev] = 1 + ((major == 7 && minor == 0 && sm70 != nullptr && std::atoi(sm70) != 0) || p100 || p40 ? 8 : turing ? 4 : kExpModeDefault);
     }
     return per_dev[dev] - 1;
@@ -4705,23 +4705,23 @@ int exp_mode() {
 }
 #endif
 int g_exp_phase = 0;   // the bench: 0 all, 1 gate/up + swiglu + quantize only, 2 down only
-#if STRATA_EXP_LAYOUTS && !defined(__HIPCC__)
+#if CORTEX_EXP_LAYOUTS && !defined(__HIPCC__)
 // The down projection's mode on Turing's default: mode 4 is slower than the CUDA layout once groups have 3+ entries
 // (12 x 3: 36.5 -> 40.8 us, 16 x 4: 56.9 -> 68.9) - windows of 4+ tokens (cap_groups > 30) keep mode 0 there.
 int sm75_down_em(int em0, int64_t cap_groups) {
-    if (em0 != 4 || g_exp_mode >= 0 || std::getenv("STRATA_EXP_MODE") != nullptr || cap_groups <= 30) return em0;
+    if (em0 != 4 || g_exp_mode >= 0 || std::getenv("CORTEX_EXP_MODE") != nullptr || cap_groups <= 30) return em0;
     int dev = 0, major = 0, minor = 0;
     if (cudaGetDevice(&dev) != cudaSuccess) return em0;
     cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, dev);
     cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, dev);
-    return strata::is_sm75(major, minor) ? 0 : em0;
+    return cortex::is_sm75(major, minor) ? 0 : em0;
 }
 #else
 int sm75_down_em(int em0, int64_t) { return em0; }
 #endif
 
 void native_expert_set_mode(int mode, int phase) {
-#if STRATA_EXP_LAYOUTS
+#if CORTEX_EXP_LAYOUTS
     g_exp_mode = mode;
 #else
     (void) mode;
@@ -4730,7 +4730,7 @@ void native_expert_set_mode(int mode, int phase) {
 }
 
 namespace {
-bool g_grouped_v1 = env_on("STRATA_GROUPED_V1");
+bool g_grouped_v1 = env_on("CORTEX_GROUPED_V1");
 }  // namespace
 
 void native_grouped_set_v1(bool v1) { g_grouped_v1 = v1; }
@@ -4778,10 +4778,10 @@ void native_expert_grouped(const NativeExpertLayout& L, const unsigned long long
     float* h = (float*) ((uint8_t*) scratch + 2 * fa);
     block_q8_1* hq = (block_q8_1*) ((uint8_t*) scratch + 3 * fa);
     const auto* X = (const block_q8_1*) x_q8_1;
-    static const bool v2 = [] { const char* v = std::getenv("STRATA_EXPERT_V2"); return v && v[0] == '1'; }();
+    static const bool v2 = [] { const char* v = std::getenv("CORTEX_EXPERT_V2"); return v && v[0] == '1'; }();
     if (v2 && L.gu_type == 21 && L.d_type == 20 && L.n_embd == 2560 && L.n_ff == 640) {   // S26: see s26_gu_l_kernel
-        // S26 STRATA_TSUM=1: the sums as one transposed butterfly per warp (s26_tsum.cuh; bitwise the same values)
-        static const bool ts = [] { const char* v = std::getenv("STRATA_TSUM"); return v && v[0] == '1'; }();
+        // S26 CORTEX_TSUM=1: the sums as one transposed butterfly per warp (s26_tsum.cuh; bitwise the same values)
+        static const bool ts = [] { const char* v = std::getenv("CORTEX_TSUM"); return v && v[0] == '1'; }();
         // (+ down rows' items spread evenly over the lanes, one load group: bitwise, harness 1.09-1.12x vs 1.03-1.06x;
         // the same for gate / up was 0.6-0.8x)
         if (ts) s26_launch_l<true, true, 4, 4, true, true, true, 1>(L, cap_groups, s, grp_ptr, grp_start, n_groups, ent_dst, ent_tok, X, gate, up, h,
@@ -4793,16 +4793,16 @@ void native_expert_grouped(const NativeExpertLayout& L, const unsigned long long
     }
     // stream B: UD-Q4_K_XL's Q4_K / Q5_K gate/up and Q5_1 / Q8_0 down (see S27 above)
     // MODEL-UPDATE: on by default on gfx12 (every output the old kernels' bits; R9700, UD-Q4_K_XL decode, 5 interleaved
-    // pairs: story +1.2% 5/5, code +0.8% 5/5, after 6K +0.2% 4/5); STRATA_EXPERT_V2K=0 turns it off, =1 turns it on
+    // pairs: story +1.2% 5/5, code +0.8% 5/5, after 6K +0.2% 4/5); CORTEX_EXPERT_V2K=0 turns it off, =1 turns it on
     // elsewhere (not measured on other cards)
     static const bool v2k = [] {
-        const char* v = std::getenv("STRATA_EXPERT_V2K");
+        const char* v = std::getenv("CORTEX_EXPERT_V2K");
         if (v != nullptr && v[0] != '\0') return v[0] == '1';
-#if defined(__HIPCC__) && !defined(STRATA_HIP_GFX906)
+#if defined(__HIPCC__) && !defined(CORTEX_HIP_GFX906)
         int dev = 0;
         cudaDeviceProp p;
         const bool g12 = cudaGetDevice(&dev) == cudaSuccess && cudaGetDeviceProperties(&p, dev) == cudaSuccess &&
-                         strata::kernels::gfx_arch_is_gfx12(p.gcnArchName);
+                         cortex::kernels::gfx_arch_is_gfx12(p.gcnArchName);
         (void) cudaGetLastError();
         return g12;
 #else
@@ -4813,9 +4813,9 @@ void native_expert_grouped(const NativeExpertLayout& L, const unsigned long long
     const bool q36geo = L.n_embd == 2048 && L.n_ff == 512 && L.d_type == 13;
     if (v2k && (L.gu_type == 12 || L.gu_type == 13) &&
         (((L.d_type == 7 || L.d_type == 8) && L.n_embd == 2560 && L.n_ff == 640) || q36geo)) {
-        static const bool ts = [] { const char* v = std::getenv("STRATA_TSUM"); return v && v[0] == '1'; }();
+        static const bool ts = [] { const char* v = std::getenv("CORTEX_TSUM"); return v && v[0] == '1'; }();
         const long long nh = (long long) cap_entries * L.n_ff;
-#define STRATA_V2K(G, D) s27_launch_ts<G, D>(ts, L, cap_groups, s, grp_ptr, grp_start, n_groups, ent_dst, ent_tok, X, gate, up, h, hq, out, nh)
+#define CORTEX_V2K(G, D) s27_launch_ts<G, D>(ts, L, cap_groups, s, grp_ptr, grp_start, n_groups, ent_dst, ent_tok, X, gate, up, h, hq, out, nh)
         if (q36geo) {
             // the gate/up of the V2K path (4 rows per warp, the chunk's activations in LDS) + SwiGLU/q8_1, and the old down kernel:
             // for n_ff 512 the new down kernel measured slower (15.1 vs 13.4 us per layer on gfx1201, R9700)
@@ -4826,11 +4826,11 @@ void native_expert_grouped(const NativeExpertLayout& L, const unsigned long long
             const dim3 gd((unsigned) ((L.n_embd + 7) / 8), (unsigned) cap_groups);
             launch_down<13>(gd, s, grp_ptr, grp_start, n_groups, ent_dst, hq, L, out);
         }
-        else if (L.gu_type == 12 && L.d_type == 7) STRATA_V2K(12, 7);
-        else if (L.gu_type == 12) STRATA_V2K(12, 8);
-        else if (L.d_type == 7) STRATA_V2K(13, 7);
-        else STRATA_V2K(13, 8);
-#undef STRATA_V2K
+        else if (L.gu_type == 12 && L.d_type == 7) CORTEX_V2K(12, 7);
+        else if (L.gu_type == 12) CORTEX_V2K(12, 8);
+        else if (L.d_type == 7) CORTEX_V2K(13, 7);
+        else CORTEX_V2K(13, 8);
+#undef CORTEX_V2K
         check("native_expert_grouped (v2k)");
         return;
     }
@@ -4839,8 +4839,8 @@ void native_expert_grouped(const NativeExpertLayout& L, const unsigned long long
     const int gu_rows = (!g_old_kernels && !g_no_sub16_gu && L.n_embd == 2560 && gu_split(L.gu_type) &&
                          gu_qk(L.gu_type) != 128 && L.gu_type != 12 && L.gu_type != 13) ? 16 : GU_ROWS;   // qk 128 (APR trellis): no sub-16 rows, see launch_gu
     const dim3 ggu((unsigned) ((2 * L.n_ff + gu_rows - 1) / gu_rows), (unsigned) gy);
-#if STRATA_EXP_LAYOUTS
-#if defined(STRATA_HIP_GFX906)
+#if CORTEX_EXP_LAYOUTS
+#if defined(CORTEX_HIP_GFX906)
     const int em0 = exp_mode();
 #else
     // CUDA: the AMD layouts launch a block row per possible group, so a call that strides (a verify window's PCIe
@@ -4848,7 +4848,7 @@ void native_expert_grouped(const NativeExpertLayout& L, const unsigned long long
     const int em0 = (grid_groups > 0 && grid_groups < cap_groups) ? 0 : exp_mode();
 #endif
 #endif
-#if STRATA_EXP_LAYOUTS
+#if CORTEX_EXP_LAYOUTS
     const bool fused_gu = em0 == 8 && ((kExpLds16 && L.gu_type == 16) || L.gu_type == 18 || L.gu_type == 21 || L.gu_type == 22 || L.gu_type == 23) &&
                           L.n_ff % 32 == 0;
     if (fused_gu && g_exp_phase != 2) {
@@ -4864,28 +4864,28 @@ void native_expert_grouped(const NativeExpertLayout& L, const unsigned long long
         check("native_expert_grouped/gu fused");
     }
 #endif
-    // 147-verify STRATA_GU_SWIGLU=1: gate/up + SwiGLU + q8_1 in one launch where the CUDA layout's 16-lane kernel would run
+    // 147-verify CORTEX_GU_SWIGLU=1: gate/up + SwiGLU + q8_1 in one launch where the CUDA layout's 16-lane kernel would run
     bool gs_done = false;
-#if STRATA_EXP_LAYOUTS
+#if CORTEX_EXP_LAYOUTS
     const bool gs_layout = !fused_gu && em0 == 0;
 #else
     const bool gs_layout = true;
 #endif
     if (gs_layout && g_exp_phase == 0 && !v1 && gu_swiglu_on() && !(expdec_mode() && !g_old_kernels && expdec_gu_ok(L))) {
         switch (L.gu_type) {
-#define STRATA_GS(T) case T: gs_done = launch_gu_swiglu<T>(L, gy, s, grp_ptr, grp_start, n_groups, ent_tok, X, hq); break;
-            STRATA_GU_FMTS(STRATA_GS)
-#undef STRATA_GS
+#define CORTEX_GS(T) case T: gs_done = launch_gu_swiglu<T>(L, gy, s, grp_ptr, grp_start, n_groups, ent_tok, X, hq); break;
+            CORTEX_GU_FMTS(CORTEX_GS)
+#undef CORTEX_GS
             default: break;
         }
         if (gs_done) check("native_expert_grouped/gu+swiglu");
     }
-#if STRATA_EXP_LAYOUTS
+#if CORTEX_EXP_LAYOUTS
     if (g_exp_phase != 2 && !fused_gu && !gs_done) {
 #else
     if (g_exp_phase != 2 && !gs_done) {
 #endif
-#if STRATA_EXP_LAYOUTS
+#if CORTEX_EXP_LAYOUTS
     const bool lds_gu = (em0 == 5 || em0 == 6 || em0 == 7 || em0 == 8) && ((kExpLds16 && L.gu_type == 16) || L.gu_type == 18 || L.gu_type == 21 || L.gu_type == 22 || L.gu_type == 23);
     if (lds_gu) {
         const dim3 gl((unsigned) ((2 * L.n_ff + LDS_RB - 1) / LDS_RB), (unsigned) cap_groups);
@@ -4900,7 +4900,7 @@ void native_expert_grouped(const NativeExpertLayout& L, const unsigned long long
     } else {
     const int em = em0 >= 5 ? kExpFallback : em0;
     const dim3 ggu_amd((unsigned) ((2 * L.n_ff + (em == 1 ? 3 : em == 4 ? 31 : 15)) / (em == 1 ? 4 : em == 4 ? 32 : 16)), (unsigned) cap_groups);
-#define STRATA_GU_AMD(T) \
+#define CORTEX_GU_AMD(T) \
     case T: if (em == 1) native_gu_amd_kernel<T, 1><<<ggu_amd, 256, 0, s>>>(grp_ptr, grp_start, n_groups, ent_tok, X, L, gate, up); \
             else if (em == 4) native_gu_amd_kernel<T, 4><<<ggu_amd, 256, 0, s>>>(grp_ptr, grp_start, n_groups, ent_tok, X, L, gate, up); \
             else native_gu_amd_kernel<T, 2><<<ggu_amd, 256, 0, s>>>(grp_ptr, grp_start, n_groups, ent_tok, X, L, gate, up); break;
@@ -4909,28 +4909,28 @@ void native_expert_grouped(const NativeExpertLayout& L, const unsigned long long
                         L.gu_type == 23 || L.gu_type == 29 || L.gu_type == 42;
     if ((em == 1 || em == 2 || em == 4) && amd_gu) {
         switch (L.gu_type) {
-            STRATA_GU_AMD(16) STRATA_GU_AMD(17) STRATA_GU_AMD(18) STRATA_GU_AMD(21) STRATA_GU_AMD(22) STRATA_GU_AMD(23)
-            STRATA_GU_AMD(29) STRATA_GU_AMD(42)
+            CORTEX_GU_AMD(16) CORTEX_GU_AMD(17) CORTEX_GU_AMD(18) CORTEX_GU_AMD(21) CORTEX_GU_AMD(22) CORTEX_GU_AMD(23)
+            CORTEX_GU_AMD(29) CORTEX_GU_AMD(42)
         }
     } else
-#undef STRATA_GU_AMD
+#undef CORTEX_GU_AMD
 #endif
-    if (!expdec_gu(L, gy, cap_groups, s, grp_ptr, grp_start, n_groups, ent_tok, X, gate, up))   // STRATA_EXPDEC=1
+    if (!expdec_gu(L, gy, cap_groups, s, grp_ptr, grp_start, n_groups, ent_tok, X, gate, up))   // CORTEX_EXPDEC=1
     switch (L.gu_type) {
-#define STRATA_GU(T) case T: launch_gu<T>(ggu, s, grp_ptr, grp_start, n_groups, ent_tok, X, L, gate, up); break;
-        STRATA_GU_FMTS(STRATA_GU)
-#undef STRATA_GU
+#define CORTEX_GU(T) case T: launch_gu<T>(ggu, s, grp_ptr, grp_start, n_groups, ent_tok, X, L, gate, up); break;
+        CORTEX_GU_FMTS(CORTEX_GU)
+#undef CORTEX_GU
         default: std::fprintf(stderr, "native_expert_grouped: gate/up type %d\n", L.gu_type); std::exit(1);
     }
-#if STRATA_EXP_LAYOUTS
+#if CORTEX_EXP_LAYOUTS
     }
 #endif
     check("native_expert_grouped/gu");
     const long long nh = (long long) cap_entries * L.n_ff;
-#if defined(STRATA_HIP_GFX906)
+#if defined(CORTEX_HIP_GFX906)
     // gfx906: the separate SwiGLU and q8_1 passes stay the default (the A/B baseline); the RDNA one-pass
-    // kernel (bitwise the same) with STRATA_HIP_SWIGLU_FUSED=1
-    static const bool sw_fused = env_on("STRATA_HIP_SWIGLU_FUSED");
+    // kernel (bitwise the same) with CORTEX_HIP_SWIGLU_FUSED=1
+    static const bool sw_fused = env_on("CORTEX_HIP_SWIGLU_FUSED");
     const bool sw_v1 = v1 || !sw_fused;
 #else
     const bool sw_v1 = v1;
@@ -4950,7 +4950,7 @@ void native_expert_grouped(const NativeExpertLayout& L, const unsigned long long
     if (g_exp_phase == 1) return;
     const int d_rows = (!g_old_kernels && !g_no_sub16_gu && L.n_ff == 640) ? (L.d_type == 20 || L.d_type == 40 ? 32 : (L.d_type == 42 ? 16 : 8)) : 8;
     const dim3 gd((unsigned) ((L.n_embd + d_rows - 1) / d_rows), (unsigned) gy);
-#if STRATA_EXP_LAYOUTS
+#if CORTEX_EXP_LAYOUTS
     const int em0d = sm75_down_em(em0, cap_groups);
     if ((em0d == 7 || em0d == 8) && (L.d_type == 20 || L.d_type == 42)) {
         const dim3 gl((unsigned) ((L.n_embd + LDS_RB - 1) / LDS_RB), (unsigned) cap_groups);
@@ -4962,7 +4962,7 @@ void native_expert_grouped(const NativeExpertLayout& L, const unsigned long long
     }
     const int em = em0d >= 5 ? kExpFallback : em0d;
     const dim3 gd_amd((unsigned) ((L.n_embd + (em == 1 ? 3 : em == 4 ? 31 : 15)) / (em == 1 ? 4 : em == 4 ? 32 : 16)), (unsigned) cap_groups);
-#define STRATA_D_AMD(T) \
+#define CORTEX_D_AMD(T) \
     case T: if (em == 1) native_down_amd_kernel<T, 1><<<gd_amd, 256, 0, s>>>(grp_ptr, grp_start, n_groups, ent_dst, hq, L, out); \
             else if (em == 4) native_down_amd_kernel<T, 4><<<gd_amd, 256, 0, s>>>(grp_ptr, grp_start, n_groups, ent_dst, hq, L, out); \
             else native_down_amd_kernel<T, 2><<<gd_amd, 256, 0, s>>>(grp_ptr, grp_start, n_groups, ent_dst, hq, L, out); break;
@@ -4970,29 +4970,29 @@ void native_expert_grouped(const NativeExpertLayout& L, const unsigned long long
     // CUDA layout below
     if ((em == 1 || em == 2 || em == 4) && (L.d_type == 20 || L.d_type == 23 || L.d_type == 42)) {
         switch (L.d_type) {
-            STRATA_D_AMD(20) STRATA_D_AMD(23) STRATA_D_AMD(42)
+            CORTEX_D_AMD(20) CORTEX_D_AMD(23) CORTEX_D_AMD(42)
         }
     } else
-#undef STRATA_D_AMD
+#undef CORTEX_D_AMD
 #endif
-    if (!expdec_down(L, gy, cap_groups, s, grp_ptr, grp_start, n_groups, ent_dst, hq, out))   // STRATA_EXPDEC=1
+    if (!expdec_down(L, gy, cap_groups, s, grp_ptr, grp_start, n_groups, ent_dst, hq, out))   // CORTEX_EXPDEC=1
     switch (L.d_type) {
-#define STRATA_DOWN(T) case T: launch_down<T>(gd, s, grp_ptr, grp_start, n_groups, ent_dst, hq, L, out); break;
-        STRATA_D_FMTS(STRATA_DOWN)
-#undef STRATA_DOWN
+#define CORTEX_DOWN(T) case T: launch_down<T>(gd, s, grp_ptr, grp_start, n_groups, ent_dst, hq, L, out); break;
+        CORTEX_D_FMTS(CORTEX_DOWN)
+#undef CORTEX_DOWN
         default: std::fprintf(stderr, "native_expert_grouped: down type %d\n", L.d_type); std::exit(1);
     }
     check("native_expert_grouped/down");
 }
 
-}  // namespace strata::kernels
+}  // namespace cortex::kernels
 
-// ---- Volta prompt experts (STRATA_PF_WMMA): a group's experts as one launch of FP16 tensor-core tiles, the weights
+// ---- Volta prompt experts (CORTEX_PF_WMMA): a group's experts as one launch of FP16 tensor-core tiles, the weights
 // dequantized into shared memory by dq_dispatch (the FP16 path's own formulas), the activations FP16, FP32 sums.
 // Replaces MMQ's dp4a products on sm_70, and the FP16 path's dequantize-to-global + one cuBLAS call per expert.
 #if !defined(__HIPCC__)
 #include <mma.h>
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 constexpr int WG_BM = 64, WG_BN = 128, WG_THREADS = 256, WG_XK = 128, WG_MT = 4;
 // A block: BN = 128 weight rows of one expert x up to WG_MT * BM = 256 of its token rows (blockIdx.y walks an expert's
@@ -5131,7 +5131,7 @@ __global__ void __launch_bounds__(WG_THREADS) gemm_iq_f16_grouped_kernel(int ty,
 #endif
 }
 
-// ---- STRATA_PF_WMMA2=1 (opt-in): IQ2_S gate/up and IQ4_NL down, tiled like a Volta MoE kernel in the
+// ---- CORTEX_PF_WMMA2=1 (opt-in): IQ2_S gate/up and IQ4_NL down, tiled like a Volta MoE kernel in the
 // PR author's own unpublished llama.cpp patches.
 // A block: W2_RB = 128 weight rows of one expert x W2_CB = 64 of its sorted rows, K stages of W2_KT = 64. Thread t dequantizes
 // row t % 128, 32-value sub-block t / 128 of each K stage from the raw stage in shared memory (one IQ2_S super-block or four IQ4_NL
@@ -5331,7 +5331,7 @@ __global__ void __launch_bounds__(W2_NT, 2) gemm_iq_f16_w2_kernel(const uint8_t*
 }
 
 bool w2_on() {
-    static const bool v = [] { const char* e = std::getenv("STRATA_PF_WMMA2"); return e && e[0] == '1'; }();
+    static const bool v = [] { const char* e = std::getenv("CORTEX_PF_WMMA2"); return e && e[0] == '1'; }();
     return v;
 }
 }  // namespace
@@ -5345,7 +5345,7 @@ bool gemm_iq_f16_grouped(int ty, const void* W, size_t expert_bytes, int n_out, 
             major < 7)
             return false;
     }
-    // STRATA_PF_WMMA2=1 (opt-in): IQ2_S gate/up and IQ4_NL down through gemm_iq_f16_w2_kernel (above)
+    // CORTEX_PF_WMMA2=1 (opt-in): IQ2_S gate/up and IQ4_NL down through gemm_iq_f16_w2_kernel (above)
     if (w2_on() && n_out % W2_RB == 0 && ldx % 8 == 0 && ldy % 8 == 0 && (uintptr_t) X % 16 == 0 && (uintptr_t) Y % 32 == 0 &&
         (uintptr_t) W % 4 == 0 && expert_bytes % 4 == 0 && ((ty == 22 && K % 512 == 0) || (ty == 20 && K % 128 == 0))) {
         const size_t rb = iq_row_bytes(ty, K);
@@ -5390,11 +5390,11 @@ bool gemm_iq_f16_grouped(int ty, const void* W, size_t expert_bytes, int n_out, 
                                                                                   (const __half*) X, ldx, bounds, mt, Y, ldy);
     return cudaGetLastError() == cudaSuccess;
 }
-}  // namespace strata::kernels
+}  // namespace cortex::kernels
 #else
-namespace strata::kernels {
+namespace cortex::kernels {
 bool gemm_iq_f16_grouped(int, const void*, size_t, int, int, const void*, int, const int32_t*, int, int, float*, int, void*) {
     return false;
 }
-}  // namespace strata::kernels
+}  // namespace cortex::kernels
 #endif

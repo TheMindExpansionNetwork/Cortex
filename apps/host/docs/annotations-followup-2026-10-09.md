@@ -1,6 +1,6 @@
 # Browser annotations 1–9
 
-Implemented in the restored Strata source served at `http://localhost:5160`.
+Implemented in the restored Cortex source served at `http://localhost:5160`.
 
 1. Workspace chat timestamps share a fixed, right-aligned column.
 2. The chat header displays the loaded model family without its quantization.

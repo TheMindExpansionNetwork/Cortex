@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from serve.frontend import ChatTemplate, literal_tags, mark_think_literals, unmark_think_literals  # noqa: E402
 from serve.server import (ANSWER_RESERVE_MIN, CTX_SLACK, ByteTokenizer, EngineDied, EngineNonFinite, GpuBusy, MockEngine,  # noqa: E402
                           PP_DONE_TAIL, Service,
-                          StrataEngine, api_key_of, engine_args, key_matches, layer_split_value, prompt_progress,
+                          CortexEngine, api_key_of, engine_args, key_matches, layer_split_value, prompt_progress,
                           prompt_tokens_seen,
                           request_stats, request_timings, serve, start_failure_hint)
 from types import SimpleNamespace  # noqa: E402
@@ -99,14 +99,14 @@ class MaxTokens(unittest.TestCase):
         self.assertEqual(b["input_tokens"], n_in)
 
     def test_request_line_parses_the_engine_summary(self):
-        line = ("strata serve: prompt 1200 tokens = 1000 reused + 200 read in 50 ms (4000.0 tok/s), 30 generated in "
+        line = ("cortex serve: prompt 1200 tokens = 1000 reused + 200 read in 50 ms (4000.0 tok/s), 30 generated in "
                 "300 ms (100.0 tok/s), drafts accepted 20 of 28, 2 checkpoints")
         from serve.server import ENGINE_REQUEST
         m = ENGINE_REQUEST.search(line)
         self.assertIsNotNone(m)
         self.assertEqual((m["prompt"], m["reused"], m["gen"], m["tg"]), ("1200", "1000", "30", "100.0"))
         # #471: a request cancelled while its prompt was read says how far it got
-        m = ENGINE_REQUEST.search("strata serve: prompt 98179 tokens = 0 reused + 12288 of 98179 read in 17565 ms "
+        m = ENGINE_REQUEST.search("cortex serve: prompt 98179 tokens = 0 reused + 12288 of 98179 read in 17565 ms "
                                   "(699.6 tok/s), 0 generated in 0 ms (0.0 tok/s), drafts accepted 0 of 0, "
                                   "0 checkpoints (cancelled)")
         self.assertIsNotNone(m)
@@ -237,7 +237,7 @@ class MaxTokens(unittest.TestCase):
     def test_debug_log_shows_the_resolved_budget(self):
         import contextlib
         import io
-        os.environ["STRATA_DEBUG"] = "1"
+        os.environ["CORTEX_DEBUG"] = "1"
         try:
             for api in ("openai", "anthropic"):
                 with self.subTest(api=api):
@@ -246,7 +246,7 @@ class MaxTokens(unittest.TestCase):
                         _, _, pt, _ = self.call(api, max_tokens=-1)
                     self.assertIn(f"max_new={CTX - CTX_SLACK - pt} ", out.getvalue())
         finally:
-            del os.environ["STRATA_DEBUG"]
+            del os.environ["CORTEX_DEBUG"]
 
 
 class FitMaxTokens(unittest.TestCase):
@@ -413,11 +413,11 @@ class ImageMarkers(unittest.TestCase):
             svc.prepare(msgs, None, {})
             self.assertEqual(svc.embeddings.keys, ["fedcba9876543210", "0123456789abcdef"])
             svc.embeddings.path.unlink(missing_ok=True)
-        keys = StrataEngine.sampling_keys({"strata_img_keys": ["fedcba9876543210", "0123456789abcdef"]})
+        keys = CortexEngine.sampling_keys({"cortex_img_keys": ["fedcba9876543210", "0123456789abcdef"]})
         self.assertEqual(keys, " img_keys=fedcba9876543210,0123456789abcdef")
         for bad in ([], ["XYZ"], ["ab cd"], "abc", [3]):   # never sent malformed: the engine falls back to the embeddings
             with self.subTest(bad=bad):
-                self.assertNotIn("img_keys", StrataEngine.sampling_keys({"strata_img_keys": bad}))
+                self.assertNotIn("img_keys", CortexEngine.sampling_keys({"cortex_img_keys": bad}))
 
     def test_anthropic_tool_result_image(self):
         """Claude Code's Read of a picture returns it inside a tool_result: it reaches the encoder, in place."""
@@ -582,7 +582,7 @@ class VisionTempFiles(unittest.TestCase):
 
         pipe = Pipe()
         v = Vision.__new__(Vision)
-        v.dir, v.lock, v.cache = Path(tempfile.mkdtemp(prefix="strata-vision-test-")), threading.Lock(), {}
+        v.dir, v.lock, v.cache = Path(tempfile.mkdtemp(prefix="cortex-vision-test-")), threading.Lock(), {}
         v.proc = mock.Mock(stdin=pipe, stdout=mock.Mock(readline=lambda: "OK 7 1 1 1\n"))
         try:
             with mock.patch.object(Vision, "load", return_value=b""), \
@@ -625,7 +625,7 @@ class VisionTempFiles(unittest.TestCase):
             err.winerror = code
             with self.subTest(winerror=code), mock.patch.object(subprocess, "Popen", side_effect=err):
                 with self.assertRaises(OSError) as cm:
-                    popen("the image encoder", ["strata-vision.exe"])
+                    popen("the image encoder", ["cortex-vision.exe"])
                 self.assertIn("Smart App Control", str(cm.exception))
                 self.assertIn("--vision no", str(cm.exception))
         with mock.patch.object(subprocess, "Popen", side_effect=FileNotFoundError("gone")):
@@ -723,7 +723,7 @@ class LiteralThinkTags(unittest.TestCase):
         self.assertIn("Hello, </think> is a tag.", self.tok.decode(ids))
 
     def test_the_real_tokenizer_reads_the_tag_as_text(self):
-        import strata_tokenizer as ST
+        import cortex_tokenizer as ST
         b2u = ST.bytes_to_unicode()
         tokens = [b2u[b] for b in range(256)] + ["<think>", "</think>", "<|im_end|>"]
         tok = ST.Tokenizer(tokens, [], [1] * 256 + [4, 4, 3])
@@ -796,7 +796,7 @@ class LiteralControlTokens(unittest.TestCase):
         self.assertIn(text, self.tok.decode(ids))
 
     def test_a_literal_inside_a_longer_one(self):
-        import strata_tokenizer as ST
+        import cortex_tokenizer as ST
         b2u = ST.bytes_to_unicode()
         text = "see <x<|a|>y> and <|a|> here"
         for order in (["<|a|>", "<x<|a|>y>"], ["<x<|a|>y>", "<|a|>"]):          # either order in the vocabulary
@@ -808,7 +808,7 @@ class LiteralControlTokens(unittest.TestCase):
                 self.assertEqual(tok.encode(prompt, parse_special=True, plain=plain), [*text.encode()])
 
     def test_the_real_tokenizer_names_its_control_tokens(self):
-        import strata_tokenizer as ST
+        import cortex_tokenizer as ST
         b2u = ST.bytes_to_unicode()
         tokens = [b2u[b] for b in range(256)] + ["<think>", "</think>", "<|im_end|>"]
         self.assertEqual(ST.Tokenizer(tokens, [], [1] * 256 + [4, 4, 3]).control_tokens, ["<|im_end|>"])
@@ -963,7 +963,7 @@ class ConfigApiKey(unittest.TestCase):
         err = io.StringIO()
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ), \
                 mock.patch.object(S, "serve", fake_serve), mock.patch.object(sys, "stderr", new=err):
-            os.environ.pop("STRATA_API_KEY", None)
+            os.environ.pop("CORTEX_API_KEY", None)
             p = Path(d) / "cfg.json"
             p.write_text(json.dumps(cfg), encoding="utf-8")
             with mock.patch.object(sys, "argv", ["server.py", "--engine", "mock", "--port", "0", "--config", str(p)]):
@@ -1517,7 +1517,7 @@ class ClientShapes(unittest.TestCase):
                 raise BrokenPipeError("the encoder is gone")
 
         v = Vision.__new__(Vision)
-        v.dir, v.lock, v.cache = Path(tempfile.mkdtemp(prefix="strata-vision-test-")), threading.Lock(), {}
+        v.dir, v.lock, v.cache = Path(tempfile.mkdtemp(prefix="cortex-vision-test-")), threading.Lock(), {}
         v.proc = mock.Mock(stdin=Gone())
         with mock.patch.object(Vision, "load", return_value=b""), mock.patch.object(Vision, "normalize",
                                                                                    return_value=b"png"):
@@ -1601,7 +1601,7 @@ class SamplingKeys(unittest.TestCase):
     to fall back to the engine default 20); a penalty always carries its window."""
 
     def keys(self, **sampling):
-        return StrataEngine.sampling_keys(sampling).split()
+        return CortexEngine.sampling_keys(sampling).split()
 
     def test_top_k(self):
         self.assertIn("top_k=10", self.keys(temperature=0.7, top_k=10))
@@ -1612,30 +1612,30 @@ class SamplingKeys(unittest.TestCase):
             self.assertFalse([k for k in self.keys(temperature=0.7, top_k=bad) if k.startswith("top_k=")], bad)
 
     def test_tune_keys(self):
-        k = self.keys(temperature=0, strata_tune={"pcie_frac": 0.2, "spec_min_p": 0.7})
+        k = self.keys(temperature=0, cortex_tune={"pcie_frac": 0.2, "spec_min_p": 0.7})
         self.assertIn("pcie_frac=0.2", k)
         self.assertIn("spec_min_p=0.7", k)
-        bad = self.keys(strata_tune={"pcie_frac": 3, "spec_min_p": True, "pool_workers": 2})
+        bad = self.keys(cortex_tune={"pcie_frac": 3, "spec_min_p": True, "pool_workers": 2})
         self.assertFalse([x for x in bad if x.split("=")[0] in ("pcie_frac", "spec_min_p", "pool_workers")])
 
     def test_tune_prefill_pipe(self):
-        self.assertIn("pipe=1536.0", self.keys(temperature=0, strata_tune={"prefill_pipe": 1536}))
-        self.assertIn("pipe=0.0", self.keys(temperature=0, strata_tune={"prefill_pipe": 0}))
+        self.assertIn("pipe=1536.0", self.keys(temperature=0, cortex_tune={"prefill_pipe": 1536}))
+        self.assertIn("pipe=0.0", self.keys(temperature=0, cortex_tune={"prefill_pipe": 0}))
         for bad in (-1, True, "800", 1e9):
-            self.assertFalse([x for x in self.keys(temperature=0, strata_tune={"prefill_pipe": bad})
+            self.assertFalse([x for x in self.keys(temperature=0, cortex_tune={"prefill_pipe": bad})
                               if x.startswith("pipe=")], bad)
 
     def test_tune_aux_cpus(self):
         for val, want in ((True, "aux_cpus=1"), (1, "aux_cpus=1"), (False, "aux_cpus=0"), (0, "aux_cpus=0"),
                           (1.0, "aux_cpus=1"), (0.0, "aux_cpus=0")):
-            self.assertIn(want, self.keys(strata_tune={"aux_cpus": val}), val)
+            self.assertIn(want, self.keys(cortex_tune={"aux_cpus": val}), val)
         for bad in (2, -1, 0.5, "1", None, "auto"):
-            self.assertFalse([x for x in self.keys(strata_tune={"aux_cpus": bad}) if x.startswith("aux_cpus=")], bad)
+            self.assertFalse([x for x in self.keys(cortex_tune={"aux_cpus": bad}) if x.startswith("aux_cpus=")], bad)
         self.assertFalse([x for x in self.keys(temperature=0) if x.startswith("aux_cpus=")])
 
     def test_checkpoint_key(self):
-        self.assertIn("ckpt=0", self.keys(temperature=0, strata_checkpoint=False))
-        for absent in ({}, {"strata_checkpoint": True}, {"strata_checkpoint": 0}, {"cache_prompt": False}):
+        self.assertIn("ckpt=0", self.keys(temperature=0, cortex_checkpoint=False))
+        for absent in ({}, {"cortex_checkpoint": True}, {"cortex_checkpoint": 0}, {"cache_prompt": False}):
             self.assertNotIn("ckpt=0", self.keys(**absent), absent)
 
     def test_penalty_window(self):
@@ -1645,7 +1645,7 @@ class SamplingKeys(unittest.TestCase):
 
 
 class SharedPrefix(unittest.TestCase):
-    """R1: "strata_prefix" marks the first messages as a shared prefix; the engine gets pin=N."""
+    """R1: "cortex_prefix" marks the first messages as a shared prefix; the engine gets pin=N."""
 
     @classmethod
     def setUpClass(cls):
@@ -1654,22 +1654,22 @@ class SharedPrefix(unittest.TestCase):
         cls.tok = tok
 
     def keys(self, **sampling):
-        return StrataEngine.sampling_keys(sampling).split()
+        return CortexEngine.sampling_keys(sampling).split()
 
     MSGS = [{"role": "system", "content": "You answer questions about the document."},
             {"role": "user", "content": "DOC " * 40},
             {"role": "user", "content": "Which word repeats?"}]
 
     def test_pin_key(self):
-        self.assertIn("pin=1234", self.keys(strata_prefix={"tokens": 1234}))
-        for absent in ({}, {"strata_prefix": {}}, {"strata_prefix": {"messages": 2}}, {"strata_prefix": {"tokens": 0}},
-                       {"strata_prefix": {"tokens": True}}, {"strata_prefix": "x"}):
+        self.assertIn("pin=1234", self.keys(cortex_prefix={"tokens": 1234}))
+        for absent in ({}, {"cortex_prefix": {}}, {"cortex_prefix": {"messages": 2}}, {"cortex_prefix": {"tokens": 0}},
+                       {"cortex_prefix": {"tokens": True}}, {"cortex_prefix": "x"}):
             self.assertFalse([k for k in self.keys(**absent) if k.startswith("pin=")], absent)
 
     def test_messages_resolve_to_the_boundary_token(self):
-        req = {"strata_prefix": {"messages": 2}}
+        req = {"cortex_prefix": {"messages": 2}}
         ids, _, _ = self.svc.prepare(self.MSGS, None, {}, 16, req=req)
-        n = req["strata_prefix"]["tokens"]
+        n = req["cortex_prefix"]["tokens"]
         text = self.tok.decode(ids[:n], errors="replace")
         self.assertTrue(text.endswith("DOC<|im_end|>\n"), text[-40:])   # right where the next message's turn starts
         self.assertEqual(self.tok.decode(ids[n:n + 1]), "<|im_start|>")
@@ -1678,33 +1678,33 @@ class SharedPrefix(unittest.TestCase):
 
     def test_tokens_and_unusable_prefixes(self):
         ids, _, _ = self.svc.prepare(self.MSGS, None, {}, 16)
-        req = {"strata_prefix": {"tokens": 100}}
+        req = {"cortex_prefix": {"tokens": 100}}
         self.svc.prepare(self.MSGS, None, {}, 16, req=req)
-        self.assertEqual(req["strata_prefix"], {"tokens": 100})
+        self.assertEqual(req["cortex_prefix"], {"tokens": 100})
         for spec in ({"messages": 3}, {"messages": 9}, {"tokens": len(ids)},       # leaves no last message / no suffix
                      {"message": 1, "chars": 5000}, {"message": 7, "chars": 3}):   # more text than the message has
-            req = {"strata_prefix": spec}
+            req = {"cortex_prefix": spec}
             with contextlib.redirect_stdout(io.StringIO()):
                 self.svc.prepare(self.MSGS, None, {}, 16, req=req)
-            self.assertEqual(req["strata_prefix"], {}, spec)                     # said in the log, never a refusal
+            self.assertEqual(req["cortex_prefix"], {}, spec)                     # said in the log, never a refusal
         for bad in ({"messages": 0}, {"messages": "2"}, {"messages": True}, {"tokens": 1.5}, {"x": 1},
                     {"messages": 1, "tokens": 2}, {"message": 1}, {"chars": 3}, {"message": -1, "chars": 3}, [], "pin", {}):
             with self.assertRaises(ValueError, msg=bad):
-                self.svc.prepare(self.MSGS, None, {}, 16, req={"strata_prefix": bad})
+                self.svc.prepare(self.MSGS, None, {}, 16, req={"cortex_prefix": bad})
 
     def test_chars_end_inside_a_message(self):
         # a document and its question in ONE message: the prefix is the first 160 characters of it
         text = "DOC " * 40 + "Which word repeats?"
         msgs = [{"role": "user", "content": text}]
-        req = {"strata_prefix": {"message": 0, "chars": 160}}
+        req = {"cortex_prefix": {"message": 0, "chars": 160}}
         ids, _, _ = self.svc.prepare(msgs, None, {}, 16, req=req)
-        n = req["strata_prefix"]["tokens"]
+        n = req["cortex_prefix"]["tokens"]
         self.assertEqual(self.tok.decode(ids[:n]).split("user\n", 1)[1], "DOC " * 40)   # exactly those characters
         # a system message first: message 1 is the user's
         msgs = [{"role": "system", "content": "S"}, {"role": "user", "content": text}]
-        req = {"strata_prefix": {"message": 1, "chars": 160}}
+        req = {"cortex_prefix": {"message": 1, "chars": 160}}
         ids, _, _ = self.svc.prepare(msgs, None, {}, 16, req=req)
-        self.assertEqual(self.tok.decode(ids[:req["strata_prefix"]["tokens"]]).split("user\n", 1)[1], "DOC " * 40)
+        self.assertEqual(self.tok.decode(ids[:req["cortex_prefix"]["tokens"]]).split("user\n", 1)[1], "DOC " * 40)
 
     def test_without_the_field_nothing_changes(self):
         req = {"temperature": 0}
@@ -1906,8 +1906,8 @@ class IncrementalPrompts(unittest.TestCase):
         self.assertEqual(kept, sorted(texts[1:] + [svc.render_prompt(msgs, None, {})]))
 
     def lazy_service(self, args, **info):
-        """A Service over the real StrataEngine class started lazily: no process yet, so no INFO line either."""
-        engine = StrataEngine("strata", args, lazy=True)
+        """A Service over the real CortexEngine class started lazily: no process yet, so no INFO line either."""
+        engine = CortexEngine("cortex", args, lazy=True)
         engine.info.update(info)
         return Service(engine, self.svc.tok, self.svc.template)
 
@@ -1957,7 +1957,7 @@ class IncrementalPrompts(unittest.TestCase):
     def test_same_ids_as_a_full_encode_on_varied_conversations(self):
         import random
         sys.path.insert(0, str(ROOT / "tools"))
-        from test_strata_tokenizer import conversation_prompts, load_tokenizer
+        from test_cortex_tokenizer import conversation_prompts, load_tokenizer
         toks = [("byte", ByteTokenizer())]
         qwen = load_tokenizer()
         if qwen is not None:
@@ -2125,7 +2125,7 @@ class EngineDeath(unittest.TestCase):
 
 
 class DoneLineEngine(MockEngine):
-    """The mock engine whose `last` comes from a DONE line, parsed as StrataEngine parses it."""
+    """The mock engine whose `last` comes from a DONE line, parsed as CortexEngine parses it."""
 
     def __init__(self, *a, done_lines=(), **kw):
         super().__init__(*a, **kw)
@@ -2135,7 +2135,7 @@ class DoneLineEngine(MockEngine):
         try:
             yield from super().generate(ids, max_new, sampling, cancel, embeddings)
         finally:
-            StrataEngine._parse_done(self, self.done_lines.pop(0))
+            CortexEngine._parse_done(self, self.done_lines.pop(0))
 
 
 class DraftCounts(unittest.TestCase):
@@ -2201,8 +2201,8 @@ class PrometheusMetrics(unittest.TestCase):
         self.assertEqual(m["llamacpp:tokens_predicted_total"], t["output_tokens"])
         self.assertEqual(m["llamacpp:tokens_predicted_seconds_total"], 0.4)
         self.assertEqual((m["llamacpp:requests_processing"], m["llamacpp:requests_deferred"]), (0, 0))
-        self.assertEqual((m["strata:requests_total"], m["strata:drafts_offered_total"],
-                          m["strata:drafts_accepted_total"]), (2, 17, 10))
+        self.assertEqual((m["cortex:requests_total"], m["cortex:drafts_offered_total"],
+                          m["cortex:drafts_accepted_total"]), (2, 17, 10))
 
     def test_throughput_gauges_cover_the_window_between_scrapes(self):
         """#2341: llama.cpp reads these two from a bucket it resets on every scrape, so a scrape that saw no
@@ -2362,7 +2362,7 @@ class RepeatStop(unittest.TestCase):
 
 class NonFiniteEngine(MockEngine):
     """#879: each pass ends on the engine's `DONE ... nonfinite` after plan[i] tokens (None, or no plan left: the
-    script runs whole), as StrataEngine.generate raises it.  A pass that ends on it had reused all but the last
+    script runs whole), as CortexEngine.generate raises it.  A pass that ends on it had reused all but the last
     prompt token; the next one reads from token 0, as the engine does."""
 
     def __init__(self, *a, plan=(), **kw):
@@ -2465,9 +2465,9 @@ class NonFiniteLogits(unittest.TestCase):
             httpd.server_close()
 
     def test_engine_done_line_raises(self):
-        """StrataEngine.generate: `DONE ... nonfinite` raises EngineNonFinite after the tokens before it."""
+        """CortexEngine.generate: `DONE ... nonfinite` raises EngineNonFinite after the tokens before it."""
         import queue as queue_
-        eng = object.__new__(StrataEngine)
+        eng = object.__new__(CortexEngine)
         eng.lines = queue_.Queue()
         for line in ("T 5", "T 6", "DONE 2 3 1.0 2.0 nonfinite 0 0 0"):
             eng.lines.put(line)
@@ -2525,24 +2525,24 @@ class DraftHeadHint(unittest.TestCase):
         return str(p), len(before.encode())
 
     def test_the_engines_hint_is_relayed(self):
-        p, off = self.log("strata mtp: the draft head over 106299 tokens needs 348 MiB of VRAM and 120 MiB is free.\n"
-                          "strata mtp: hint: a smaller draft vocabulary needs less VRAM: --draft-vocab en (...)\n"
-                          "strata serve: mtp: the draft head does not fit\n")
+        p, off = self.log("cortex mtp: the draft head over 106299 tokens needs 348 MiB of VRAM and 120 MiB is free.\n"
+                          "cortex mtp: hint: a smaller draft vocabulary needs less VRAM: --draft-vocab en (...)\n"
+                          "cortex serve: mtp: the draft head does not fit\n")
         h = start_failure_hint(p, off)
         self.assertIn("the draft head does not fit", h)
         self.assertIn("348 MiB", h)
         self.assertIn("--draft-vocab en", h)
 
     def test_an_older_engine_gets_the_advice_in_words(self):
-        p, off = self.log("strata serve: mtp: the draft head does not fit\n")
+        p, off = self.log("cortex serve: mtp: the draft head does not fit\n")
         self.assertIn("--draft-vocab en", start_failure_hint(p, off))
 
     def test_other_failures_and_earlier_starts_add_nothing(self):
-        p, off = self.log("strata serve: cannot open the pack\n")
+        p, off = self.log("cortex serve: cannot open the pack\n")
         self.assertEqual(start_failure_hint(p, off), "")
         # an earlier start's failure (before this start's offset) is not this one's
-        p, off = self.log("strata serve: cannot open the pack\n",
-                          before="strata serve: mtp: the draft head does not fit\n")
+        p, off = self.log("cortex serve: cannot open the pack\n",
+                          before="cortex serve: mtp: the draft head does not fit\n")
         self.assertEqual(start_failure_hint(p, off), "")
         self.assertEqual(start_failure_hint(None, 0), "")
         self.assertEqual(start_failure_hint(str(Path(tempfile.mkdtemp()) / "missing.log"), 0), "")
@@ -2580,9 +2580,9 @@ class StartFailureLog(unittest.TestCase):
         from serve.server import start_log_tail
         d = tempfile.mkdtemp()
         p = Path(d) / "engine.log"
-        before = "strata serve: an earlier start's line\n"
-        p.write_text(before + "".join(f"strata serve: line {i}\n" for i in range(30)) + "\n"
-                     "strata serve: cannot open the pack\n", encoding="utf-8")
+        before = "cortex serve: an earlier start's line\n"
+        p.write_text(before + "".join(f"cortex serve: line {i}\n" for i in range(30)) + "\n"
+                     "cortex serve: cannot open the pack\n", encoding="utf-8")
         tail = start_log_tail(str(p), len(before.encode()))
         self.assertIn("the engine log's last lines:", tail)
         self.assertIn("cannot open the pack", tail)
@@ -2598,9 +2598,9 @@ class StartFailureLog(unittest.TestCase):
 
     def test_the_start_error_has_them(self):
         import serve.server as server
-        fake = "import sys\nsys.stderr.write('strata serve: cannot open the pack packs/x\\n')\nsys.exit(2)\n"
+        fake = "import sys\nsys.stderr.write('cortex serve: cannot open the pack packs/x\\n')\nsys.exit(2)\n"
         with tempfile.TemporaryDirectory() as d:
-            script, log = Path(d) / "fake_strata.py", Path(d) / "strata.log"
+            script, log = Path(d) / "fake_cortex.py", Path(d) / "cortex.log"
             script.write_text(fake, encoding="utf-8")
             log.write_text("an earlier start\n", encoding="utf-8")
             real = server.subprocess.Popen
@@ -2608,7 +2608,7 @@ class StartFailureLog(unittest.TestCase):
                                    lambda cmd, **kw: real([sys.executable, str(script), *cmd[1:]], **kw)), \
                     mock.patch.object(server, "narrate_start", lambda *a, **k: None):
                 with self.assertRaises(RuntimeError) as cm:
-                    StrataEngine("strata", [], log=str(log))
+                    CortexEngine("cortex", [], log=str(log))
             text = str(cm.exception)
             self.assertIn("exited before it was ready", text)
             self.assertIn("cannot open the pack packs/x", text)
@@ -2625,7 +2625,7 @@ class StartCrashReported(unittest.TestCase):
         import io
         import serve.server as server
         with tempfile.TemporaryDirectory() as d:
-            script, log = Path(d) / "fake_strata.py", Path(d) / "strata.log"
+            script, log = Path(d) / "fake_cortex.py", Path(d) / "cortex.log"
             script.write_text(code, encoding="utf-8")
             real = server.subprocess.Popen
             out = io.StringIO()
@@ -2636,7 +2636,7 @@ class StartCrashReported(unittest.TestCase):
                     mock.patch.object(server.time, "sleep", lambda s: None), \
                     contextlib.redirect_stdout(out):
                 with self.assertRaises(RuntimeError) as cm:
-                    StrataEngine("strata", [], log=str(log))
+                    CortexEngine("cortex", [], log=str(log))
             return str(cm.exception), out.getvalue()
 
     def test_status_words(self):
@@ -2659,7 +2659,7 @@ class StartCrashReported(unittest.TestCase):
         from serve.server import transient_start_failure
         d = tempfile.mkdtemp()
         p = Path(d) / "engine.log"
-        p.write_text("[strata] 2026-10-13 17:49:15 engine started: /x/strata --serve\n", encoding="utf-8")
+        p.write_text("[cortex] 2026-10-13 17:49:15 engine started: /x/cortex --serve\n", encoding="utf-8")
         self.assertTrue(transient_start_failure(str(p), 0, 3.0, 0))         # a silent plain exit: the old retry
         self.assertTrue(transient_start_failure(str(p), 0, 3.0, -6))        # SIGABRT (ROCm teardown)
         self.assertFalse(transient_start_failure(str(p), 0, 3.0, 1))        # the engine's own error exit
@@ -2669,7 +2669,7 @@ class StartCrashReported(unittest.TestCase):
             for sig in (signal.SIGILL, signal.SIGSEGV, signal.SIGBUS, signal.SIGKILL):
                 self.assertFalse(transient_start_failure(str(p), 0, 3.0, -int(sig)), sig)
         # the runtime's own words keep it a retry whatever the status
-        p.write_text("[strata] x engine started\nterminate called after throwing an instance of "
+        p.write_text("[cortex] x engine started\nterminate called after throwing an instance of "
                      "'rocr::AMD::hsa_exception'\n", encoding="utf-8")
         self.assertTrue(transient_start_failure(str(p), 0, 3.0, -6))
 
@@ -2732,14 +2732,14 @@ class StartNarrator(unittest.TestCase):
         return out.getvalue()
 
     def test_a_mapped_start(self):
-        said = self.narrate(["--mmap-experts"], ["strata generate: experts via mmap (--mmap-experts; the GGUF shards "
+        said = self.narrate(["--mmap-experts"], ["cortex generate: experts via mmap (--mmap-experts; the GGUF shards "
                                                  "in place, no experts.bin)"])
         self.assertIn("mapping the experts from the model files", said)
         self.assertNotIn("loading the experts into RAM", said)
 
     def test_an_arena_start(self):
-        said = self.narrate([], ["strata generate: expert arena: resident, 31.64 GiB",
-                                 "strata generate: loaded 31.64 GiB at 3.17 GiB/s"])
+        said = self.narrate([], ["cortex generate: expert arena: resident, 31.64 GiB",
+                                 "cortex generate: loaded 31.64 GiB at 3.17 GiB/s"])
         self.assertIn("loading the experts into RAM (tens of GB)", said)
         self.assertIn("experts loaded: 31.64 GiB at 3.17 GiB/s", said)
 
@@ -2750,25 +2750,25 @@ class CancelledRead(unittest.TestCase):
 
     def test_parse_done_read_field(self):
         e = SimpleNamespace()
-        StrataEngine._parse_done(e, "DONE 0 98179 17565.0 0.0 cancel 0 0 0 0 0 0 0 0.0 12288")
+        CortexEngine._parse_done(e, "DONE 0 98179 17565.0 0.0 cancel 0 0 0 0 0 0 0 0.0 12288")
         self.assertEqual((e.last["prompt_tokens"], e.last["prompt_read"], e.last["finish"]), (98179, 12288, "cancel"))
-        StrataEngine._parse_done(e, "DONE 0 98179 17565.0 0.0 cancel 0 0 0 0 0 0 0 0.0")
+        CortexEngine._parse_done(e, "DONE 0 98179 17565.0 0.0 cancel 0 0 0 0 0 0 0 0.0")
         self.assertNotIn("prompt_read", e.last)
 
     def test_parse_done_chunk_fields(self):
         """The prompt's first chunk and its streamed expert blobs come as key=value fields after the positional ones,
         with or without the five --lookup-chain fields; an older line has neither."""
         e = SimpleNamespace()
-        StrataEngine._parse_done(e, "DONE 5 12000 900.0 80.0 stop 3 4 0 7 9 0 0 0.0 12000 2 chunk=1536 "
+        CortexEngine._parse_done(e, "DONE 5 12000 900.0 80.0 stop 3 4 0 7 9 0 0 0.0 12000 2 chunk=1536 "
                                     "experts_streamed=24576")
         self.assertEqual((e.last["chunk"], e.last["experts_streamed"], e.last["offloaded"]), (1536, 24576, 2))
-        StrataEngine._parse_done(e, "DONE 5 12000 900.0 80.0 stop 3 4 0 7 9 0 0 0.0 12000 2 1 2 3 4 5 chunk=8192 "
+        CortexEngine._parse_done(e, "DONE 5 12000 900.0 80.0 stop 3 4 0 7 9 0 0 0.0 12000 2 1 2 3 4 5 chunk=8192 "
                                     "experts_streamed=0")
         self.assertEqual((e.last["chunk"], e.last["experts_streamed"]), (8192, 0))
-        StrataEngine._parse_done(e, "DONE 5 12000 900.0 80.0 stop 3 4 0 7 9 0 0 0.0 12000 2")
+        CortexEngine._parse_done(e, "DONE 5 12000 900.0 80.0 stop 3 4 0 7 9 0 0 0.0 12000 2")
         self.assertNotIn("chunk", e.last)
         self.assertNotIn("experts_streamed", e.last)
-        StrataEngine._parse_done(e, "DONE 5 12000 900.0 80.0 stop 3 4 0 7 9 0 0 0.0 12000 2 chunk=x other=1")
+        CortexEngine._parse_done(e, "DONE 5 12000 900.0 80.0 stop 3 4 0 7 9 0 0 0.0 12000 2 chunk=x other=1")
         self.assertNotIn("chunk", e.last)
         self.assertNotIn("other", e.last)
 
@@ -2882,7 +2882,7 @@ class LiveRate(unittest.TestCase):
         import io
         import queue
         from types import SimpleNamespace
-        engine = StrataEngine.__new__(StrataEngine)
+        engine = CortexEngine.__new__(CortexEngine)
         engine.proc = SimpleNamespace(stdin=io.StringIO(), poll=lambda: None)   # alive() asks it (#208)
         engine.lines = queue.Queue()
         engine.can_stop = False
@@ -3150,7 +3150,7 @@ class SharedSettings(unittest.TestCase):
         cls.engine = Sampled(tok, "</think>\n\nhello", max_context=CTX)
         cls.svc = Service(cls.engine, tok, ChatTemplate(ROOT / "serve/chat_template.jinja"))
         cls.tmp = tempfile.TemporaryDirectory()
-        cls.svc.shared_path = os.path.join(cls.tmp.name, "strata-x.shared-settings.json")
+        cls.svc.shared_path = os.path.join(cls.tmp.name, "cortex-x.shared-settings.json")
         cls.httpd = serve(cls.svc, port=0)
         cls.base = f"http://127.0.0.1:{cls.httpd.server_address[1]}"
 
@@ -3216,7 +3216,7 @@ class SharedSettings(unittest.TestCase):
         self.chat()
         self.assertEqual(self.engine.last_sampling["temperature"], 0.3)
 
-    def test_only_strata_s_own_page_may_set_them(self):
+    def test_only_cortex_s_own_page_may_set_them(self):
         code, _ = self.req("/settings", None, {"Content-Type": "text/plain"}, raw=b'{"defaults": {"temperature": 1}}')
         self.assertEqual(code, 415)
         code, _ = self.req("/settings", {"defaults": {"temperature": 1}}, {"Origin": "http://evil.example"})
@@ -3238,7 +3238,7 @@ class SharedSettings(unittest.TestCase):
         finally:
             self.svc.api_key = ""
 
-    def test_proxy_headers_do_not_make_a_page_strata_s_own(self):
+    def test_proxy_headers_do_not_make_a_page_cortex_s_own(self):
         # #321: X-Forwarded-*, CF-Ray or CF-Connecting-IP say nothing about the page that sent the request - any web
         # page behind any proxy would otherwise change the settings (or run MCP tools)
         for extra in ({"X-Forwarded-Host": "proxy.example.com"}, {"CF-Ray": "1234567890"},
@@ -3250,7 +3250,7 @@ class SharedSettings(unittest.TestCase):
         code, _ = self.req("/settings", {"defaults": {"temperature": 1}}, {"Origin": "http://127.0.0.1:1"})
         self.assertEqual(code, 403)
 
-    def test_a_trusted_origin_is_strata_s_own_page(self):
+    def test_a_trusted_origin_is_cortex_s_own_page(self):
         # the web app behind a reverse proxy or tunnel: the config's trusted_origins
         self.svc.trusted_origins = ["https://strata.example.com"]
         try:
@@ -3496,7 +3496,7 @@ class WebApp(unittest.TestCase):
         try:
             props = json.loads(self.get("/props")[2])
             self.assertEqual(props["model_path"], engine.model_path)
-            self.assertEqual(props["build_info"], "Strata 0.1.21")
+            self.assertEqual(props["build_info"], "Cortex 0.1.21")
             for busy in (True, False):
                 with self.svc.status_lock:
                     self.svc.status["busy"] = busy
@@ -3535,7 +3535,7 @@ class WebApp(unittest.TestCase):
 
 
 class ClockedEngine(MockEngine):
-    """The mock engine with StrataEngine's clock: `last` as the engine's DONE line gives it, the conversation cache
+    """The mock engine with CortexEngine's clock: `last` as the engine's DONE line gives it, the conversation cache
     holding the first REUSED tokens of every prompt."""
     REUSED = 5
 
@@ -3545,7 +3545,7 @@ class ClockedEngine(MockEngine):
             for t in super().generate(ids, max_new, sampling, cancel, embeddings):
                 n += 1
                 yield t
-        finally:          # as StrataEngine reads its DONE line: also when the server closes the request at a stop token
+        finally:          # as CortexEngine reads its DONE line: also when the server closes the request at a stop token
             self.last = {"generated": n, "prompt_tokens": len(ids), "prompt_ms": 40.0, "decode_ms": 20.0 * n,
                          "finish": "stop", "reused": min(self.REUSED, len(ids)), "hits": 9, "lookups": 10}
 
@@ -3702,7 +3702,7 @@ class TimingsDrafts(unittest.TestCase):
 
 
 class UnloadableEngine(MockEngine):
-    """A mock engine that can be stopped and started again like StrataEngine (alive / unload / restart)."""
+    """A mock engine that can be stopped and started again like CortexEngine (alive / unload / restart)."""
 
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
@@ -4521,7 +4521,7 @@ class StatusHandover(unittest.TestCase):
         self.assertNotIn("tail", svc.status)
 
 
-FAKE_STRATA = '''import pathlib, sys, time
+FAKE_CORTEX = '''import pathlib, sys, time
 gate = pathlib.Path(sys.argv[sys.argv.index("--gate") + 1])
 print("INFO engine=0.0.0", flush=True)
 while not gate.exists():                     # the test says when the engine is "ready"
@@ -4532,12 +4532,12 @@ for line in sys.stdin:
         break
 '''
 
-FAKE_STRATA_FAIL_ONCE = '''import pathlib, sys, time
+FAKE_CORTEX_FAIL_ONCE = '''import pathlib, sys, time
 fail = pathlib.Path(sys.argv[sys.argv.index("--fail") + 1])
 if fail.exists():                            # this start fails before READY (as one next to a dying engine did)
     fail.unlink()
     sys.exit(1)
-''' + FAKE_STRATA.split("\n", 1)[1]
+''' + FAKE_CORTEX.split("\n", 1)[1]
 
 
 class RestartWindow(unittest.TestCase):
@@ -4548,13 +4548,13 @@ class RestartWindow(unittest.TestCase):
         from unittest import mock
         import serve.server as server
         with tempfile.TemporaryDirectory() as d:
-            script, gate = Path(d) / "fake_strata.py", Path(d) / "ready"
-            script.write_text(FAKE_STRATA, encoding="utf-8")
+            script, gate = Path(d) / "fake_cortex.py", Path(d) / "ready"
+            script.write_text(FAKE_CORTEX, encoding="utf-8")
             real = server.subprocess.Popen
             with mock.patch.object(server.subprocess, "Popen",
                                    lambda cmd, **kw: real([sys.executable, str(script), *cmd[1:]], **kw)):
                 gate.touch()
-                eng = StrataEngine("strata", ["--gate", str(gate)])
+                eng = CortexEngine("cortex", ["--gate", str(gate)])
                 try:
                     self.assertEqual(eng.max_context, 4096)
                     self.assertTrue(eng.alive())
@@ -4596,14 +4596,14 @@ class RestartWindow(unittest.TestCase):
         from unittest import mock
         import serve.server as server
         with tempfile.TemporaryDirectory() as d:
-            script, gate, fail = Path(d) / "fake_strata.py", Path(d) / "ready", Path(d) / "fail_once"
-            script.write_text(FAKE_STRATA_FAIL_ONCE, encoding="utf-8")
+            script, gate, fail = Path(d) / "fake_cortex.py", Path(d) / "ready", Path(d) / "fail_once"
+            script.write_text(FAKE_CORTEX_FAIL_ONCE, encoding="utf-8")
             real = server.subprocess.Popen
             with mock.patch.object(server.subprocess, "Popen",
                                    lambda cmd, **kw: real([sys.executable, str(script), *cmd[1:]], **kw)), \
-                 mock.patch.object(StrataEngine, "RESTART_RETRY_S", 0.0):
+                 mock.patch.object(CortexEngine, "RESTART_RETRY_S", 0.0):
                 gate.touch()
-                eng = StrataEngine("strata", ["--gate", str(gate), "--fail", str(fail)])
+                eng = CortexEngine("cortex", ["--gate", str(gate), "--fail", str(fail)])
                 try:
                     self.assertEqual(eng.max_context, 4096)
                     self.assertEqual(eng.known_ctx, 4096)
@@ -4942,7 +4942,7 @@ class SilentEngine(unittest.TestCase):
     def bare(self, silence, can_stop=False):
         import io
         import queue
-        engine = StrataEngine.__new__(StrataEngine)
+        engine = CortexEngine.__new__(CortexEngine)
         engine.proc = mock.Mock()
         engine.proc.stdin = io.StringIO()
         engine.proc.poll.return_value = None
@@ -4974,14 +4974,14 @@ class SilentEngine(unittest.TestCase):
         self.assertNotIn("STOP", engine.proc.stdin.getvalue())    # nothing is listening: no STOP, no drain
 
     def test_death_note_finds_the_watchdog_line_under_a_long_trace(self):
-        # #1705: STRATA_VERIFY_TRACE dumps (~30 KB) after the watchdog's line must not hide it
+        # #1705: CORTEX_VERIFY_TRACE dumps (~30 KB) after the watchdog's line must not hide it
         import tempfile
         engine = self.bare(0.3)
         with tempfile.TemporaryDirectory() as d:
             engine.log_path = os.path.join(d, "e.log")
             with open(engine.log_path, "w", encoding="utf-8") as f:
-                f.write("strata serve: no progress for 60 s during a request (issue #29)\n")
-                f.write("strata verify trace: dump\n" * 1500)
+                f.write("cortex serve: no progress for 60 s during a request (issue #29)\n")
+                f.write("cortex verify trace: dump\n" * 1500)
             engine.proc.poll.return_value = -6
             self.assertIn("a hang it caught", engine.death_note())
 
@@ -5109,12 +5109,12 @@ class LostStep(unittest.TestCase):
     def run_mode(self, mode, stream):
         import serve.server as server
         with tempfile.TemporaryDirectory() as d:
-            script, mark = Path(d) / "fake_strata.py", Path(d) / "lost"
+            script, mark = Path(d) / "fake_cortex.py", Path(d) / "lost"
             script.write_text(FAKE_LOST_STEP, encoding="utf-8")
             real = server.subprocess.Popen
             with mock.patch.object(server.subprocess, "Popen",
                                    lambda cmd, **kw: real([sys.executable, str(script), *cmd[1:]], **kw)):
-                eng = StrataEngine("strata", ["--mark", str(mark), "--mode", mode])
+                eng = CortexEngine("cortex", ["--mark", str(mark), "--mode", mode])
                 eng.silence_s = 0.5
                 tok = ByteTokenizer()
                 svc = Service(eng, tok, ChatTemplate(ROOT / "serve/chat_template.jinja"))
@@ -5603,7 +5603,7 @@ class VisionArgs(unittest.TestCase):
             return Proc()
 
         with mock.patch.object(server.subprocess, "Popen", popen):
-            server.Vision({"exe": "strata-vision", "mmproj": "m.gguf", "model": "t.gguf", **cfg})
+            server.Vision({"exe": "cortex-vision", "mmproj": "m.gguf", "model": "t.gguf", **cfg})
         return seen[0]
 
     def test_min_tokens_is_passed_only_when_set(self):
@@ -5719,7 +5719,7 @@ class LazyVision(unittest.TestCase):
             return p
 
         with mock.patch.object(server, "popen", popen):
-            v = server.Vision({"exe": "strata-vision", "mmproj": "m.gguf", "model": "t.gguf"}, lazy=True)
+            v = server.Vision({"exe": "cortex-vision", "mmproj": "m.gguf", "model": "t.gguf"}, lazy=True)
             self.addCleanup(lambda: shutil.rmtree(v.dir, ignore_errors=True))
             return v, started, popen
 
@@ -5766,7 +5766,7 @@ class VisionShutdown(unittest.TestCase):
     def test_shutdown_removes_the_work_dir_but_close_keeps_it(self):
         import serve.server as server
         with tempfile.TemporaryDirectory() as t:
-            d = Path(t) / "strata-vision-x"
+            d = Path(t) / "cortex-vision-x"
             d.mkdir()
             (d / "k.sve").write_bytes(b"x")
             v = server.Vision.__new__(server.Vision)
@@ -5901,7 +5901,7 @@ class UntimedReads(unittest.TestCase):
         import serve.server as server
         fake = "import time\nprint('INFO engine=0.0.0', flush=True)\ntime.sleep(600)\n"
         with tempfile.TemporaryDirectory() as d:
-            script = Path(d) / "fake_strata.py"
+            script = Path(d) / "fake_cortex.py"
             script.write_text(fake, encoding="utf-8")
             real = server.subprocess.Popen
             procs = []
@@ -5914,7 +5914,7 @@ class UntimedReads(unittest.TestCase):
                     mock.patch.object(server, "narrate_start", lambda *a, **k: None):
                 t0 = time.monotonic()
                 with self.assertRaises(RuntimeError) as cm:
-                    StrataEngine("strata", [])
+                    CortexEngine("cortex", [])
             self.assertLess(time.monotonic() - t0, 30)
             self.assertIn("did not report READY within 1 s", str(cm.exception))
             procs[0].wait(10)                                   # killed, not left running
@@ -5938,7 +5938,7 @@ class UntimedReads(unittest.TestCase):
         import serve.server as server
         silent = self.Silent()
         v = server.Vision.__new__(server.Vision)
-        v.dir, v.lock, v.cache = Path(tempfile.mkdtemp(prefix="strata-vision-test-")), threading.Lock(), {}
+        v.dir, v.lock, v.cache = Path(tempfile.mkdtemp(prefix="cortex-vision-test-")), threading.Lock(), {}
         v.stopped = False
         v.proc = SimpleNamespace(stdin=io.StringIO(), stdout=silent, kill=silent.kill, poll=lambda: 1 if silent.killed else None)
         try:
@@ -5958,8 +5958,8 @@ class UntimedReads(unittest.TestCase):
         silent = self.Silent()
         proc = SimpleNamespace(stdin=io.StringIO(), stdout=silent, kill=silent.kill, poll=lambda: None)
         v = server.Vision.__new__(server.Vision)
-        v.spawn = (["strata-vision"], None, None)
-        v.dir = Path(tempfile.mkdtemp(prefix="strata-vision-test-"))
+        v.spawn = (["cortex-vision"], None, None)
+        v.dir = Path(tempfile.mkdtemp(prefix="cortex-vision-test-"))
         try:
             with mock.patch.object(server, "popen", lambda *a, **k: proc), mock.patch.object(server, "VISION_READY_S", 0.3):
                 with self.assertRaises(RuntimeError) as cm:

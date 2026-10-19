@@ -1,11 +1,11 @@
-// src/kernels/cuda/qsa_select.cu - see include/strata/kernels/qsa_select.hpp.
-#include "strata/core/emulate.hpp"
-#include "strata/core/sm75_series.hpp"
-#include "strata/core/geometry.hpp"
+// src/kernels/cuda/qsa_select.cu - see include/cortex/kernels/qsa_select.hpp.
+#include "cortex/core/emulate.hpp"
+#include "cortex/core/sm75_series.hpp"
+#include "cortex/core/geometry.hpp"
 #include <cstdlib>
 #include <cstring>
-#include "strata/kernels/qsa_select.hpp"
-#include "strata/kernels/gfx_arch.hpp"
+#include "cortex/kernels/qsa_select.hpp"
+#include "cortex/kernels/gfx_arch.hpp"
 
 #include <cuda_runtime.h>
 
@@ -15,11 +15,11 @@
 #include <cstdlib>
 #include <cstring>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
 constexpr int IDX_DIM = 128, IDX_HEADS = 4, R = 4;
-static_assert(IDX_DIM == strata::core::kCompiledGeometry.idx_key_dim && IDX_HEADS == strata::core::kCompiledGeometry.idx_q_heads && R == strata::core::kCompiledGeometry.idx_block,
+static_assert(IDX_DIM == cortex::core::kCompiledGeometry.idx_key_dim && IDX_HEADS == cortex::core::kCompiledGeometry.idx_q_heads && R == cortex::core::kCompiledGeometry.idx_block,
               "qsa_select is compiled for core/geometry.hpp");
 constexpr int SCORE_WARPS = 8;
 constexpr int TOPK_T = 256;
@@ -172,14 +172,14 @@ constexpr int TC_KS = IDX_DIM + 4;               // key row stride
 
 // TF32 conversion and MMA need sm_80: below it they compile to a trap and qsa_block_scores_tc refuses the device
 #if defined(__HIPCC__)          // AMD: no mma.sync / cp.async; the host keeps the warp kernel (below)
-#define STRATA_SEL_SM80 0
+#define CORTEX_SEL_SM80 0
 #elif !defined(__CUDA_ARCH__) || __CUDA_ARCH__ >= 800
-#define STRATA_SEL_SM80 1
+#define CORTEX_SEL_SM80 1
 #else
-#define STRATA_SEL_SM80 0
+#define CORTEX_SEL_SM80 0
 #endif
 __device__ __forceinline__ uint32_t tf32_hi(float x) {
-#if STRATA_SEL_SM80
+#if CORTEX_SEL_SM80
     uint32_t r;
     asm("cvt.rna.tf32.f32 %0, %1;" : "=r"(r) : "f"(x));
     return r;
@@ -188,7 +188,7 @@ __device__ __forceinline__ uint32_t tf32_hi(float x) {
 #endif
 }
 __device__ __forceinline__ void mma_tf32(float* c, const uint32_t* a, const uint32_t* b) {
-#if !STRATA_SEL_SM80
+#if !CORTEX_SEL_SM80
     __trap();
 #else
     asm volatile("mma.sync.aligned.m16n8k8.row.col.f32.tf32.tf32.f32 {%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, "
@@ -301,17 +301,17 @@ __global__ void __launch_bounds__(128) block_scores_tc_kernel(const float* __res
 // (A) or column (B) - lanes 16..31 repeat lanes 0..15 - and D[2i + l/16][l%16]; SEL_KL is the k per lane, SEL_KOFF(g)
 // the first, SEL_ROW(i, g) the D row of element i.  Same products, same order per element as on gfx12.
 #if defined(__gfx1200__) || defined(__gfx1201__)
-#define STRATA_SEL_GFX12 1
-#define STRATA_SEL_GFX11 0
+#define CORTEX_SEL_GFX12 1
+#define CORTEX_SEL_GFX11 0
 #elif defined(__gfx1100__) || defined(__gfx1101__) || defined(__gfx1102__) || defined(__gfx1103__) || defined(__gfx1150__) || \
     defined(__gfx1151__)
-#define STRATA_SEL_GFX12 0
-#define STRATA_SEL_GFX11 1
+#define CORTEX_SEL_GFX12 0
+#define CORTEX_SEL_GFX11 1
 #else
-#define STRATA_SEL_GFX12 0
-#define STRATA_SEL_GFX11 0
+#define CORTEX_SEL_GFX12 0
+#define CORTEX_SEL_GFX11 0
 #endif
-#if STRATA_SEL_GFX11
+#if CORTEX_SEL_GFX11
 constexpr int SEL_KL = 16;
 #define SEL_KOFF(g) 0
 #define SEL_ROW(i, g) (2 * (i) + (g))
@@ -328,9 +328,9 @@ constexpr int WITER = 4;                   // key tiles per warp (the CTA covers
 constexpr int WQS = IDX_DIM + 8;           // bf16 elements per LDS row: 272 bytes, conflict-free 16-byte reads
 
 __device__ __forceinline__ sel_f8 wmma_bf16(const sel_s8& a, const sel_s8& b, const sel_f8& c) {
-#if STRATA_SEL_GFX12
+#if CORTEX_SEL_GFX12
     return __builtin_amdgcn_wmma_f32_16x16x16_bf16_w32_gfx12(a, b, c);
-#elif STRATA_SEL_GFX11
+#elif CORTEX_SEL_GFX11
     return __builtin_amdgcn_wmma_f32_16x16x16_bf16_w32(a, b, c);
 #else
     __trap();
@@ -345,7 +345,7 @@ __device__ __forceinline__ void split3(float x, uint32_t& hi, uint32_t& mid, uin
     lo = __float_as_uint(r1 - __uint_as_float(mid)) & 0xffff0000u;   // exact: at most 8 significant bits left
 }
 __device__ __forceinline__ uint32_t pack_bf16x2(uint32_t a, uint32_t b) {   // low half = a's bf16, high half = b's
-#if STRATA_SEL_GFX12 || STRATA_SEL_GFX11
+#if CORTEX_SEL_GFX12 || CORTEX_SEL_GFX11
     return __builtin_amdgcn_perm(b, a, 0x07060302u);
 #else
     return (a >> 16) | (b & 0xffff0000u);
@@ -454,7 +454,7 @@ bool sel_gfx12_device() {
         cudaDeviceProp prop;
         ok[dev] = (cudaGetDeviceProperties(&prop, dev) == cudaSuccess &&
                    (std::strncmp(prop.gcnArchName, "gfx1200", 7) == 0 || std::strncmp(prop.gcnArchName, "gfx1201", 7) == 0 ||
-                    strata::kernels::gfx_arch_is_gfx11_wmma(prop.gcnArchName)))
+                    cortex::kernels::gfx_arch_is_gfx11_wmma(prop.gcnArchName)))
                       ? 1 : 2;
         cudaGetLastError();
     }
@@ -600,7 +600,7 @@ static bool block_scores_simt(const float* pooled, const float* dead, const floa
 // block_scores_simt_kernel with larger tiles (QT queries x NB blocks, RI x CJ products per thread) and the next K
 // chunk's loads in registers while the current one is used.  Every (row, block) dot is the same fmaf chain over
 // k = 0..127 from 0, and the relu sum over the heads in the same order: the same bits as block_scores_simt_kernel.
-// STRATA_SELECT_SIMT=2.
+// CORTEX_SELECT_SIMT=2.
 constexpr int S2_KC = 32;
 template <int QT, int NB>
 __global__ void __launch_bounds__(256, 1) block_scores_simt2_kernel(const float* __restrict__ pooled,
@@ -1061,7 +1061,7 @@ __global__ void __launch_bounds__(SCORE_WARPS * 32) block_scores_slots_kernel(Sc
                             QsaScoreRows{});
 }
 
-// QSAROWS (docs/QSAROWS.md, STRATA_QSA_ROWS=1): block_scores_multi_kernel's work for NQ <= 4 queries with less issue
+// QSAROWS (docs/QSAROWS.md, CORTEX_QSA_ROWS=1): block_scores_multi_kernel's work for NQ <= 4 queries with less issue
 // pressure per (block, query).  nsys of a 131k decode window (RTX 2080 Ti + RTX 3060): the multi kernel costs ~20 us more a
 // call for every row of the window on both cards - per (block, query) it reads the four query slices from shared memory
 // (4 x LDS.128) and reduces each head's lane products with its own five shuffles (20 a block and query), and those two
@@ -1216,7 +1216,7 @@ __global__ void __launch_bounds__(256, 1) block_scores_thread_kernel(const float
     }
 }
 
-// The exact scorer runs on gfx1100 (the PR's own card) when STRATA_SCORES_THREAD=1, and on gfx12 (RDNA4) unless STRATA_SCORES_THREAD=0:
+// The exact scorer runs on gfx1100 (the PR's own card) when CORTEX_SCORES_THREAD=1, and on gfx12 (RDNA4) unless CORTEX_SCORES_THREAD=0:
 // there it is bitwise equal to the warp scorer on an R9700 (qsa_scores_gfx1100_parity --full, 35 cases; exact_pp residual dumps at 70K and
 // 131K tokens) and 3.6-4.4x faster in the scorer stage, +8% (131K) to +15% (230K) on a prompt read.  Other wave32 parts have no measurement.
 // Returns 0 (not offered), 1 (gfx1100: only on request), 2 (gfx12: the default).
@@ -1351,12 +1351,12 @@ constexpr int CL_N = 8;        // CTAs per query (the portable cluster size)
 constexpr int CL_T = 1024;     // threads per CTA
 constexpr int CL_MAXQ = 16;    // larger calls (prefill sub-batches) fill the GPU with one CTA per query already
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 900
-#define STRATA_SEL_CLUSTER 1
+#define CORTEX_SEL_CLUSTER 1
 #else
-#define STRATA_SEL_CLUSTER 0   // an older target's code is a trap; qsa_block_topk_cluster never launches it there
+#define CORTEX_SEL_CLUSTER 0   // an older target's code is a trap; qsa_block_topk_cluster never launches it there
 #endif
 
-#if STRATA_SEL_CLUSTER
+#if CORTEX_SEL_CLUSTER
 __device__ __forceinline__ void cl_arrive_relaxed() {
     asm volatile("barrier.cluster.arrive.relaxed.aligned;\n" ::: "memory");
 }
@@ -1405,7 +1405,7 @@ __device__ __forceinline__ unsigned long long cl_excl_scan64(unsigned long long 
 __global__ void __launch_bounds__(CL_T) block_topk_cluster_kernel(const float* __restrict__ scores,
                                                                   const int32_t* __restrict__ steps, int64_t max_blocks,
                                                                   int64_t cap, int32_t* __restrict__ ids) {
-#if STRATA_SEL_CLUSTER
+#if CORTEX_SEL_CLUSTER
     extern __shared__ uint32_t keys[];                  // this CTA's blocks' keys
     __shared__ __align__(16) int hin[2][CL_N][256];     // the cluster's histograms, slot = the pushing rank
     __shared__ __align__(16) int hloc[2][256];          // this CTA's histogram
@@ -1545,12 +1545,12 @@ __global__ void __launch_bounds__(CL_T) block_topk_cluster_kernel(const float* _
 }
 #endif  // !__HIPCC__
 bool scores_multi_on() {
-    static const bool on = [] { const char* v = std::getenv("STRATA_SCORES_MULTI"); return v == nullptr || std::atoi(v) != 0; }();
+    static const bool on = [] { const char* v = std::getenv("CORTEX_SCORES_MULTI"); return v == nullptr || std::atoi(v) != 0; }();
     return on;
 }
-// STRATA_QSA_EARLY_EXIT=0 keeps the old staging (every CTA loads the queries first); the scores are the same bits
+// CORTEX_QSA_EARLY_EXIT=0 keeps the old staging (every CTA loads the queries first); the scores are the same bits
 bool scores_early_exit() {
-    static const bool on = [] { const char* v = std::getenv("STRATA_QSA_EARLY_EXIT"); return v == nullptr || std::atoi(v) != 0; }();
+    static const bool on = [] { const char* v = std::getenv("CORTEX_QSA_EARLY_EXIT"); return v == nullptr || std::atoi(v) != 0; }();
     return on;
 }
 }  // namespace
@@ -1584,7 +1584,7 @@ bool qsa_block_scores_slots(const float* const* pooled, const float* const* dead
 // (lane l, lane l ^ o) the butterfly adds for that value at that offset, so every value's additions are the
 // butterfly's, operand for operand (float addition commutes): the same bits, with V - 1 shuffles plus the plain
 // butterfly's remaining stages instead of 5 V.  Lane l ends with value (l >> (5 - log2 V)); the query's 4 heads are
-// then gathered by its head-0 lane and summed in block_scores_multi_kernel's order.  STRATA_SCORES_HALVE=0: the old kernel.
+// then gathered by its head-0 lane and summed in block_scores_multi_kernel's order.  CORTEX_SCORES_HALVE=0: the old kernel.
 template <int V>
 __global__ void __launch_bounds__(SCORE_WARPS * 32) block_scores_halve_kernel(const float* __restrict__ pooled,
                                                                               const float* __restrict__ dead,
@@ -1674,10 +1674,10 @@ __global__ void __launch_bounds__(SCORE_WARPS * 32) block_scores_halve_kernel(co
 }
 
 // #1825: the prompt path's thread-per-head scorer (bitwise the warp kernel's scores).  Default: Turing with
-// STRATA_SM75_PERF=1 (the P100 gain measured here is +1..3% at 30-60K tokens, under the 3% bar for a new default);
-// STRATA_SCORES_THREAD=1 turns it on, =0 off, on any CUDA card
+// CORTEX_SM75_PERF=1 (the P100 gain measured here is +1..3% at 30-60K tokens, under the 3% bar for a new default);
+// CORTEX_SCORES_THREAD=1 turns it on, =0 off, on any CUDA card
 bool scores_thread_on() {
-    static const int env = [] { const char* v = std::getenv("STRATA_SCORES_THREAD"); return v ? (std::atoi(v) != 0 ? 1 : 0) : -1; }();
+    static const int env = [] { const char* v = std::getenv("CORTEX_SCORES_THREAD"); return v ? (std::atoi(v) != 0 ? 1 : 0) : -1; }();
     if (env >= 0) return env != 0;
     static int ok[64] = {};   // 0 unknown, 1 yes, 2 no
     int dev = 0;
@@ -1686,13 +1686,13 @@ bool scores_thread_on() {
         int major = 0, minor = 0;
         cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, dev);
         cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, dev);
-        ok[dev] = strata::sm75_default(major, minor) ? 1 : 2;   // Turing, STRATA_SM75_PERF=1
+        ok[dev] = cortex::sm75_default(major, minor) ? 1 : 2;   // Turing, CORTEX_SM75_PERF=1
     }
     return ok[dev] == 1;
 }
 
 bool scores_halve_on() {
-    static const int env = [] { const char* v = std::getenv("STRATA_SCORES_HALVE"); return v ? (std::atoi(v) != 0 ? 1 : 0) : -1; }();
+    static const int env = [] { const char* v = std::getenv("CORTEX_SCORES_HALVE"); return v ? (std::atoi(v) != 0 ? 1 : 0) : -1; }();
     if (env >= 0) return env != 0;
     static int ok[64] = {};   // 0 unknown, 1 yes, 2 no
     int dev = 0;
@@ -1701,7 +1701,7 @@ bool scores_halve_on() {
         int major = 0, minor = 0;
         cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, dev);
         cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, dev);
-        ok[dev] = strata::sm75_default(major, minor) ? 1 : 2;   // Turing, STRATA_SM75_PERF=1
+        ok[dev] = cortex::sm75_default(major, minor) ? 1 : 2;   // Turing, CORTEX_SM75_PERF=1
     }
     return ok[dev] == 1;
 }
@@ -1715,8 +1715,8 @@ void qsa_block_scores(const float* pooled, const float* dead, const float* q_idx
     }
     // a block past a query's n_bid returns at once: the grid need only reach the batch's largest n_bid (C-1)
     if (scores_multi_on() && nq <= MQ && active_blocks <= 0) {   // no active count: decode (captured or not) and prefill's pooled16
-        // QSAROWS: STRATA_QSA_ROWS=1 (exactly) takes block_scores_rows_kernel for calls of up to 4 queries - the same bits
-        static const bool rows_env = [] { const char* v = std::getenv("STRATA_QSA_ROWS"); return v != nullptr && v[0] == '1' && v[1] == '\0'; }();
+        // QSAROWS: CORTEX_QSA_ROWS=1 (exactly) takes block_scores_rows_kernel for calls of up to 4 queries - the same bits
+        static const bool rows_env = [] { const char* v = std::getenv("CORTEX_QSA_ROWS"); return v != nullptr && v[0] == '1' && v[1] == '\0'; }();
         if (rows_env && qsa_block_scores_rows(pooled, dead, q_idx, steps, nq, max_blocks, s, scores, stream)) return;
         if (scores_halve_on()) {   // Turing: block_scores_halve_kernel, the same bits
             const cudaStream_t st = (cudaStream_t) stream;
@@ -1745,18 +1745,18 @@ void qsa_block_scores(const float* pooled, const float* dead, const float* q_idx
     }
     const int64_t reach = active_blocks > 0 && active_blocks < max_blocks ? active_blocks : max_blocks;
 #if defined(__HIPCC__)
-    // STRATA_SCORES_THREAD: 1 = on (gfx1100, gfx12), 0 = off, unset = on for gfx12 only (gfx1100: off, nothing measured here)
+    // CORTEX_SCORES_THREAD: 1 = on (gfx1100, gfx12), 0 = off, unset = on for gfx12 only (gfx1100: off, nothing measured here)
     static const int thread_env = [] {
-        const char* value = std::getenv("STRATA_SCORES_THREAD");
+        const char* value = std::getenv("CORTEX_SCORES_THREAD");
         return value == nullptr ? -1 : (std::atoi(value) == 1 ? 1 : 0);
     }();
     // The bound is the ACTUAL live extent. A reserved 256K context never enables this by itself.
     if (thread_env != 0 && active_blocks >= 16385 && active_blocks <= max_blocks && nq >= 64 &&
         (scores_thread_arch() == 2 || (thread_env == 1 && scores_thread_arch() == 1))) {
         static thread_local bool logged = false;
-        if (!logged && (thread_env == -1 || std::getenv("STRATA_SCORES_THREAD_TRACE"))) {
+        if (!logged && (thread_env == -1 || std::getenv("CORTEX_SCORES_THREAD_TRACE"))) {
             std::fprintf(stderr, "qsa exact thread: the prompt's block scorer runs as the four-lanes-per-query kernel (nq=%lld active_blocks=%lld "
-                                 "capacity=%lld; the same scores bit for bit; STRATA_SCORES_THREAD=0 turns it off)\n",
+                                 "capacity=%lld; the same scores bit for bit; CORTEX_SCORES_THREAD=0 turns it off)\n",
                          (long long)nq, (long long)active_blocks, (long long)max_blocks);
             logged = true;
         }
@@ -1814,7 +1814,7 @@ void qsa_block_scores_rows(const QsaScoreRows& rows, const float* q_idx, const i
         std::fprintf(stderr, "qsa_block_scores_rows: unsupported geometry\n");
         std::exit(1);
     }
-    static const bool early = [] { const char* v = std::getenv("STRATA_QSA_EARLY_EXIT"); return v == nullptr || std::atoi(v) != 0; }();
+    static const bool early = [] { const char* v = std::getenv("CORTEX_QSA_EARLY_EXIT"); return v == nullptr || std::atoi(v) != 0; }();
     block_scores_multi_kernel<<<256, SCORE_WARPS * 32, 0, (cudaStream_t) stream>>>(nullptr, nullptr, q_idx, steps, (int) nq,
                                                                                  max_blocks, scores, early, rows);
     const cudaError_t e = cudaGetLastError();
@@ -1826,16 +1826,16 @@ bool qsa_block_scores_tc(const float* pooled, const float* dead, const float* q_
     if (nq <= 0) return true;
     if (s.idx_dim != IDX_DIM || s.idx_n_head != IDX_HEADS || s.idx_block != R || nq > 65535 * TC_QT) return false;
 #if defined(__HIPCC__)
-    // AMD: the gfx12 (RDNA4) WMMA scorer, opt-in (STRATA_SELECT_WMMA=1): it selects slightly differently from the warp
+    // AMD: the gfx12 (RDNA4) WMMA scorer, opt-in (CORTEX_SELECT_WMMA=1): it selects slightly differently from the warp
     // kernel (254/256 queries the same), so the default keeps the warp kernel; every other target keeps it too (false)
     static const bool wmma_on = [] {
-        const char* v = std::getenv("STRATA_SELECT_WMMA");
+        const char* v = std::getenv("CORTEX_SELECT_WMMA");
         return v != nullptr && v[0] != '\0' && v[0] != '0';
     }();
-    // any HIP card: the FP32 tiled scorer, opt-in as on CUDA (STRATA_SELECT_SIMT=1; another summation order than the
+    // any HIP card: the FP32 tiled scorer, opt-in as on CUDA (CORTEX_SELECT_SIMT=1; another summation order than the
     // warp kernel, so the default keeps the warp kernel).  RX 6900 XT, 256 queries at 128K: 2.71 -> 0.587 ms
     static const bool simt_on = [] {
-        const char* v = std::getenv("STRATA_SELECT_SIMT");
+        const char* v = std::getenv("CORTEX_SELECT_SIMT");
         return v != nullptr && v[0] == '1';
     }();
     if (simt_on && !(wmma_on && sel_gfx12_device())) {
@@ -1843,7 +1843,7 @@ bool qsa_block_scores_tc(const float* pooled, const float* dead, const float* q_
         const bool rdna2 = sel_gfx103_device();
         static std::atomic<bool> said{false};
         if (!said.exchange(true))
-            std::fprintf(stderr, "qsa select: FP32 tiled scorer (STRATA_SELECT_SIMT=1), tiles %s\n",
+            std::fprintf(stderr, "qsa select: FP32 tiled scorer (CORTEX_SELECT_SIMT=1), tiles %s\n",
                          rdna2 ? "32/128/16/8 (gfx103x)" : "32/64/32/4");
         return block_scores_simt(pooled, dead, q_idx, steps, nq, max_blocks, reach, scores, (cudaStream_t) stream, rdna2);
     }
@@ -1869,23 +1869,23 @@ bool qsa_block_scores_tc(const float* pooled, const float* dead, const float* q_
                 cudaGetLastError();
                 return false;
             }
-            // STRATA_QSA_WARP=1|select (an A/B arm): the pre-sm_80 kernels on any card, as RTX 20 runs them
-            const char* w = std::getenv("STRATA_QSA_WARP");
-            cc_major[dev] = w && (!std::strcmp(w, "1") || !std::strcmp(w, "select")) ? 7 : strata::cc_major_of(major);
+            // CORTEX_QSA_WARP=1|select (an A/B arm): the pre-sm_80 kernels on any card, as RTX 20 runs them
+            const char* w = std::getenv("CORTEX_QSA_WARP");
+            cc_major[dev] = w && (!std::strcmp(w, "1") || !std::strcmp(w, "select")) ? 7 : cortex::cc_major_of(major);
         }
         if (cc_major[dev] < 8) {
-            // no TF32 tensor cores: the FP32 tiled kernel, opt-in (STRATA_SELECT_SIMT=1): its sum order differs from the
+            // no TF32 tensor cores: the FP32 tiled kernel, opt-in (CORTEX_SELECT_SIMT=1): its sum order differs from the
             // warp kernel's, so the default stays the caller's warp kernel and the output bytes stay the same
-            // STRATA_SELECT_SIMT=2: block_scores_simt2_kernel (the same bits as =1, larger tiles)
+            // CORTEX_SELECT_SIMT=2: block_scores_simt2_kernel (the same bits as =1, larger tiles)
             static const int simt = [] {
-                const char* v = std::getenv("STRATA_SELECT_SIMT");
+                const char* v = std::getenv("CORTEX_SELECT_SIMT");
                 return v == nullptr ? 0 : v[0] == '1' ? 1 : v[0] == '2' ? 2 : 0;
             }();
             if (!simt) return false;
             const int64_t reach = active_blocks > 0 && active_blocks < max_blocks ? active_blocks : max_blocks;
             if (simt == 2) {
-                // STRATA_SIMT2_TILE=2: 64 x 64 tiles (measured slower: 400K 3.00 vs 2.82 ms)
-                static const int tile = [] { const char* v = std::getenv("STRATA_SIMT2_TILE"); return v ? std::atoi(v) : 1; }();
+                // CORTEX_SIMT2_TILE=2: 64 x 64 tiles (measured slower: 400K 3.00 vs 2.82 ms)
+                static const int tile = [] { const char* v = std::getenv("CORTEX_SIMT2_TILE"); return v ? std::atoi(v) : 1; }();
                 if (tile != 2) {
                     const dim3 grid((unsigned) ((reach + 127) / 128), (unsigned) ((nq + 31) / 32));
                     if (grid.y > 65535) return false;
@@ -1971,7 +1971,7 @@ bool qsa_block_topk_cluster(const float* scores, const int32_t* steps, int64_t n
     if (s.idx_block != R || cap < qsa_selection_width(kTopkMaxCells, s) || nq > 65535 || max_blocks <= 0) return false;
     const size_t smem = (size_t) ((max_blocks + CL_N - 1) / CL_N) * sizeof(uint32_t);
     // Per device (a layer split runs on several): 1 the cluster kernel runs here, 2 it does not. It needs sm_90+ (the
-    // card's, or STRATA_EMULATE_CC's) AND code built for it: a build with only older code JIT-compiles their PTX, whose
+    // card's, or CORTEX_EMULATE_CC's) AND code built for it: a build with only older code JIT-compiles their PTX, whose
     // copy of this kernel is a trap - the function's PTX version says which. `opt`: the dynamic shared memory opted in.
     static int ok[64] = {};
     static size_t opt[64] = {};
@@ -1981,7 +1981,7 @@ bool qsa_block_topk_cluster(const float* scores, const int32_t* steps, int64_t n
         int major = 0;
         cudaFuncAttributes fa{};
         const bool code = cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, dev) == cudaSuccess &&
-                          strata::cc_major_of(major) >= 9 &&
+                          cortex::cc_major_of(major) >= 9 &&
                           cudaFuncGetAttributes(&fa, block_topk_cluster_kernel) == cudaSuccess && fa.ptxVersion >= 90 &&
                           fa.binaryVersion >= 90;
         cudaGetLastError();
@@ -2034,7 +2034,7 @@ bool qsa_block_topk_cluster(const float* scores, const int32_t* steps, int64_t n
 // one), a count of each chunk's cells above / at the threshold, and the emit.  Each pass's CTAs take the previous
 // digit from the complete histogram with block_topk_kernel's rule (the largest digit whose cells at or above it reach
 // the width; 0 when none) - pure functions of integer counts, so every CTA finds the same digit, and the threshold,
-// `above` and the emitted cells are block_topk_kernel's: identical ids.  STRATA_TOPK_SPLIT=0 keeps the wide kernel.
+// `above` and the emitted cells are block_topk_kernel's: identical ids.  CORTEX_TOPK_SPLIT=0 keeps the wide kernel.
 constexpr int SP_T = 256, SP_W = SP_T / 32, SP_CH = 2048, SP_MAXQ = 16, SP_MAXCH = 512;
 __device__ int g_sp_hist[SP_MAXQ][4][256];
 __device__ int g_sp_state[5][SP_MAXQ][2];          // after p digits: prefix, above
@@ -2245,7 +2245,7 @@ __global__ void __launch_bounds__(SP_T) topk_split_emit_kernel(const float* __re
 
 bool topk_split_device() {
     static int ok[64] = {};   // 0 unknown, 1 yes, 2 no
-    static const int env = [] { const char* v = std::getenv("STRATA_TOPK_SPLIT"); return v ? (std::atoi(v) != 0 ? 1 : 0) : -1; }();
+    static const int env = [] { const char* v = std::getenv("CORTEX_TOPK_SPLIT"); return v ? (std::atoi(v) != 0 ? 1 : 0) : -1; }();
     if (env == 0) return false;
     int dev = 0;
     if (cudaGetDevice(&dev) != cudaSuccess || dev < 0 || dev >= 64) { cudaGetLastError(); return false; }
@@ -2253,7 +2253,7 @@ bool topk_split_device() {
         int major = 0, minor = 0;
         cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, dev);
         cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, dev);
-        ok[dev] = (env == 1 || strata::sm75_default(major, minor)) ? 1 : 2;   // Turing, STRATA_SM75_PERF=1
+        ok[dev] = (env == 1 || cortex::sm75_default(major, minor)) ? 1 : 2;   // Turing, CORTEX_SM75_PERF=1
     }
     return ok[dev] == 1;
 }
@@ -2291,7 +2291,7 @@ bool qsa_block_topk_split(const float* scores, const int32_t* steps, int64_t nq,
 // above the threshold is a candidate: the threshold, `above` and the tie budget computed over the candidates with
 // block_topk_kernel's rule are the reference's, and the candidates sorted by block emit the reference's cells in its
 // order.  Otherwise (too few cells above LB, or more than SM_CAP candidates) the query is flagged and
-// block_topk_wide_kernel<true> runs it.  STRATA_TOPK_SAMPLE=0 keeps the wide kernel alone.
+// block_topk_wide_kernel<true> runs it.  CORTEX_TOPK_SAMPLE=0 keeps the wide kernel alone.
 constexpr int TS_STRIDE = 32, TS_CAP = 4096;
 
 __device__ __forceinline__ int ts_block_scan(int v, int* s_w) {   // exclusive scan over the CTA's TK_T threads
@@ -2473,11 +2473,11 @@ __global__ void __launch_bounds__(TK_T) block_topk_sample_kernel(const float* __
     }
 }
 
-// The prompt path's one-read top-k: STRATA_TOPK_SAMPLE=0 / 1 forces it off / on for any card; unset it is a Turing kernel
-// of the series (STRATA_SM75_PERF=1).  (As submitted in #2093 it was on for every CUDA card; same ids, but only measured
+// The prompt path's one-read top-k: CORTEX_TOPK_SAMPLE=0 / 1 forces it off / on for any card; unset it is a Turing kernel
+// of the series (CORTEX_SM75_PERF=1).  (As submitted in #2093 it was on for every CUDA card; same ids, but only measured
 // on an RTX 2080 Ti, so the other cards keep the wide kernel.)
 bool topk_sample_on() {
-    static const int env = [] { const char* v = std::getenv("STRATA_TOPK_SAMPLE"); return v ? (std::atoi(v) != 0 ? 1 : 0) : -1; }();
+    static const int env = [] { const char* v = std::getenv("CORTEX_TOPK_SAMPLE"); return v ? (std::atoi(v) != 0 ? 1 : 0) : -1; }();
     if (env >= 0) return env != 0;
     static int ok[64] = {};   // 0 unknown, 1 yes, 2 no
     int dev = 0;
@@ -2486,7 +2486,7 @@ bool topk_sample_on() {
         int major = 0, minor = 0;
         cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, dev);
         cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, dev);
-        ok[dev] = strata::sm75_default(major, minor) ? 1 : 2;
+        ok[dev] = cortex::sm75_default(major, minor) ? 1 : 2;
     }
     return ok[dev] == 1;
 }
@@ -2495,14 +2495,14 @@ bool topk_sample_on() {
 void qsa_block_topk(const float* scores, const int32_t* steps, int64_t nq, int64_t max_blocks, int64_t cap,
                     const QsaShapes& s, int32_t* ids, void* stream, int64_t active_blocks) {
     // keys in registers when every query's blocks fit (contexts up to ~135K cells), else (CUDA) the same threads
-    // reading them from memory; the same ids. STRATA_TOPK_OLD=1: the original kernel
-    static const bool old = std::getenv("STRATA_TOPK_OLD") != nullptr;
+    // reading them from memory; the same ids. CORTEX_TOPK_OLD=1: the original kernel
+    static const bool old = std::getenv("CORTEX_TOPK_OLD") != nullptr;
     if (nq <= 0) return;
 #if !defined(__HIPCC__)
     // sm_90+: a cluster of CL_N CTAs per query for the calls of a few queries (decode windows); the same ids.
-    // STRATA_QSA_CLUSTER=0: the one-CTA kernels below
+    // CORTEX_QSA_CLUSTER=0: the one-CTA kernels below
     static const bool cluster = [] {
-        const char* v = std::getenv("STRATA_QSA_CLUSTER");
+        const char* v = std::getenv("CORTEX_QSA_CLUSTER");
         return !v || std::atoi(v) != 0;
     }();
     if (cluster && !old && nq <= CL_MAXQ && qsa_block_topk_cluster(scores, steps, nq, max_blocks, cap, s, ids, stream))
@@ -2527,20 +2527,20 @@ void qsa_block_topk(const float* scores, const int32_t* steps, int64_t nq, int64
     // TK_T * TK_PER registers. Use the prefill bound on sm_75, keeping max_blocks as the score-row stride.
     // Other CUDA devices keep 0.1.32's capacity rule: #337 was measured on RDNA4, and RTX 5070 64K prompts were
     // 1-3% slower. Decode/captured graphs omit the bound and never query the device here.
-    static const bool capacity_guard = std::getenv("STRATA_TOPK_CAPACITY_GUARD") != nullptr;
-    // STRATA_TOPK_ACTIVE_ANY=1 (tests): the Turing dispatch on any CUDA card, so qsa_topk_active_parity checks it
+    static const bool capacity_guard = std::getenv("CORTEX_TOPK_CAPACITY_GUARD") != nullptr;
+    // CORTEX_TOPK_ACTIVE_ANY=1 (tests): the Turing dispatch on any CUDA card, so qsa_topk_active_parity checks it
     // on whatever card runs the tests (the kernels are the same on every architecture)
-    static const bool any_card = [] { const char* v = std::getenv("STRATA_TOPK_ACTIVE_ANY"); return v && v[0] == '1'; }();
+    static const bool any_card = [] { const char* v = std::getenv("CORTEX_TOPK_ACTIVE_ANY"); return v && v[0] == '1'; }();
     const bool counted = !capacity_guard && active_blocks > 0 && active_blocks <= max_blocks &&
                          (any_card || topk_active_turing_device());
 #endif
     const int64_t reach = counted && active_blocks < max_blocks ? active_blocks : max_blocks;
     const int64_t fit = (int64_t) TK_T * (counted ? TK_PER_MAX : TK_PER);
 #if defined(__HIPCC__)
-    // gfx1201: below ~28K cells (7,168 blocks) the 1,024-thread kernel's fixed cost loses to the ref.  STRATA_TOPK_REG_MIN_BLOCKS
+    // gfx1201: below ~28K cells (7,168 blocks) the 1,024-thread kernel's fixed cost loses to the ref.  CORTEX_TOPK_REG_MIN_BLOCKS
     // moves the line (0: the register kernel always); gfx1151's table sets 4096, the crossover with the cooperative scan
     static const int64_t kRegMinBlocks = [] {
-        const char* v = std::getenv("STRATA_TOPK_REG_MIN_BLOCKS");
+        const char* v = std::getenv("CORTEX_TOPK_REG_MIN_BLOCKS");
         return v != nullptr ? (int64_t) std::atoll(v) : (int64_t) 7168;
     }();
     const bool too_small = counted && reach < kRegMinBlocks;
@@ -2560,11 +2560,11 @@ void qsa_block_topk(const float* scores, const int32_t* steps, int64_t nq, int64
     }
     // Turing prefill (the `counted` bound) above ~90K cells (22,528 blocks): the wide kernel, which reads the keys
     // coalesced, instead of the register kernel's uncoalesced per-thread runs (PR #743: 131K, 1.03 -> 0.75 ms); the
-    // same ids.  STRATA_TOPK_STREAM=0 restores the register kernel there.
+    // same ids.  CORTEX_TOPK_STREAM=0 restores the register kernel there.
     // campaign3: on HIP too (was CUDA-only; gfx11 has no sm_90 cluster path and fell to the ref radix past the
     // register kernel's reach - the deep-decode top-k cost).  Same ids as the ref kernel.
     static const bool turing_wide = [] {
-        const char* v = std::getenv("STRATA_TOPK_STREAM");
+        const char* v = std::getenv("CORTEX_TOPK_STREAM");
         return v == nullptr || v[0] != '0';
     }();
     if (reach > fit || (turing_wide && counted && reach > 22528)) {   // past the register kernel's reach, or Turing's band
@@ -2584,4 +2584,4 @@ void qsa_block_topk(const float* scores, const int32_t* steps, int64_t nq, int64
     if (e != cudaSuccess) { std::fprintf(stderr, "qsa_block_topk: %s\n", cudaGetErrorString(e)); std::exit(1); }
 }
 
-}  // namespace strata::kernels
+}  // namespace cortex::kernels

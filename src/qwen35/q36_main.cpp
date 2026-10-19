@@ -1,5 +1,5 @@
-// src/qwen35/q36_main.cpp - strata-q36: the Qwen3.6 engine path on its own (the same entry point `strata` switches
+// src/qwen35/q36_main.cpp - cortex-q36: the Qwen3.6 engine path on its own (the same entry point `cortex` switches
 // to for a qwen35moe model).
-#include "strata/qwen35/engine.hpp"
+#include "cortex/qwen35/engine.hpp"
 
-int main(int argc, char** argv) { return strata::qwen35::run(argc, argv); }
+int main(int argc, char** argv) { return cortex::qwen35::run(argc, argv); }

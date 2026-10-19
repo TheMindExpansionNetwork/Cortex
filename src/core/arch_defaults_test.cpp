@@ -1,6 +1,6 @@
 // src/core/arch_defaults_test.cpp - the per-architecture default table (no GPU needed).
-#include "strata/core/arch_defaults.hpp"
-#include "strata/core/gfx12_platform_defaults.hpp"
+#include "cortex/core/arch_defaults.hpp"
+#include "cortex/core/gfx12_platform_defaults.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -25,8 +25,8 @@ static void put(const char* k, const char* v) {
 }
 
 int main() {
-    using namespace strata::core;
-    unset("STRATA_GFX1151_DEFAULTS");
+    using namespace cortex::core;
+    unset("CORTEX_GFX1151_DEFAULTS");
     // other architectures (and CUDA, which passes an empty name): nothing
     CHECK(arch_default_env("gfx1100").empty());
     CHECK(arch_default_env("gfx1150").empty());
@@ -39,36 +39,36 @@ int main() {
         const auto t = arch_default_env(a);
         CHECK(t.size() >= 10);
         for (const auto& kv : t) {
-            CHECK(kv.first.rfind("STRATA_", 0) == 0);
-            for (const char* bits : {"STRATA_PF_GEMM", "STRATA_PF_FUSED", "STRATA_HC_UPMIX", "STRATA_PA_FAST", "STRATA_HIP_WMMA",
-                                     "STRATA_SELECT_WMMA", "STRATA_HC_Q8", "STRATA_PF_HCDOWN", "STRATA_WMMA_GEMM"})
+            CHECK(kv.first.rfind("CORTEX_", 0) == 0);
+            for (const char* bits : {"CORTEX_PF_GEMM", "CORTEX_PF_FUSED", "CORTEX_HC_UPMIX", "CORTEX_PA_FAST", "CORTEX_HIP_WMMA",
+                                     "CORTEX_SELECT_WMMA", "CORTEX_HC_Q8", "CORTEX_PF_HCDOWN", "CORTEX_WMMA_GEMM"})
                 CHECK(kv.first != bits);
         }
     }
     // gfx12: the five prompt switches only, no decode switch, no bit-changing one
-    unset("STRATA_GFX12_DEFAULTS");
+    unset("CORTEX_GFX12_DEFAULTS");
     for (const char* a : {"gfx1200", "gfx1201", "gfx1201:sramecc-:xnack-"}) {
         const auto t = arch_default_env(a);
         CHECK(t.size() == 5);
-        for (const auto& kv : t) CHECK(kv.first != "STRATA_HCD_EXACT");
+        for (const auto& kv : t) CHECK(kv.first != "CORTEX_HCD_EXACT");
         for (const auto& kv : t) {
-            CHECK(kv.first != "STRATA_Q8_PACKED" && kv.first != "STRATA_SH_STREAM" && kv.first != "STRATA_PF_GEMM" &&
-                  kv.first != "STRATA_PF_FUSED");
+            CHECK(kv.first != "CORTEX_Q8_PACKED" && kv.first != "CORTEX_SH_STREAM" && kv.first != "CORTEX_PF_GEMM" &&
+                  kv.first != "CORTEX_PF_FUSED");
         }
     }
     CHECK(arch_default_env("gfx12010").empty());
-    put("STRATA_GFX12_DEFAULTS", "0");
+    put("CORTEX_GFX12_DEFAULTS", "0");
     CHECK(arch_default_env("gfx1201").empty());
-    unset("STRATA_GFX12_DEFAULTS");
+    unset("CORTEX_GFX12_DEFAULTS");
     // a user's setting wins, whatever it is; the rest are set
-    put("STRATA_TSUM", "0");
-    unset("STRATA_QFUSE");
+    put("CORTEX_TSUM", "0");
+    unset("CORTEX_QFUSE");
     const auto set = apply_arch_defaults("gfx1151");
-    CHECK(std::getenv("STRATA_TSUM") != nullptr && std::string(std::getenv("STRATA_TSUM")) == "0");
-    CHECK(std::getenv("STRATA_QFUSE") != nullptr && std::string(std::getenv("STRATA_QFUSE")) == "1");
-    for (const auto& n : set) CHECK(n != "STRATA_TSUM");
+    CHECK(std::getenv("CORTEX_TSUM") != nullptr && std::string(std::getenv("CORTEX_TSUM")) == "0");
+    CHECK(std::getenv("CORTEX_QFUSE") != nullptr && std::string(std::getenv("CORTEX_QFUSE")) == "1");
+    for (const auto& n : set) CHECK(n != "CORTEX_TSUM");
     // the opt-out
-    put("STRATA_GFX1151_DEFAULTS", "0");
+    put("CORTEX_GFX1151_DEFAULTS", "0");
     CHECK(arch_default_env("gfx1151").empty());
     CHECK(apply_arch_defaults("gfx1151").empty());
     // the two approved gfx12 prompt defaults (WMMA attention, Q2_0 fused experts): on for Linux, off for Windows

@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { createTimeSkip, diffRun, measureFolder, timeskipRevisionMessage } from '../server/timeskip.mjs';
 
 const REPO = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..');
-const PYTHON = process.env.STRATA_TEST_PYTHON ?? (process.platform === 'win32' ? 'python' : 'python3');
+const PYTHON = process.env.CORTEX_TEST_PYTHON ?? (process.platform === 'win32' ? 'python' : 'python3');
 const hasPython = spawnSync(PYTHON, ['--version'], { windowsHide: true }).status === 0;
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -58,9 +58,9 @@ test('a run starts without the caller waiting, shows its changed files, and appl
     const workspace = join(dir, 'work'); mkdirSync(workspace);
     writeFileSync(join(workspace, 'plan.md'), 'first draft\n');
     const script = join(dir, 'revise.mjs');
-    writeFileSync(script, "import { writeFileSync, appendFileSync } from 'node:fs'; await new Promise(r => setTimeout(r, 1500)); appendFileSync('plan.md', 'second line\\n'); writeFileSync('extra.md', process.env.STRATA_TIMESKIP_PROMPT);");
+    writeFileSync(script, "import { writeFileSync, appendFileSync } from 'node:fs'; await new Promise(r => setTimeout(r, 1500)); appendFileSync('plan.md', 'second line\\n'); writeFileSync('extra.md', process.env.CORTEX_TIMESKIP_PROMPT);");
     const state = join(dir, 'state');
-    const ts = createTimeSkip({ repoRoot: REPO, python: PYTHON, env: { ...process.env, STRATA_TIMESKIP_DIR: state } });
+    const ts = createTimeSkip({ repoRoot: REPO, python: PYTHON, env: { ...process.env, CORTEX_TIMESKIP_DIR: state } });
     const started = Date.now();
     const result = await ts.startDetached({ workspace, prompt: 'extend the plan', attempts: 1, reviseCommand: `"${process.execPath}" "${script}"` });
     assert.ok(result.ok, JSON.stringify(result));
@@ -90,7 +90,7 @@ test('a run whose host is gone reads as interrupted, not as still working', { sk
     const state = join(dir, 'state'), id = 'a'.repeat(32);
     mkdirSync(join(state, id), { recursive: true });
     writeFileSync(join(state, id, 'run.json'), JSON.stringify({ id, state: 'generating', workspace: dir, prompt: 'x', checkpoints: [], attempts: [] }));
-    const ts = createTimeSkip({ repoRoot: REPO, python: PYTHON, env: { ...process.env, STRATA_TIMESKIP_DIR: state } });
+    const ts = createTimeSkip({ repoRoot: REPO, python: PYTHON, env: { ...process.env, CORTEX_TIMESKIP_DIR: state } });
     assert.equal(ts.status(id).phase, 'interrupted');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
@@ -104,7 +104,7 @@ test('Stop ends the job and everything it started, deletes the copies, leaves th
     const script = join(dir, 'slow.mjs');
     writeFileSync(script, `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); writeFileSync('half-done.md', 'x'); await new Promise(r => setTimeout(r, 120000));`);
     const state = join(dir, 'state');
-    const ts = createTimeSkip({ repoRoot: REPO, python: PYTHON, env: { ...process.env, STRATA_TIMESKIP_DIR: state } });
+    const ts = createTimeSkip({ repoRoot: REPO, python: PYTHON, env: { ...process.env, CORTEX_TIMESKIP_DIR: state } });
     const started = await ts.startDetached({ workspace, prompt: 'slow one', attempts: 1, reviseCommand: `"${process.execPath}" "${script}"` });
     assert.ok(started.ok, JSON.stringify(started));
     const id = started.run.id;
@@ -129,7 +129,7 @@ test('the revision step reads the host\'s stream: a long silent turn is fine, a 
   const script = join(REPO, 'apps', 'host', 'server', 'timeskip-revise.mjs');
   const mode = { current: 'ok' };
   const server = http.createServer((req, res) => {
-    if (req.headers['x-strata-internal'] !== 's3cret') { res.writeHead(403, { 'content-type': 'application/json' }); res.end('{"error":"Not allowed."}'); return; }
+    if (req.headers['x-cortex-internal'] !== 's3cret') { res.writeHead(403, { 'content-type': 'application/json' }); res.end('{"error":"Not allowed."}'); return; }
     if (mode.current === 'refuse') { res.writeHead(503, { 'content-type': 'application/json' }); res.end('{"error":"Load a model first, then try Time-skip again."}'); return; }
     res.writeHead(200, { 'content-type': 'application/x-ndjson' });
     res.write('{"type":"beat"}\n');
@@ -142,7 +142,7 @@ test('the revision step reads the host\'s stream: a long silent turn is fine, a 
   });
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const run = (env = {}) => new Promise(resolve => {
-    const child = spawn(process.execPath, [script], { env: { ...process.env, STRATA_HOST_URL: `http://127.0.0.1:${server.address().port}`, STRATA_INTERNAL_SECRET: 's3cret', STRATA_TIMESKIP_PROMPT: 'x', ...env } });
+    const child = spawn(process.execPath, [script], { env: { ...process.env, CORTEX_HOST_URL: `http://127.0.0.1:${server.address().port}`, CORTEX_INTERNAL_SECRET: 's3cret', CORTEX_TIMESKIP_PROMPT: 'x', ...env } });
     let out = '', err = ''; child.stdout.on('data', d => { out += d; }); child.stderr.on('data', d => { err += d; });
     child.on('close', code => resolve({ code, out: out.trim(), err: err.trim() }));
   });
@@ -151,9 +151,9 @@ test('the revision step reads the host\'s stream: a long silent turn is fine, a 
     mode.current = 'error'; const bad = await run(); assert.equal(bad.code, 1); assert.equal(bad.err, 'The model stopped answering.');
     mode.current = 'cut'; const cut = await run(); assert.equal(cut.code, 1); assert.match(cut.err, /stopped before it finished/);
     mode.current = 'refuse'; assert.match((await run()).err, /Load a model first/);
-    assert.match((await run({ STRATA_INTERNAL_SECRET: 'wrong' })).err, /Not allowed/);
-    assert.match((await run({ STRATA_INTERNAL_SECRET: '' })).err, /needs the Strata app/);
+    assert.match((await run({ CORTEX_INTERNAL_SECRET: 'wrong' })).err, /Not allowed/);
+    assert.match((await run({ CORTEX_INTERNAL_SECRET: '' })).err, /needs the Cortex app/);
   } finally { server.close(); }
-  const gone = await new Promise(resolve => { const child = spawn(process.execPath, [script], { env: { ...process.env, STRATA_HOST_URL: 'http://127.0.0.1:9', STRATA_INTERNAL_SECRET: 's', STRATA_TIMESKIP_PROMPT: 'x' } }); let err = ''; child.stderr.on('data', d => { err += d; }); child.on('close', code => resolve({ code, err })); });
+  const gone = await new Promise(resolve => { const child = spawn(process.execPath, [script], { env: { ...process.env, CORTEX_HOST_URL: 'http://127.0.0.1:9', CORTEX_INTERNAL_SECRET: 's', CORTEX_TIMESKIP_PROMPT: 'x' } }); let err = ''; child.stderr.on('data', d => { err += d; }); child.on('close', code => resolve({ code, err })); });
   assert.equal(gone.code, 1); assert.match(gone.err, /could not be reached/);
 });

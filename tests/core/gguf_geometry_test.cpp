@@ -1,5 +1,5 @@
-// tests/core/gguf_geometry_test.cpp - the model's geometry from its GGUF metadata (strata::read_geometry) and the
-// check against the shape the kernels are compiled for (strata::geometry_unsupported, check_architecture), on
+// tests/core/gguf_geometry_test.cpp - the model's geometry from its GGUF metadata (cortex::read_geometry) and the
+// check against the shape the kernels are compiled for (cortex::geometry_unsupported, check_architecture), on
 // synthetic GGUFs: no model, no GPU.
 //
 // The full key set is the one Unsloth's Qwen3.8-Flash-Next UD-IQ4_XS carries (read from its first shard).  Then
@@ -17,7 +17,7 @@
 #include <vector>
 
 namespace fs = std::filesystem;
-using strata::core::ModelGeometry;
+using cortex::core::ModelGeometry;
 
 namespace {
 int g_fail = 0;
@@ -30,7 +30,7 @@ struct TempDir {
     fs::path path;
     TempDir() {
         path = fs::temp_directory_path() /
-               ("strata-gguf-geometry-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+               ("cortex-gguf-geometry-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
         fs::create_directories(path);
     }
     ~TempDir() {
@@ -105,10 +105,10 @@ Result run(const fs::path& dir, const std::vector<fixture::Kv>& kv) {
     const fs::path p = dir / ("m" + std::to_string(n++) + ".gguf");
     fixture::write(p, kv, {});
     Result r;
-    const strata::GgufFile f(p.string());
-    r.read_err = strata::read_geometry(f, r.g);
-    if (r.read_err.empty()) r.unsupported = strata::geometry_unsupported(r.g);
-    r.guard = strata::check_architecture(f);
+    const cortex::GgufFile f(p.string());
+    r.read_err = cortex::read_geometry(f, r.g);
+    if (r.read_err.empty()) r.unsupported = cortex::geometry_unsupported(r.g);
+    r.guard = cortex::check_architecture(f);
     return r;
 }
 bool has(const std::string& s, const char* part) { return s.find(part) != std::string::npos; }
@@ -126,9 +126,9 @@ bool same_shape(const ModelGeometry& a, const ModelGeometry& b) {
 
 int real_model(const std::string& shard) {
     try {
-        const strata::GgufFile f(shard);
+        const cortex::GgufFile f(shard);
         ModelGeometry g;
-        const std::string err = strata::read_geometry(f, g);
+        const std::string err = cortex::read_geometry(f, g);
         if (!err.empty()) {
             std::printf("  refused: %s\n", err.c_str());
             return 1;
@@ -144,7 +144,7 @@ int real_model(const std::string& shard) {
                     (long long) g.idx_top_k);
         std::printf("  HC %lld (rank %lld); MoE %lld experts, %lld per token, ff %lld\n", (long long) g.hc,
                     (long long) g.hc_lr, (long long) g.n_expert, (long long) g.n_expert_used, (long long) g.n_ff);
-        const std::string why = strata::geometry_unsupported(g);
+        const std::string why = cortex::geometry_unsupported(g);
         std::printf("  the compiled kernels: %s\n", why.empty() ? "can run it" : why.c_str());
         return why.empty() ? 0 : 1;
     } catch (const std::exception& e) {
@@ -161,7 +161,7 @@ int main(int argc, char** argv) {
     const std::string p = "qwen4exp.";
     {
         const Result r = run(d.path, full_keys());
-        ModelGeometry want = strata::core::kCompiledGeometry;
+        ModelGeometry want = cortex::core::kCompiledGeometry;
         want.n_vocab = 1000;
         check(r.read_err.empty(), "the full key set reads" + (r.read_err.empty() ? "" : ": " + r.read_err));
         check(same_shape(r.g, want), "  and gives the compiled shape (vocabulary from tokenizer.ggml.tokens)");
@@ -176,7 +176,7 @@ int main(int argc, char** argv) {
             fixture::u32(p + "expert_used_count", 10),        fixture::u32(p + "attention.head_count", 24),
             fixture::u32(p + "attention.head_count_kv", 2)};
         const Result r = run(d.path, six);
-        check(r.read_err.empty() && same_shape(r.g, strata::core::kCompiledGeometry) && r.guard.empty(),
+        check(r.read_err.empty() && same_shape(r.g, cortex::core::kCompiledGeometry) && r.guard.empty(),
               "only the six required keys: the rest keeps the compiled values");
         for (const char* key : {"block_count", "embedding_length", "expert_count", "expert_used_count",
                                 "attention.head_count", "attention.head_count_kv"}) {

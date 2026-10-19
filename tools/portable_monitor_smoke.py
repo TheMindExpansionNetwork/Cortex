@@ -31,11 +31,11 @@ import sys
 sys.path.insert(0, sys.argv[1])
 from rich.console import Console
 from textual.widgets import Static
-from strata_cli.client import Endpoint
-from strata_cli.monitor import MonitorApp
-from strata_cli.dashboard import render_dashboard
-from strata_cli.detail_dashboard import render_detail_dashboard
-import strata_cli.monitor as monitor_module
+from cortex_cli.client import Endpoint
+from cortex_cli.monitor import MonitorApp
+from cortex_cli.dashboard import render_dashboard
+from cortex_cli.detail_dashboard import render_detail_dashboard
+import cortex_cli.monitor as monitor_module
 
 async def main():
     source = str(monitor_module.__file__).replace("\\", "/")
@@ -185,7 +185,7 @@ def smoke(bundle: Path, *, interactive: bool = False) -> dict:
                 (one_shot.get("snapshot") or {}).get("model", {}).get("id") != "portable-smoke-model"):
             raise RuntimeError("one-shot monitor returned the wrong model or failed")
 
-        with tempfile.TemporaryDirectory(prefix="strata-portable-smoke-") as scratch:
+        with tempfile.TemporaryDirectory(prefix="cortex-portable-smoke-") as scratch:
             target = Path(scratch) / "monitor"
             preview = _run(str(BUILDER), "install", str(bundle), "--target", str(target), "--plan")
             if preview.get("sha256") != expected_sha or preview.get("would_install") is not True:

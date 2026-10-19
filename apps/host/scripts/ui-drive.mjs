@@ -1,7 +1,7 @@
-// Shared helpers for driving a throwaway host with Playwright (the app page in a real browser). STRATA_UI_BASE = the host's address, CHROME_PATH = the browser.
+// Shared helpers for driving a throwaway host with Playwright (the app page in a real browser). CORTEX_UI_BASE = the host's address, CHROME_PATH = the browser.
 export { chromium } from 'playwright-core';
 import { chromium as browserType } from 'playwright-core';
-export const BASE = process.env.STRATA_UI_BASE ?? 'http://127.0.0.1:18791';
+export const BASE = process.env.CORTEX_UI_BASE ?? 'http://127.0.0.1:18791';
 export const CHROME = process.env.CHROME_PATH ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 export async function api(path, method = 'GET', body) {
   const r = await fetch(BASE + path, { method, headers: { 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });

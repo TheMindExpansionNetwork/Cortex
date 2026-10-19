@@ -14,7 +14,7 @@
 //   mm_down   YE[row][d] = h . down_d, fp32
 //   mm_combine y[t][d] = sum_k w(t, k) * YE[pos(t, k)][d], k in order
 //
-// The idea of feeding matmul2d tiles of dequantized weights from threadgroup memory follows yibie/strata-mlx's
+// The idea of feeding matmul2d tiles of dequantized weights from threadgroup memory follows yibie/cortex-mlx's
 // tile_matmul (MIT); the code is our own.
 #include <MetalPerformancePrimitives/MetalPerformancePrimitives.h>
 using namespace mpp::tensor_ops;
@@ -271,8 +271,8 @@ kernel void mm_gather(device const float* x [[buffer(0)]], device const int* srt
 
 // The SSD-streaming arena (as in moe.metal): with function constant 20, expert e's slot is smap[e] in the chunks W,
 // W1..W3 (buffers 5..8 of mm_gu2 / mm_down2 / mm_gu3 / mm_down3); gate_off / up_off / down_off are offsets in the slot.
-#ifndef STRATA_ARENA_METAL
-#define STRATA_ARENA_METAL
+#ifndef CORTEX_ARENA_METAL
+#define CORTEX_ARENA_METAL
 constant bool kArenaFc [[function_constant(20)]];
 constant bool kArena = is_function_constant_defined(kArenaFc) && kArenaFc;
 static inline device const uchar* arena_slot(uint v, device const uchar* W, device const uchar* W1, device const uchar* W2,
@@ -400,8 +400,8 @@ MMDN2(T_IQ4_NL, 16, 64, 32, 2) MMDN2(T_IQ4_NL, 16, 64, 64, 2) MMDN2(T_IQ4_NL, 16
 // no threadgroup staging and no barriers in the K loop.  Each simdgroup owns TN output rows; a threadgroup SG * TN.
 // The right input's element layout (tests/coop_layout): runs of 4 consecutive k at one n, so a lane decodes 4 values
 // at a time (W4<F>).  Activations: the gathered fp16 rows from device memory.
-#ifndef STRATA_COOP_K4
-#define STRATA_COOP_K4
+#ifndef CORTEX_COOP_K4
+#define CORTEX_COOP_K4
 // function constant 7: the right-input cooperative tensor holds runs of 4 consecutive k at one n per lane (the M5's
 // layout; tests/coop_layout).  false (the M4: runs of 2 n at one k): every element decoded on its own.
 constant bool COOP_K4 [[function_constant(7)]];

@@ -1,6 +1,6 @@
 """Tests for setup.py's parallel ranged downloads (0.2.0): a local threaded HTTP server that supports Range stands in
 for Hugging Face's CDN.  Covers the parallel path, a resume after a kill and after a failed round, a server without Range,
-a piece that fails once, a signed address that runs out, the SHA-256 pin, STRATA_DL_CONNECTIONS=1 and the progress line.
+a piece that fails once, a signed address that runs out, the SHA-256 pin, CORTEX_DL_CONNECTIONS=1 and the progress line.
 
     python -m unittest tools.test_setup_download
 """
@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 import setup  # noqa: E402
-import strata_mcp  # noqa: E402
+import cortex_mcp  # noqa: E402
 
 CHUNK = 64 << 10                                       # the tests' piece size (setup uses 32 MiB)
 DATA = bytes((i * 7 + (i >> 8)) & 0xFF for i in range(CHUNK * 40 + 12345))       # 40 whole pieces and a short last one
@@ -148,8 +148,8 @@ def small_pieces(**extra):
         for k, v in consts.items():
             st.enter_context(mock.patch.object(setup, k, v))
         st.enter_context(mock.patch.object(setup.time, "sleep", lambda s: None))
-        env = {k: v for k, v in os.environ.items() if k not in ("STRATA_DL_CONNECTIONS", "STRATA_ALLOW_UNPINNED")}
-        env["STRATA_SOURCE"] = "huggingface"
+        env = {k: v for k, v in os.environ.items() if k not in ("CORTEX_DL_CONNECTIONS", "CORTEX_ALLOW_UNPINNED")}
+        env["CORTEX_SOURCE"] = "huggingface"
         st.enter_context(mock.patch.dict(os.environ, env, clear=True))
         yield
 
@@ -206,7 +206,7 @@ class ParallelDownload(unittest.TestCase):
 
     def test_one_connection_variable_restores_one_stream(self):
         with small_pieces(), Server() as srv, tempfile.TemporaryDirectory() as d:
-            with mock.patch.dict(os.environ, {"STRATA_DL_CONNECTIONS": "1"}):
+            with mock.patch.dict(os.environ, {"CORTEX_DL_CONNECTIONS": "1"}):
                 code, out = run(srv, d)
             self.assertIsNone(code, out)
             self.assertEqual((Path(d) / NAME).read_bytes(), DATA)
@@ -217,7 +217,7 @@ class ParallelDownload(unittest.TestCase):
         with small_pieces():
             self.assertEqual(setup.dl_connections(), 4)
             for raw, want in (("16", 16), ("0", 1), ("-3", 1), ("99", 32), ("x", 4), ("", 4)):
-                with mock.patch.dict(os.environ, {"STRATA_DL_CONNECTIONS": raw}):
+                with mock.patch.dict(os.environ, {"CORTEX_DL_CONNECTIONS": raw}):
                     self.assertEqual(setup.dl_connections(), want, raw)
 
 
@@ -297,7 +297,7 @@ class Resume(unittest.TestCase):
             "setup.download(sys.argv[1], __import__('pathlib').Path(sys.argv[2]) / %r, 'the model')\n"
             % (str(ROOT), str(ROOT / "tools"), CHUNK, len(DATA), hashlib.sha256(DATA).hexdigest(), NAME))
         with small_pieces(), Server(delay=0.05) as srv, tempfile.TemporaryDirectory() as d:
-            env = dict(os.environ, STRATA_SOURCE="huggingface")
+            env = dict(os.environ, CORTEX_SOURCE="huggingface")
             proc = subprocess.Popen([sys.executable, "-c", runner, srv.url, d], env=env,
                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             try:
@@ -340,7 +340,7 @@ class Resume(unittest.TestCase):
             part.write_bytes(bytes(junk[:20 * CHUNK]))
             (Path(d) / (NAME + ".part.chunks")).write_text(json.dumps(
                 {"v": 1, "total": len(DATA), "chunk": CHUNK, "done": [[0, 8], [9, 20]]}))
-            with mock.patch.dict(os.environ, {"STRATA_DL_CONNECTIONS": "1"}):
+            with mock.patch.dict(os.environ, {"CORTEX_DL_CONNECTIONS": "1"}):
                 code, out = run(srv, d)
             self.assertIsNone(code, out)
             self.assertEqual((Path(d) / NAME).read_bytes(), DATA)
@@ -443,7 +443,7 @@ class Progress(unittest.TestCase):
             self.assertTrue(bar)
             for x in bar:
                 self.assertRegex(x, r"^  the model: +[\d.]+ / [\d.]+ GB \(\d+%\) +$")
-            parsed = strata_mcp.install_progress(bar)["download"]
+            parsed = cortex_mcp.install_progress(bar)["download"]
             self.assertEqual(parsed["file"], "the model")
             self.assertEqual(parsed["percent"], 100)
             self.assertEqual(parsed["total_gb"], round(len(DATA) / 1e9, 2))
@@ -451,7 +451,7 @@ class Progress(unittest.TestCase):
     def test_the_format_matches_the_one_stream_path(self):
         with small_pieces(), Server() as srv, tempfile.TemporaryDirectory() as d1, tempfile.TemporaryDirectory() as d2:
             _, par = run(srv, d1)
-            with mock.patch.dict(os.environ, {"STRATA_DL_CONNECTIONS": "1"}):
+            with mock.patch.dict(os.environ, {"CORTEX_DL_CONNECTIONS": "1"}):
                 _, one = run(srv, d2)
             def shape(out):
                 return {re.sub(r"[\d.]+", "N", x) for x in out.replace("\r", "\n").split("\n") if "GB (" in x}

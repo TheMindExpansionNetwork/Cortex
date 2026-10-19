@@ -1,10 +1,10 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/sycl_queue.hpp"
-#include "strata/kernels/bf16_gemv.hpp"
+#include "cortex/sycl_queue.hpp"
+#include "cortex/kernels/bf16_gemv.hpp"
 #include "s26_tsum.dp.hpp"
-#include "strata/kernels/bf16_bits.hpp"
+#include "cortex/kernels/bf16_bits.hpp"
 
 #include <cstdlib>
 #include <limits>
@@ -12,7 +12,7 @@
 #include <string>
 #include <cmath>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
 // The FP32-activation MMVF implementation below is adapted from llama.cpp
@@ -179,11 +179,11 @@ __dpct_inline__ void bf16_f32_mmvf_multi_kernel(
                 y[(size_t)k * ldy + item_ct1.get_group(2)] = acc[k];
 }
 
-// S25 (STRATA_MMVF_ROWS=1): RPB output rows per block. Each block read its row's weights once but all T activation
+// S25 (CORTEX_MMVF_ROWS=1): RPB output rows per block. Each block read its row's weights once but all T activation
 // rows again (n_out blocks x T x n_in floats through L2 - the part that grew with T); here a block reads the
 // activations once for RPB rows. Per output, thread t still walks pairs t, t + BLOCK_SIZE, ... with the same two
 // ordered FMAs and the same warp and block reductions: bit-identical to bf16_f32_mmvf_multi_kernel.
-// S26 STRATA_LFUSE=1 (AUX): one more block computes row 0 of w_aux into y_aux[k * ldy_aux] - the same per-output
+// S26 CORTEX_LFUSE=1 (AUX): one more block computes row 0 of w_aux into y_aux[k * ldy_aux] - the same per-output
 // code, so each aux output is bitwise what its own bf16_f32_mmvf_multi_kernel launch gave (the shared expert's gate)
 template <int BLOCK_SIZE, int NT, int RPB, bool TS = false, bool AUX = false>
 /*
@@ -256,7 +256,7 @@ __dpct_inline__ void bf16_f32_mmvf_rows_kernel(
             }
         }
     }
-    if constexpr (TS) {   // S26 STRATA_TSUM=1: the RPB x NT warp sums (both stages) as transposed butterflies, bitwise the same
+    if constexpr (TS) {   // S26 CORTEX_TSUM=1: the RPB x NT warp sums (both stages) as transposed butterflies, bitwise the same
         constexpr int V = RPB * NT, P = s26ts::pow2_ceil(V);
         const int lane = t & 31, j = s26ts::tsum_token<P>(lane);
         const bool own = lane == s26ts::tsum_lane<P>(j) && j < V;
@@ -319,8 +319,8 @@ void launch_rows(const float *x, int64_t ldx, const uint16_t *w, float *y,
                  float *y_aux = nullptr, int64_t ldy_aux = 0) {
     constexpr int RPB = 4;
     const unsigned nb = (unsigned) ((n_out + RPB - 1) / RPB);
-    static const bool ts = [] { const char* v = std::getenv("STRATA_TSUM"); return v && v[0] == '1'; }();
-    if (w_aux != nullptr) {   // S26 STRATA_LFUSE: + one aux row block
+    static const bool ts = [] { const char* v = std::getenv("CORTEX_TSUM"); return v && v[0] == '1'; }();
+    if (w_aux != nullptr) {   // S26 CORTEX_LFUSE: + one aux row block
 /*
 DPCT1049: The work-group size passed to the SYCL kernel may exceed the
 limit. To get the device limit, query info::device::max_work_group_size. Adjust
@@ -536,12 +536,12 @@ int mmvf_block_size(int64_t n_in) {
 bool bf16_gemv_fp32_mmvf_multi_aux(const float* x, int64_t ldx, const uint16_t* w, float* y, int64_t ldy,
                                    int64_t n_in, int64_t n_out, int n_tok, const uint16_t* w_aux, float* y_aux,
                                    int64_t ldy_aux, void* stream) {
-    static const bool rows = [] { const char* v = std::getenv("STRATA_MMVF_ROWS"); return v && v[0] == '1'; }();
+    static const bool rows = [] { const char* v = std::getenv("CORTEX_MMVF_ROWS"); return v && v[0] == '1'; }();
     // exactly the conditions under which both calls would take the rows / multi kernels at the same block size
     if (!rows || n_out < 64 || n_tok < 2 || n_tok > 8 || n_in <= 0 || (n_in & 1) != 0 || (ldx & 1) != 0 || x == nullptr ||
         w == nullptr || y == nullptr || w_aux == nullptr || y_aux == nullptr || (reinterpret_cast<uintptr_t>(x) & 7u) != 0)
         return false;
-    const dpct::queue_ptr st = strata::q_of(stream);
+    const dpct::queue_ptr st = cortex::q_of(stream);
     const int ni = (int) n_in, no = (int) n_out;
     switch (mmvf_block_size(n_in)) {
         case 32: launch_rows<32>(x, ldx, w, y, ldy, ni, no, n_tok, st, w_aux, y_aux, ldy_aux); break;
@@ -584,8 +584,8 @@ void bf16_gemv_fp32_mmvf_multi(const float* x, int64_t ldx, const uint16_t* w, f
     if (n_tok < 1 || n_tok > 8 || n_in <= 0 || (n_in & 1) != 0 || n_out <= 0 || (ldx & 1) != 0 || x == nullptr ||
         w == nullptr || y == nullptr || (reinterpret_cast<uintptr_t>(x) & 7u) != 0)
         throw std::invalid_argument("bf16_gemv_fp32_mmvf_multi: 1..8 rows, even n_in/ldx, aligned pointers");
-    const dpct::queue_ptr st = strata::q_of(stream);
-    static const bool rows = [] { const char* v = std::getenv("STRATA_MMVF_ROWS"); return v && v[0] == '1'; }();
+    const dpct::queue_ptr st = cortex::q_of(stream);
+    static const bool rows = [] { const char* v = std::getenv("CORTEX_MMVF_ROWS"); return v && v[0] == '1'; }();
     if (rows && n_out >= 64) {
         const int ni = (int) n_in, no = (int) n_out;
         switch (mmvf_block_size(n_in)) {
@@ -622,7 +622,7 @@ void bf16_gemv_fp32_mmvf_multi(const float* x, int64_t ldx, const uint16_t* w, f
                 dpct::get_error_string_dummy(result));
         return;
     }
-#define STRATA_MMVF_M(N)                                                       \
+#define CORTEX_MMVF_M(N)                                                       \
     case N:                                                                    \
         switch (n_tok) {                                                       \
         case 1: {                                                              \
@@ -830,10 +830,10 @@ void bf16_gemv_fp32_mmvf_multi(const float* x, int64_t ldx, const uint16_t* w, f
         } break;                                                               \
         } break
     switch (mmvf_block_size(n_in)) {
-        STRATA_MMVF_M(32); STRATA_MMVF_M(64); STRATA_MMVF_M(96); STRATA_MMVF_M(128);
-        STRATA_MMVF_M(160); STRATA_MMVF_M(192); STRATA_MMVF_M(224); STRATA_MMVF_M(256);
+        CORTEX_MMVF_M(32); CORTEX_MMVF_M(64); CORTEX_MMVF_M(96); CORTEX_MMVF_M(128);
+        CORTEX_MMVF_M(160); CORTEX_MMVF_M(192); CORTEX_MMVF_M(224); CORTEX_MMVF_M(256);
     }
-#undef STRATA_MMVF_M
+#undef CORTEX_MMVF_M
     /*
     DPCT1010: SYCL uses exceptions to report errors and does not use the
     error codes. The cudaGetLastError function call was replaced with 0. You
@@ -868,8 +868,8 @@ void bf16_gemv_fp32_mmvf(const float* x, const uint16_t* w, float* y,
         (reinterpret_cast<uintptr_t>(w) & 3u) != 0 ||
         (reinterpret_cast<uintptr_t>(y) & 3u) != 0)
         throw std::invalid_argument("bf16_gemv_fp32_mmvf: null or misaligned pointer");
-    const dpct::queue_ptr st = strata::q_of(stream);
-#define STRATA_MMVF_CASE(N)                                                    \
+    const dpct::queue_ptr st = cortex::q_of(stream);
+#define CORTEX_MMVF_CASE(N)                                                    \
     case N: {                                                                  \
         auto exp_props = sycl::ext::oneapi::experimental::properties{          \
             sycl::ext::oneapi::experimental::use_root_sync};                   \
@@ -894,16 +894,16 @@ void bf16_gemv_fp32_mmvf(const float* x, const uint16_t* w, float* y,
         });                                                                    \
     } break
     switch (mmvf_block_size(n_in)) {
-        STRATA_MMVF_CASE(32);
-        STRATA_MMVF_CASE(64);
-        STRATA_MMVF_CASE(96);
-        STRATA_MMVF_CASE(128);
-        STRATA_MMVF_CASE(160);
-        STRATA_MMVF_CASE(192);
-        STRATA_MMVF_CASE(224);
-        STRATA_MMVF_CASE(256);
+        CORTEX_MMVF_CASE(32);
+        CORTEX_MMVF_CASE(64);
+        CORTEX_MMVF_CASE(96);
+        CORTEX_MMVF_CASE(128);
+        CORTEX_MMVF_CASE(160);
+        CORTEX_MMVF_CASE(192);
+        CORTEX_MMVF_CASE(224);
+        CORTEX_MMVF_CASE(256);
     }
-#undef STRATA_MMVF_CASE
+#undef CORTEX_MMVF_CASE
     /*
     DPCT1010: SYCL uses exceptions to report errors and does not use the
     error codes. The cudaGetLastError function call was replaced with 0. You
@@ -941,4 +941,4 @@ void bf16_gemv_fp32_mmvf_cols(const float* x, const uint16_t* w, float* y, int64
     }
 }
 
-}  // namespace strata::kernels
+}  // namespace cortex::kernels

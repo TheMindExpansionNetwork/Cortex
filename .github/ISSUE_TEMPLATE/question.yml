@@ -1,5 +1,5 @@
 name: Question
-description: Ask how to use Strata, or share a result
+description: Ask how to use Cortex, or share a result
 title: "[Area] "
 labels: ["question"]
 body:
@@ -16,7 +16,7 @@ body:
       options:
         - "[Engine]  (speed, kernels, models, the server and API)"
         - "[GUI]  (the desktop app)"
-        - "[TUI]  (the Terminal: strata launch, connect, monitor)"
+        - "[TUI]  (the Terminal: cortex launch, connect, monitor)"
         - "[Benchmark]  (measurements and reports)"
         - "[Docs]  (documentation)"
         - "[Other]  (anything else, including setup and installation)"

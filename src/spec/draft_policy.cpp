@@ -1,9 +1,9 @@
-// src/spec/draft_policy.cpp - see include/strata/spec/draft_policy.hpp.
-#include "strata/spec/draft_policy.hpp"
+// src/spec/draft_policy.cpp - see include/cortex/spec/draft_policy.hpp.
+#include "cortex/spec/draft_policy.hpp"
 
 #include <algorithm>
 
-namespace strata::spec {
+namespace cortex::spec {
 namespace {
 
 // The shape of a round's cost by window size, relative to one token, used only for sizes not measured yet (the
@@ -158,4 +158,4 @@ void DraftPolicy::observe_chain(int t_mtp, int k, int accepted, int match, doubl
     cbad_[b] = kDecay * cbad_[b] + (ok < k ? 1.0 : 0.0);
 }
 
-}  // namespace strata::spec
+}  // namespace cortex::spec

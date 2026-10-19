@@ -1,5 +1,5 @@
 /**
- * Programs that are not Strata's own (zenity, kdialog, xdg-open, the assistant's shell) get the environment the Linux AppImage was
+ * Programs that are not Cortex's own (zenity, kdialog, xdg-open, the assistant's shell) get the environment the Linux AppImage was
  * started from, not the AppImage's libraries and settings (tester report 2026-10-17: zenity died with
  * "libssl.so.3: version OPENSSL_3.2.0 not found" and the folder picker did nothing).
  */
@@ -10,9 +10,9 @@ import { externalEnvironment, recordedOriginal, withoutAppImage } from '../serve
 import { chooseFolder, chooserUnavailable, portalFolder } from '../server/folder-dialog.mjs';
 import { agentEnvironment } from '../server/agent/harness-runtime.mjs';
 
-const APPDIR = '/tmp/.mount_StrataAbc';
+const APPDIR = '/tmp/.mount_CortexAbc';
 const leaky = {
-  APPDIR, APPIMAGE: '/home/u/Strata.AppImage', ARGV0: 'Strata',
+  APPDIR, APPIMAGE: '/home/u/Cortex.AppImage', ARGV0: 'Cortex',
   LD_LIBRARY_PATH: `${APPDIR}/usr/lib:${APPDIR}/usr/lib/x86_64-linux-gnu:/opt/cuda/lib64`,
   PATH: `${APPDIR}/usr/bin:/usr/local/bin:/usr/bin`,
   XDG_DATA_DIRS: `${APPDIR}/usr/share:/usr/share:/usr/local/share`,
@@ -35,10 +35,10 @@ test('without a record, everything that points into the AppImage is removed and 
 test('with the launcher\'s record, the original environment is restored exactly', () => {
   const original = { PATH: '/usr/bin', LD_LIBRARY_PATH: '/mine', HOME: '/home/u', DISPLAY: ':1' };
   const record = Buffer.from(Object.entries(original).map(([k, v]) => `${k}=${v}`).join('\0') + '\0').toString('base64');
-  const env = externalEnvironment({ ...leaky, STRATA_ORIGINAL_ENV: record });
+  const env = externalEnvironment({ ...leaky, CORTEX_ORIGINAL_ENV: record });
   assert.deepEqual(env, original);
-  assert.deepEqual(recordedOriginal({ STRATA_ORIGINAL_ENV: record }), original);
-  assert.equal(recordedOriginal({ STRATA_ORIGINAL_ENV: '!!!' }), null);
+  assert.deepEqual(recordedOriginal({ CORTEX_ORIGINAL_ENV: record }), original);
+  assert.equal(recordedOriginal({ CORTEX_ORIGINAL_ENV: '!!!' }), null);
 });
 
 test('outside an AppImage nothing changes', () => {

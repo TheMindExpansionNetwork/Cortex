@@ -1,4 +1,4 @@
-// src/kernels/cpu/kq_avx1.cpp - the AVX1 router dot for older CPUs (see kq_avx1.hpp).  From rwkeyes' Strata_Dirigo
+// src/kernels/cpu/kq_avx1.cpp - the AVX1 router dot for older CPUs (see kq_avx1.hpp).  From rwkeyes' Cortex_Dirigo
 // fork (MIT), its AVX1 floor.
 //
 // Measured on the hardware this exists for (Xeon E5-2665, 2x8 cores, AVX only) for one layer's router
@@ -7,7 +7,7 @@
 //
 // Compiled for AVX (/arch:AVX, -mavx; CMakeLists.txt sets that per source); it is only ever called behind
 // cpu_avx1_ok(), so no CPU that lacks AVX can reach it.
-#include "strata/kernels/cpu/kq_avx1.hpp"
+#include "cortex/kernels/cpu/kq_avx1.hpp"
 
 #include <immintrin.h>
 
@@ -17,7 +17,7 @@
 #error "kq_avx1.cpp must be compiled with AVX enabled (see the per-source flags in CMakeLists.txt)"
 #endif
 
-namespace strata::kernels::cpu {
+namespace cortex::kernels::cpu {
 namespace {
 
 // 8 floats -> one float, the same reduction order the AVX2 kernel's hsum_float_8 uses.
@@ -68,4 +68,4 @@ void bf16_rows_dot_multi_avx1(const uint16_t* w, int rows, int cols, const float
     }
 }
 
-}  // namespace strata::kernels::cpu
+}  // namespace cortex::kernels::cpu

@@ -1,7 +1,7 @@
 import type { TuneProgress } from './native-tune';
 
 /**
- * Which of the five steps the tuner is in, from the stage its status file names (strata_control/autotune.py):
+ * Which of the five steps the tuner is in, from the stage its status file names (cortex_control/autotune.py):
  * start and waiting are the PC check, base the first measurement, plan / rounds / drift / per_request the settings tried,
  * confirm the repeat test, and done the last moment before the result is saved and shown.
  */

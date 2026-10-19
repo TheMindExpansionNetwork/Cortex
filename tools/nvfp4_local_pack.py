@@ -1,4 +1,4 @@
-"""tools/nvfp4_local_pack.py - NVIDIA's Qwen3.8-Flash-Next-FP4-Local (ModelOpt, QAD) -> files Strata can pack.
+"""tools/nvfp4_local_pack.py - NVIDIA's Qwen3.8-Flash-Next-FP4-Local (ModelOpt, QAD) -> files Cortex can pack.
 
     python tools/nvfp4_local_pack.py convert --model <nvidia/Qwen3.8-Flash-Next-FP4-Local dir> --outfile <model.gguf>
     python tools/nvfp4_local_pack.py ple     --model <same dir> --out <ple-nvfp4.gguf>
@@ -310,11 +310,11 @@ def cmd_ple(a) -> int:
             sys.exit("%s: not an NVFP4 160-value row table" % n)
         rows += r
     print("%d shards, %d rows x 160, global scale %.9g, %.2f GB" % (len(shards), rows, scale2, rows * PLE_ROW_BYTES / 1e9), flush=True)
-    kvs = (_gs("general.architecture") + struct.pack("<I", GGUF_TYPE_STRING) + _gs("strata-ple")
+    kvs = (_gs("general.architecture") + struct.pack("<I", GGUF_TYPE_STRING) + _gs("cortex-ple")
            + _gs("general.name") + struct.pack("<I", GGUF_TYPE_STRING) + _gs("PLE n-gram table, NVFP4 as shipped")
-           + _gs("strata.ple.format") + struct.pack("<I", GGUF_TYPE_STRING) + _gs("nvfp4x16")
-           + _gs("strata.ple.scale") + struct.pack("<I", GGUF_TYPE_F32) + struct.pack("<f", scale2)
-           + _gs("strata.ple.source") + struct.pack("<I", GGUF_TYPE_STRING) + _gs(model.name))
+           + _gs("cortex.ple.format") + struct.pack("<I", GGUF_TYPE_STRING) + _gs("nvfp4x16")
+           + _gs("cortex.ple.scale") + struct.pack("<I", GGUF_TYPE_F32) + struct.pack("<f", scale2)
+           + _gs("cortex.ple.source") + struct.pack("<I", GGUF_TYPE_STRING) + _gs(model.name))
     # the tensor is [90, rows] I8 so one row is 90 contiguous bytes; the engine reads it by the format key
     head = b"GGUF" + struct.pack("<IQQ", 3, 1, 5) + kvs
     head += _gs("per_layer_token_embd.weight") + struct.pack("<I", 2) + struct.pack("<QQ", PLE_ROW_BYTES, rows)

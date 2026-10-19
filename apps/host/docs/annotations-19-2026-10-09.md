@@ -5,7 +5,7 @@ Implemented in the restored app at `http://localhost:5160`.
 | Annotation | Change |
 | --- | --- |
 | 1 | A compact 440px task delete dialog explains that the schedule stops and the instructions/last result remain recoverable. The row collapses over 240ms and an animated success toast confirms deletion. Reduced motion is respected. |
-| 2–4 | The connection guide is titled “Connect Strata to an app.” OpenAI/Anthropic tabs are in its header immediately before Close. The example-template sentence is removed. |
+| 2–4 | The connection guide is titled “Connect Cortex to an app.” OpenAI/Anthropic tabs are in its header immediately before Close. The example-template sentence is removed. |
 | 5 | API key status and controls are part of the connection summary alongside Model ID, Status and Local network. |
 | 6, 8, 9, 11, 13, 15 | Screen headers no longer display Preview build badges. |
 | 7 | Serving's subtitle is removed. |

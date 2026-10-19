@@ -7,11 +7,11 @@ const bot = require('./reset-bot');
 const bugForm = (over = {}) => {
   const f = {
     'Area': '[Engine]  (speed, kernels, models, the server and API)',
-    'Desktop app, Terminal or source?': 'Terminal (the `strata` command)',
+    'Desktop app, Terminal or source?': 'Terminal (the `cortex` command)',
     'What happened': 'Decode stops after two minutes with "CUDA error 700". I expected it to continue.',
     'Smallest steps or command that reproduce it': '_No response_',
     'Reproduction status': 'Reproduced locally',
-    'Strata version': 'Strata 0.2.0-beta · engine 0.1.45.3',
+    'Cortex version': 'Cortex 0.2.0-beta · engine 0.1.45.3',
     'Graphics card, memory and system': 'RTX 5070 12 GB · 64 GB RAM · Windows 11',
     ...over,
   };
@@ -39,15 +39,15 @@ test('filled bug form passes in both modes', () => {
 });
 
 test('bug form: missing parts are named', () => {
-  const r = c.checkIssue({ title: 'decode stops', body: bugForm({ 'Strata version': '_No response_', 'What happened': 'bad' }) });
+  const r = c.checkIssue({ title: 'decode stops', body: bugForm({ 'Cortex version': '_No response_', 'What happened': 'bad' }) });
   assert.ok(!r.ok);
   assert.ok(r.missing.some((m) => /title/i.test(m)));
   assert.ok(r.missing.some((m) => m.includes('What happened')));
-  assert.ok(r.missing.some((m) => m.includes('Strata version')));
+  assert.ok(r.missing.some((m) => m.includes('Cortex version')));
 });
 
 test('reopen needs a 0.2 version, intake does not', () => {
-  const body = bugForm({ 'Strata version': 'Strata 0.1.44' });
+  const body = bugForm({ 'Cortex version': 'Cortex 0.1.44' });
   assert.ok(c.checkIssue({ title: '[Engine] x y', body, mode: 'intake' }).ok);
   const r = c.checkIssue({ title: '[Engine] x y', body, mode: 'reopen' });
   assert.ok(!r.ok);
@@ -68,7 +68,7 @@ test('feature and question forms', () => {
 });
 
 test('free-form issue', () => {
-  const good = 'Strata 0.2.0-beta on an RTX 3060 12 GB with 32 GB RAM on Linux: the server hangs when I send two requests at once. Expected both to finish.';
+  const good = 'Cortex 0.2.0-beta on an RTX 3060 12 GB with 32 GB RAM on Linux: the server hangs when I send two requests at once. Expected both to finish.';
   assert.ok(c.checkIssue({ title: '[Engine] hang on two requests', body: good, mode: 'reopen' }).ok);
   assert.ok(!c.checkIssue({ title: '[Engine] hang', body: 'it crashes', mode: 'intake' }).ok);
   const old = good.replace('0.2.0-beta', '0.1.40');

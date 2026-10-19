@@ -1,7 +1,7 @@
-"""docker/entrypoint.sh: environment variables become `strata launch` flags, the key never appears on a command line, an engine
+"""docker/entrypoint.sh: environment variables become `cortex launch` flags, the key never appears on a command line, an engine
 that does not fit the card ends the start with a plain message, a started server is kept up, and SIGTERM runs `launch --stop`.
 
-Runs the real script in a temporary tree with a stub for the `strata` command (POSIX sh needed: skipped on Windows).
+Runs the real script in a temporary tree with a stub for the `cortex` command (POSIX sh needed: skipped on Windows).
 
     python -m unittest tools.test_docker_entrypoint
 """
@@ -31,7 +31,7 @@ case "$*" in
   *"launch --status"*) echo '{"running": [{"name": "docker", "state": "ready"}]}'; exit 0 ;;
   *"--show-key"*) echo "KEY-FROM-PRESET-0123456789"; exit 0 ;;
   *"launch --stop"*) echo "stopped" >> "$STUB_LOG"; exit 0 ;;
-  *"launch --no-tui"*) echo "key-env=${STRATA_LAUNCH_KEY:-}" >> "$STUB_LOG"; [ -n "${STUB_FAIL:-}" ] && exit 6; exit 0 ;;
+  *"launch --no-tui"*) echo "key-env=${CORTEX_LAUNCH_KEY:-}" >> "$STUB_LOG"; [ -n "${STUB_FAIL:-}" ] && exit 6; exit 0 ;;
 esac
 exit 0
 """
@@ -43,19 +43,19 @@ class Entrypoint(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         (self.tmp / "opt" / "terminal" / "bin").mkdir(parents=True)
-        stub = self.tmp / "opt" / "terminal" / "bin" / "strata"
+        stub = self.tmp / "opt" / "terminal" / "bin" / "cortex"
         stub.write_text(STUB, encoding="utf-8")
         stub.chmod(0o755)
         self.log = self.tmp / "calls.log"
         text = (ROOT / "docker" / "entrypoint.sh").read_text(encoding="utf-8")
-        text = (text.replace("/opt/strata", str(self.tmp / "opt")).replace("/data", str(self.tmp / "data"))
-                .replace("/run/strata-phase", str(self.tmp / "phase")).replace("mkdir -p ", "mkdir -p " + str(self.tmp / "run") + " ", 1))
+        text = (text.replace("/opt/cortex", str(self.tmp / "opt")).replace("/data", str(self.tmp / "data"))
+                .replace("/run/cortex-phase", str(self.tmp / "phase")).replace("mkdir -p ", "mkdir -p " + str(self.tmp / "run") + " ", 1))
         self.script = self.tmp / "entry.sh"
         self.script.write_text(text, encoding="utf-8")
 
     def env(self, **extra):
         env = {k: v for k, v in os.environ.items() if k not in ("MODEL", "API_KEY", "CONTEXT", "VISION", "TUNE", "PORT", "GPU", "GPUS")}
-        env.update(STUB_LOG=str(self.log), STRATA_CPUINFO=str(self.tmp / "cpuinfo"), **extra)
+        env.update(STUB_LOG=str(self.log), CORTEX_CPUINFO=str(self.tmp / "cpuinfo"), **extra)
         (self.tmp / "cpuinfo").write_text("flags : fpu avx2 sse4_2\n")
         return env
 
@@ -80,12 +80,12 @@ class Entrypoint(unittest.TestCase):
 
     def test_settings_become_flags_and_sigterm_stops_cleanly(self):
         p = self.start(MODEL="IQ3_XXS", CONTEXT="64k", PARALLEL="2", VISION="yes", TUNE="quick", GPUS="0,1", PORT="8123", PRESET="office",
-                       API_KEY="a-long-enough-key-123456", MODEL_PATH="/models", STRATA_SET="prefill=65536 STRATA_PIN_BY_NEED=1")
+                       API_KEY="a-long-enough-key-123456", MODEL_PATH="/models", CORTEX_SET="prefill=65536 CORTEX_PIN_BY_NEED=1")
         log = self.wait_for("--show-key")
         line = self.launch_line(log)
         for want in ("--access lan", "--port 8123", "--model IQ3_XXS", "--model-path /models", "--context 64k", "--parallel 2",
-                     "--vision on", "--gpu 0,1", "--tune quick", "--set prefill=65536", "--set STRATA_PIN_BY_NEED=1",
-                     "--save-preset office", "--api-key-env STRATA_LAUNCH_KEY"):
+                     "--vision on", "--gpu 0,1", "--tune quick", "--set prefill=65536", "--set CORTEX_PIN_BY_NEED=1",
+                     "--save-preset office", "--api-key-env CORTEX_LAUNCH_KEY"):
             self.assertIn(want, line)
         self.assertNotIn("a-long-enough-key", line)                      # the key is passed by environment, never on a command line
         self.assertIn("key-env=a-long-enough-key-123456", log)
@@ -147,27 +147,27 @@ class Entrypoint(unittest.TestCase):
     def test_a_changed_card_drops_the_saved_run_settings_of_the_old_card(self):
         install = self.tmp / "data" / "install"
         install.mkdir(parents=True)
-        (install / "strata-q2_0.json").write_text('{"gpu": 3, "args": []}')
-        (install / "strata-iq3_s.json").write_text('{"gpu": 1, "args": []}')
+        (install / "cortex-q2_0.json").write_text('{"gpu": 3, "args": []}')
+        (install / "cortex-iq3_s.json").write_text('{"gpu": 1, "args": []}')
         p = self.start(MODEL="Q2_0", GPU="1")
         line = self.launch_line(self.wait_for("--show-key"))
         self.assertIn("--gpu 1", line)
         code, out, err = self.stop(p)
         self.assertIn("making them again", out)
-        self.assertFalse((install / "strata-q2_0.json").exists())          # card 3 -> 1: made again from the files
-        self.assertTrue((install / "strata-iq3_s.json").exists())          # already card 1: kept
+        self.assertFalse((install / "cortex-q2_0.json").exists())          # card 3 -> 1: made again from the files
+        self.assertTrue((install / "cortex-iq3_s.json").exists())          # already card 1: kept
 
     def test_all_cards_leaves_the_saved_run_settings_alone(self):
         install = self.tmp / "data" / "install"
         install.mkdir(parents=True)
-        (install / "strata-q2_0.json").write_text('{"gpu": 3, "args": []}')
+        (install / "cortex-q2_0.json").write_text('{"gpu": 3, "args": []}')
         p = self.start(MODEL="Q2_0", GPUS="all")
         self.wait_for("--show-key")
         self.stop(p)
-        self.assertTrue((install / "strata-q2_0.json").exists())
+        self.assertTrue((install / "cortex-q2_0.json").exists())
 
     def test_other_commands_run_instead_of_the_server(self):
-        r = subprocess.run([SH, str(self.script), "strata", "launch", "--plan", "--model", "q2_0"], env=self.env(), capture_output=True,
+        r = subprocess.run([SH, str(self.script), "cortex", "launch", "--plan", "--model", "q2_0"], env=self.env(), capture_output=True,
                            text=True, timeout=30)
         self.assertEqual(r.returncode, 0)
         self.assertIn("launch --plan --model q2_0", self.log.read_text())

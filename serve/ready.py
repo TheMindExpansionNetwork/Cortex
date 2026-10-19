@@ -1,4 +1,4 @@
-"""Ready file for a foreground Strata server instance.
+"""Ready file for a foreground Cortex server instance.
 
 A consumer must still compare the instance ID with live telemetry before acting.
 An abruptly killed process can leave this file behind; a stale file is never

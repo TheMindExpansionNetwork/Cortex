@@ -55,9 +55,9 @@ function DownloadCounter({ value, label }: {
     return <div className="onboard-download-counter" role="img" aria-label={tr(value === undefined ? label : `${value.toFixed(1)} ${label}`)}><Icon name="download" size={18}/><strong aria-hidden="true">{tr(shown === undefined ? '···' : shown.toFixed(1))}</strong><span aria-hidden="true">{tr(label)}</span></div>;
 }
 const tour = [
-    { label: 'Time-skip', command: '/time-skip', prompt: 'Improve this launch plan.', title: 'Keep the stronger idea.', description: 'Type /time-skip and what you want to improve. Strata explores a revision, compares it with the original, and keeps the stronger version.', badge: '', steps: ['Save the original', 'Explore a revision', 'Compare and keep'] },
-    { label: 'Goal', command: '/goal', prompt: 'Get my portfolio ready to publish.', title: 'Give your AI a finish line.', description: 'A goal describes the outcome you want. Strata will plan the work, check its progress, and keep going until that outcome is reached.', badge: '', steps: ['Set the outcome', 'Work through the plan', 'Check the result'] },
-    { label: 'Loop', command: '/loop', prompt: '10m check whether the build passes.', title: 'Let useful work repeat.', description: 'Type /loop, how often, and what to do — for example /loop 10m check the build. Strata sends it again and again while the chat is open. For work that must go on with Strata closed, use Tasks.', badge: '', steps: ['Say how often', 'Say what to do', 'Stop any time'] },
+    { label: 'Time-skip', command: '/time-skip', prompt: 'Improve this launch plan.', title: 'Keep the stronger idea.', description: 'Type /time-skip and what you want to improve. Cortex explores a revision, compares it with the original, and keeps the stronger version.', badge: '', steps: ['Save the original', 'Explore a revision', 'Compare and keep'] },
+    { label: 'Goal', command: '/goal', prompt: 'Get my portfolio ready to publish.', title: 'Give your AI a finish line.', description: 'A goal describes the outcome you want. Cortex will plan the work, check its progress, and keep going until that outcome is reached.', badge: '', steps: ['Set the outcome', 'Work through the plan', 'Check the result'] },
+    { label: 'Loop', command: '/loop', prompt: '10m check whether the build passes.', title: 'Let useful work repeat.', description: 'Type /loop, how often, and what to do — for example /loop 10m check the build. Cortex sends it again and again while the chat is open. For work that must go on with Cortex closed, use Tasks.', badge: '', steps: ['Say how often', 'Say what to do', 'Stop any time'] },
     { label: 'Subagents', command: 'Spawn subagents', prompt: 'to research, draft and review my launch plan.', title: 'More hands, one conversation.', description: 'Ask “spawn subagents” in chat and describe the jobs. Separate agents can research, write and review in parallel, then bring their work back to you.', badge: '', steps: ['Describe the jobs', 'Agents work in parallel', 'Bring the results together'] },
 ] as const;
 export function OnboardingTour({ page, onChange }: {
@@ -68,8 +68,8 @@ export function OnboardingTour({ page, onChange }: {
     useEffect(() => { const motion = matchMedia('(prefers-reduced-motion: reduce)'); setPhase(motion.matches ? 2 : 0); if (motion.matches)
         return; const timer = setInterval(() => setPhase(value => (value + 1) % 3), 2600); return () => clearInterval(timer); }, [page, replay]);
     const item = tour[page % tour.length];
-    return <section className="onboard-tour" aria-label={tr("A quick tour of Strata")}>
-  <div className="onboard-tour-top"><span>{tr("Try this in Strata")}</span><div role="tablist" aria-label={tr("Tour topic")}>{tr(tour.map((t, i) => <button key={t.label} type="button" role="tab" id={`onboard-tour-tab-${i}`} aria-controls="onboard-tour-content" aria-selected={page === i} tabIndex={page === i ? 0 : -1} onClick={() => onChange(i)} onKeyDown={e => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+    return <section className="onboard-tour" aria-label={tr("A quick tour of Cortex")}>
+  <div className="onboard-tour-top"><span>{tr("Try this in Cortex")}</span><div role="tablist" aria-label={tr("Tour topic")}>{tr(tour.map((t, i) => <button key={t.label} type="button" role="tab" id={`onboard-tour-tab-${i}`} aria-controls="onboard-tour-content" aria-selected={page === i} tabIndex={page === i ? 0 : -1} onClick={() => onChange(i)} onKeyDown={e => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
         e.preventDefault();
         const next = e.key === 'Home' ? 0 : e.key === 'End' ? tour.length - 1 : (page + (e.key === 'ArrowLeft' ? -1 : 1) + tour.length) % tour.length;
         onChange(next);

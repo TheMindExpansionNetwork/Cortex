@@ -1,6 +1,6 @@
-#include "strata/core/conversation_snapshot.hpp"
-#include "strata/core/conversation_file.hpp"
-#include "strata/kernels/kv_q4.hpp"
+#include "cortex/core/conversation_snapshot.hpp"
+#include "cortex/core/conversation_file.hpp"
+#include "cortex/kernels/kv_q4.hpp"
 #include <cuda_runtime.h>
 
 #include <array>
@@ -14,8 +14,8 @@
 #include <limits>
 #include <vector>
 
-using namespace strata::core;
-using namespace strata::kernels;
+using namespace cortex::core;
+using namespace cortex::kernels;
 
 namespace {
 int checks = 0;
@@ -159,7 +159,7 @@ void full_session(int fmt, int mode, int experts) {
         check(meta.kv.empty() && sources.size()==b.kv.size(),"one source per K/V layer, none captured");
         const SessionFileIdentity id{1,2};
         namespace fs=std::filesystem;
-        const fs::path dir=fs::temp_directory_path()/("strata-snap-test-"+std::to_string(experts)+"-"+
+        const fs::path dir=fs::temp_directory_path()/("cortex-snap-test-"+std::to_string(experts)+"-"+
             std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
         fs::create_directories(dir);
         const std::string p1=(dir/"streamed.bin").string(), p2=(dir/"captured.bin").string();
@@ -386,7 +386,7 @@ int main() {
             auto bad=a; bad.head_dim++;
             check(!conversation_kv_restore(bad,f.state,f.g,upto,index,err),"reject incompatible geometry");
             if (fmt==kKvInt8) {
-                // #293: INT8 K/V saved through the Hadamard rotation (STRATA_KV_ROT=1) never restores into a state
+                // #293: INT8 K/V saved through the Hadamard rotation (CORTEX_KV_ROT=1) never restores into a state
                 // without it, nor the reverse
                 f.state.kv_rot=true;
                 ConversationKv rotated;

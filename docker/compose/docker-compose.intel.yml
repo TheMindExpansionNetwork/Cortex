@@ -1,4 +1,4 @@
-# Strata on an Intel Arc card (A-series or B-series, including Arc Pro B70). Needs the xe or i915 kernel driver on the host.
+# Cortex on an Intel Arc card (A-series or B-series, including Arc Pro B70). Needs the xe or i915 kernel driver on the host.
 # The Level Zero loader and Intel's compute runtime are in the image (Ubuntu 26.04 based).
 #
 #   cp .env.example .env
@@ -6,12 +6,12 @@
 #
 # TODO(owner): registry name. Until the images are published, build them (docker/build.sh) and use the local tag.
 services:
-  strata:
-    image: ${STRATA_IMAGE:-strata:0.2.0-sycl}
-    container_name: strata
+  cortex:
+    image: ${CORTEX_IMAGE:-cortex:0.2.0-sycl}
+    container_name: cortex
     restart: unless-stopped
     ports:
-      - "${STRATA_BIND:-127.0.0.1}:${STRATA_PORT:-8080}:8080"
+      - "${CORTEX_BIND:-127.0.0.1}:${CORTEX_PORT:-8080}:8080"
     environment:
       MODEL: ${MODEL:-}
       MODEL_PATH: ${MODEL_PATH:-}            # GGUF files you already have, as seen inside the container (mount them below)
@@ -21,7 +21,7 @@ services:
       TUNE: ${TUNE:-skip}
       API_KEY: ${API_KEY:-}
     volumes:
-      - strata-data:/data
+      - cortex-data:/data
       # - /srv/gguf/IQ3_XXS:/models:ro
     devices:
       - /dev/dri:/dev/dri
@@ -32,4 +32,4 @@ services:
     shm_size: 2gb
     stop_grace_period: 2m
 volumes:
-  strata-data:
+  cortex-data:

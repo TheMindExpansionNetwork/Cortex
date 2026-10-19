@@ -6,7 +6,7 @@
 #include <hip/hip_runtime.h>
 #include <hip/hip_bfloat16.h>
 #include <hip/hip_fp16.h>
-#include "strata/prefill/gemm.hpp"
+#include "cortex/prefill/gemm.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -28,7 +28,7 @@ struct Buffer {
 // every GEMM with beta = 0 writes its result as FP16 before widening it: those are checked at FP16's rounding
 // (2^-11 relative per element, plus the FP32 accumulation) instead of the FP32-out tolerance.  beta = 1 keeps the
 // FP32-out GEMM on the f16() path, and bf16() refuses it there (the prompt path never accumulates a BF16 product).
-bool run(strata::prefill::Gemm& gemm, hipStream_t stream, bool bf16,
+bool run(cortex::prefill::Gemm& gemm, hipStream_t stream, bool bf16,
          int t, int n, int k, int ldy, float beta, bool f16_io = false) {
     std::mt19937 rng(51012 + t + n);
     std::uniform_real_distribution<float> dist(-0.25f, 0.25f);
@@ -96,7 +96,7 @@ int main() {
     CHECK(hipStreamCreateWithFlags(&stream,hipStreamNonBlocking));
     bool ok=true;
     {
-        strata::prefill::Gemm gemm;
+        cortex::prefill::Gemm gemm;
         std::string error;
         if (!gemm.init(stream,0,error)) { std::fprintf(stderr,"%s\n",error.c_str()); return 2; }
         ok=run(gemm,stream,true,16,96,2560,96,0) && ok;
@@ -113,7 +113,7 @@ int main() {
         // The FP16-io mode.  The scratch holds 64 rows at K = 2560, so bf16()'s W conversion slices N = 96 in two
         // (64 + 32 rows, the second written at Y + 64).  ldy > N and the odd N check widen_rows_f16's in-place
         // walk (FP16 halves at the start of each FP32 row); T = 1 is a single block.
-        strata::prefill::Gemm gemm;
+        cortex::prefill::Gemm gemm;
         std::string error;
         if (!gemm.init(stream,64*2560,error)) { std::fprintf(stderr,"%s\n",error.c_str()); return 2; }
         gemm.set_f16_io(true);

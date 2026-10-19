@@ -12,11 +12,11 @@
 //   5. nothing faulted (a stray store or load of the append / copy / attention kernels ends the run in a CUDA error).
 // Every window runs twice per format: as plain launches and replayed from a graph captured per window size. Issue #2403
 // (q4_0 KV + KV streaming + MTP) is the case this was written for.
-#include "strata/kernels/kv_q4.hpp"
-#include "strata/kernels/kv_q8.hpp"
-#include "strata/kernels/kv_stream.hpp"
-#include "strata/kernels/qsa.hpp"
-#include "strata/kernels/qsa_decode_attn.hpp"
+#include "cortex/kernels/kv_q4.hpp"
+#include "cortex/kernels/kv_q8.hpp"
+#include "cortex/kernels/kv_stream.hpp"
+#include "cortex/kernels/qsa.hpp"
+#include "cortex/kernels/qsa_decode_attn.hpp"
 
 #include <cuda_runtime.h>
 
@@ -28,7 +28,7 @@
 #include <set>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 void ck(cudaError_t e, const char* w) {

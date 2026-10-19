@@ -1,8 +1,8 @@
 /**
  * Locates and runs the pinned DeepSeek Harness (`dsh`) for the web profile.
  *
- * The Harness is a separate component, not part of the host: it is found through `STRATA_HARNESS_DIR`
- * (or `<components>/harness`), checked for the files a run needs, and started with the Strata profile
+ * The Harness is a separate component, not part of the host: it is found through `CORTEX_HARNESS_DIR`
+ * (or `<components>/harness`), checked for the files a run needs, and started with the Cortex profile
  * on a loopback port the OS picks. Nothing here downloads or installs anything.
  *
  * One process, one gateway, many sessions: every chat is a Harness session inside it, and cancelling
@@ -25,7 +25,7 @@ const KEEP = /^(PATH|PATHEXT|SYSTEMROOT|WINDIR|COMSPEC|TEMP|TMP|TMPDIR|HOME|USER
 export function agentEnvironment(base = process.env, extra = {}) {
   const out = {};
   // The shell and tools the assistant runs for the person are the person's own programs: they get the environment the AppImage was
-  // started from, never Strata's bundled libraries and GTK/GIO settings (external-env.mjs). Outside an AppImage this is `base`.
+  // started from, never Cortex's bundled libraries and GTK/GIO settings (external-env.mjs). Outside an AppImage this is `base`.
   for (const [k, v] of Object.entries(externalEnvironment(base))) {
     if (v === undefined || !KEEP.test(k) || SECRET_NAME.test(k)) continue;
     out[k] = v;
@@ -41,7 +41,7 @@ export function agentEnvironment(base = process.env, extra = {}) {
  */
 export function resolveHarness({ env = process.env, componentsDir = null, bundledDir = null } = {}) {
   // Order: an explicit folder, the folder the installer ships next to the host, then the user's component folder.
-  const candidates = [env.STRATA_HARNESS_DIR, bundledDir, componentsDir ? join(componentsDir, 'harness') : null].filter(Boolean);
+  const candidates = [env.CORTEX_HARNESS_DIR, bundledDir, componentsDir ? join(componentsDir, 'harness') : null].filter(Boolean);
   if (!candidates.length) return { ok: false, reason: 'The agent component (DeepSeek Harness) is not installed.' };
   for (const dir of candidates.map(c => resolve(c))) {
     // A source checkout keeps the CLI in apps/cli; the installer's pruned production copy IS the CLI package.

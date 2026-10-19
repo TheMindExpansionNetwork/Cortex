@@ -8,7 +8,7 @@ import { createMockModelApi } from './mock-model-api.mjs';
 import { assertPrivate } from './helpers/assert-private.mjs';
 
 test('connections persist, redact keys, retain unchanged keys, and validate endpoints/models', async t => {
-  const directory = mkdtempSync(join(tmpdir(), 'strata-providers-'));
+  const directory = mkdtempSync(join(tmpdir(), 'cortex-providers-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const service = createModelProviders({ directory });
   const draft = { kind: 'custom', name: 'Other PC', baseUrl: 'http://192.168.1.20:1234/v1/', protocol: 'openai-chat', apiKey: 'test-key', models: [{ id: 'my-model', name: 'My model' }] };
@@ -30,7 +30,7 @@ test('connections persist, redact keys, retain unchanged keys, and validate endp
 });
 
 test('discovery uses provider auth, pagination, and avoids redirect/error credential leaks', async t => {
-  const mock = await createMockModelApi(), directory = mkdtempSync(join(tmpdir(), 'strata-providers-'));
+  const mock = await createMockModelApi(), directory = mkdtempSync(join(tmpdir(), 'cortex-providers-'));
   t.after(async () => { await mock.close(); rmSync(directory, { recursive: true, force: true }); });
   const service = createModelProviders({ directory });
   const draft = { kind: 'custom', name: 'Mock', baseUrl: mock.baseUrl, protocol: 'openai-chat', apiKey: 'test-key', models: [{ id: 'mock-chat' }] };
@@ -45,7 +45,7 @@ test('discovery uses provider auth, pagination, and avoids redirect/error creden
 });
 
 for (const protocol of ['openai-chat', 'openai-responses', 'anthropic']) test(`${protocol} forwards history, streams text, and records reported usage`, async t => {
-  const mock = await createMockModelApi(), directory = mkdtempSync(join(tmpdir(), 'strata-providers-'));
+  const mock = await createMockModelApi(), directory = mkdtempSync(join(tmpdir(), 'cortex-providers-'));
   t.after(async () => { await mock.close(); rmSync(directory, { recursive: true, force: true }); });
   const service = createModelProviders({ directory });
   const connection = service.save({ kind: 'custom', name: 'Mock', baseUrl: mock.baseUrl, protocol, apiKey: 'test-key', models: [{ id: 'mock-chat' }] }).connections[0];
@@ -60,7 +60,7 @@ for (const protocol of ['openai-chat', 'openai-responses', 'anthropic']) test(`$
 });
 
 test('truncated streams, provider stream errors, and cancellation preserve output without a false done', async t => {
-  const mock = await createMockModelApi(), directory = mkdtempSync(join(tmpdir(), 'strata-providers-'));
+  const mock = await createMockModelApi(), directory = mkdtempSync(join(tmpdir(), 'cortex-providers-'));
   t.after(async () => { await mock.close(); rmSync(directory, { recursive: true, force: true }); });
   const service = createModelProviders({ directory });
   const connection = service.save({ kind: 'custom', name: 'Mock', baseUrl: mock.baseUrl, protocol: 'openai-chat', apiKey: 'test-key', models: ['truncated', 'stream-error', 'slow'].map(id => ({ id })) }).connections[0];
@@ -76,7 +76,7 @@ test('truncated streams, provider stream errors, and cancellation preserve outpu
 
 
 test('every API key preset discovers and streams with its configured protocol', async t => {
-  const mock = await createMockModelApi(), directory = mkdtempSync(join(tmpdir(), 'strata-presets-'));
+  const mock = await createMockModelApi(), directory = mkdtempSync(join(tmpdir(), 'cortex-presets-'));
   t.after(async () => { await mock.close(); rmSync(directory, { recursive: true, force: true }); });
   const service = createModelProviders({ directory });
   assert.ok(PROVIDER_CATALOG.length >= 20);

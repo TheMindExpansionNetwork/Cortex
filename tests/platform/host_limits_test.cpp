@@ -1,9 +1,9 @@
 // Windows HIP auto-chunk cap (#1630) and the commit-limit verdict (#1607): no GPU, no Windows needed.
 #include <cstdio>
 
-#include "strata/platform/host_limits.hpp"
+#include "cortex/platform/host_limits.hpp"
 
-using namespace strata::platform::host_limits;
+using namespace cortex::platform::host_limits;
 
 static int failed = 0;
 #define CHECK(x) do { if (!(x)) { std::fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x); ++failed; } } while (0)
@@ -13,7 +13,7 @@ int main() {
     CHECK(auto_chunk_cap(true, true) == 6144);
     CHECK(auto_chunk_cap(true, true) < 8192);
     CHECK(auto_chunk_cap(false, true) == 0);
-    CHECK(auto_chunk_cap(true, false) == 0);    // auto:N / STRATA_PREFILL_AUTO_MAX: the operator's pick
+    CHECK(auto_chunk_cap(true, false) == 0);    // auto:N / CORTEX_PREFILL_AUTO_MAX: the operator's pick
     CHECK(auto_chunk_cap(false, false) == 0);
     // a chunk the user names stays, with a warning from 8192 up (7500 was stable)
     CHECK(warn_user_chunk(true, false, 8192));

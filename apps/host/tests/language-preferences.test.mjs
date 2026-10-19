@@ -11,7 +11,7 @@ function open(saved){
  return{...mod.exports,data,css,root};
 }
 test('saved language applies on the first render; language and installed font persist together',()=>{
- const first=open({'strata.prefs.v2':JSON.stringify({language:'ko',fontFamily:''})});
+ const first=open({'cortex.prefs.v2':JSON.stringify({language:'ko',fontFamily:''})});
  assert.equal(first.currentLanguage(),'ko');assert.notEqual(first.tr('Settings'),'Settings');
  first.setLanguage('pt');first.setFontFamily('Arial');
  assert.equal(first.root.lang,'pt');assert.match(first.css.get('--st-font'),/^"Arial",system-ui/);
@@ -19,5 +19,5 @@ test('saved language applies on the first render; language and installed font pe
  second.setFontFamily('');assert.equal(second.css.has('--st-font'),false);assert.equal(second.getState().language,'pt');
 });
 test('invalid saved language falls back to English and font names reject control characters',()=>{
- const app=open({'strata.prefs.v2':JSON.stringify({language:'unknown',fontFamily:'Arial\u0000'})});assert.equal(app.currentLanguage(),'en');assert.equal(app.getState().fontFamily,'Arial');
+ const app=open({'cortex.prefs.v2':JSON.stringify({language:'unknown',fontFamily:'Arial\u0000'})});assert.equal(app.currentLanguage(),'en');assert.equal(app.getState().fontFamily,'Arial');
 });

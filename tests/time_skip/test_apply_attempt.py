@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from strata_control import time_skip as ts  # noqa: E402
+from cortex_control import time_skip as ts  # noqa: E402
 
 from test_time_skip import TimeSkipCase  # noqa: E402
 

@@ -1,5 +1,5 @@
 /**
- * The model ladder Strata ships with, and every engine parameter Expert can reach.
+ * The model ladder Cortex ships with, and every engine parameter Expert can reach.
  *
  * Every variant points at a real GGUF on Hugging Face, so "Choose" performs a
  * real download and "Load" starts a real engine process. Sizes are the real
@@ -20,7 +20,7 @@ const DESIGN_FAMILIES = [
  // Architecture metadata follows Qwen's config; file sizes and speeds remain illustrative.
  {id:'qwen36',family:'Qwen3.6-35B-A3B',params:35,contextMax:262144,layerCount:40,experts:256,kvKbPerToken:20},
 ];
-const BUILT_IN_VARIANTS = process.env.STRATA_REAL_ENGINE === '1' ? REAL_VARIANTS : DESIGN_FAMILIES.flatMap(f=>DESIGN_VERSIONS.map(([quant,name,bits])=>{
+const BUILT_IN_VARIANTS = process.env.CORTEX_REAL_ENGINE === '1' ? REAL_VARIANTS : DESIGN_FAMILIES.flatMap(f=>DESIGN_VERSIONS.map(([quant,name,bits])=>{
  const diskGb=Math.round(f.params*bits/8*10)/10;
  return {id:`${f.id}-${quant.toLowerCase()}`,name,family:f.family,quant,label:`${f.family} · ${name} (${quant})`,params:`${f.params}B`,
  blurb:'The same model at a different precision.',role:quant==='Q4_K_M'?'best-fit':'option',tier:quant==='Q2_K'?'starter':'balanced',
@@ -50,7 +50,7 @@ export function modelFile(v) {
 /**
  * Memory footprint at a given context: weights + KV cache + runtime overhead.
  * KV grows linearly with context, which is why context length is the first
- * lever Strata offers in Engine tuning.
+ * lever Cortex offers in Engine tuning.
  */
 export function footprint(v, contextTokens) {
   const kvGb = (v.kvKbPerToken * contextTokens) / 1024 / 1024;

@@ -3,15 +3,15 @@
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/kernels/qsa.hpp"
-#include "strata/kernels/qsa_select.hpp"
+#include "cortex/kernels/qsa.hpp"
+#include "cortex/kernels/qsa_select.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <random>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 namespace {
 void ck(dpct::err0 e) {
 }
@@ -104,9 +104,9 @@ int main() try {
     }
     // the active-bound dispatch is Turing's in the engine; forced here so every CUDA card checks it
 #if defined(_WIN32)
-    _putenv_s("STRATA_TOPK_ACTIVE_ANY", "1");
+    _putenv_s("CORTEX_TOPK_ACTIVE_ANY", "1");
 #else
-    setenv("STRATA_TOPK_ACTIVE_ANY", "1", 1);
+    setenv("CORTEX_TOPK_ACTIVE_ANY", "1", 1);
 #endif
     const Case cases[] = {
         {1111, 256, 0}, {8192, 256, 0}, {32768, 256, 0}, {131072, 256, 0},

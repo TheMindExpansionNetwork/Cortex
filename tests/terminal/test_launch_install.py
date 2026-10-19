@@ -39,7 +39,7 @@ class Scripts(unittest.TestCase):
         text = (ROOT / "packaging" / "install.ps1").read_text(encoding="utf-8")
         self.assertNotIn("__FEED__", text)
         self.assertIn("else { '" + mlf.RELEASE_FEED + "' }", text)
-        self.assertIn("Installed. Run: strata launch", text)
+        self.assertIn("Installed. Run: cortex launch", text)
         ps = shutil.which("powershell") or shutil.which("pwsh")
         if not ps:
             self.skipTest("no PowerShell")
@@ -49,26 +49,26 @@ class Scripts(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_the_built_in_address_is_the_default_feed(self):
-        """install.sh / install.ps1 and `strata update` use the same GitHub Releases folder; STRATA_FEED stays an override."""
-        from strata_cli import update_cmd
+        """install.sh / install.ps1 and `cortex update` use the same GitHub Releases folder; CORTEX_FEED stays an override."""
+        from cortex_cli import update_cmd
         self.assertEqual(update_cmd.DEFAULT_FEED, mlf.RELEASE_FEED + "/strata-feed.json")
         self.assertIn(":-" + mlf.RELEASE_FEED + "}", (ROOT / "packaging" / "install.sh").read_text(encoding="utf-8"))
-        self.assertIn("$env:STRATA_FEED", (ROOT / "packaging" / "install.ps1").read_text(encoding="utf-8"))
+        self.assertIn("$env:CORTEX_FEED", (ROOT / "packaging" / "install.ps1").read_text(encoding="utf-8"))
 
 
 class Feed(unittest.TestCase):
     def make_bundle(self, work: Path) -> Path:
-        """A tiny terminal archive that is a working `strata` (the repo's own source with the system Python)."""
-        top = work / "bundle" / "strata-terminal-9.9.9-linux-x86_64"
+        """A tiny terminal archive that is a working `cortex` (the repo's own source with the system Python)."""
+        top = work / "bundle" / "cortex-terminal-9.9.9-linux-x86_64"
         top.mkdir(parents=True)
-        for name in ("strata.py", "strata_cli", "strata_control", "serve"):
+        for name in ("cortex.py", "cortex_cli", "cortex_control", "serve"):
             src = ROOT / name
             (shutil.copytree(src, top / name, ignore=shutil.ignore_patterns("__pycache__", "*.pyc")) if src.is_dir() else shutil.copy2(src, top / name))
         (top / "bin").mkdir(parents=True, exist_ok=True)
-        shutil.copy2(ROOT / "bin" / "strata", top / "bin" / "strata")
-        (top / "bin" / "strata").chmod(0o755)
+        shutil.copy2(ROOT / "bin" / "cortex", top / "bin" / "cortex")
+        (top / "bin" / "cortex").chmod(0o755)
         (top / "VERSION").write_text("9.9.9\n", encoding="utf-8")
-        archive = work / "strata-terminal-9.9.9-linux-x86_64.tar.gz"
+        archive = work / "cortex-terminal-9.9.9-linux-x86_64.tar.gz"
         with tarfile.open(archive, "w:gz") as tf:
             tf.add(top, arcname=top.name)
         return archive
@@ -106,17 +106,17 @@ class Feed(unittest.TestCase):
                 url = f"http://127.0.0.1:{server.server_address[1]}"
                 home = work / "home"
                 home.mkdir()
-                env = {**os.environ, "HOME": str(home), "STRATA_FEED": url, "STRATA_INSTALL_TEST_TRUST": "1", "STRATA_PYTHON": sys.executable,
-                       "PATH": os.environ["PATH"], "STRATA_NO_ACQUIRE": ""}
-                for k in ("XDG_DATA_HOME", "STRATA_UPDATE_TRUSTED_KEYS"):
+                env = {**os.environ, "HOME": str(home), "CORTEX_FEED": url, "CORTEX_INSTALL_TEST_TRUST": "1", "CORTEX_PYTHON": sys.executable,
+                       "PATH": os.environ["PATH"], "CORTEX_NO_ACQUIRE": ""}
+                for k in ("XDG_DATA_HOME", "CORTEX_UPDATE_TRUSTED_KEYS"):
                     env.pop(k, None)
                 r = subprocess.run(["sh", str(feed / "install.sh")], capture_output=True, text=True, env=env, timeout=240)
                 self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
                 self.assertIn("Checksum ok", r.stdout)
                 self.assertIn("Signature ok", r.stdout)
                 self.assertIn("Installed. Run:", r.stdout)
-                self.assertTrue((home / ".local" / "bin" / "strata").exists())
-                v = subprocess.run([str(home / ".local" / "bin" / "strata"), "--version"], capture_output=True, text=True, env=env, timeout=60)
+                self.assertTrue((home / ".local" / "bin" / "cortex").exists())
+                v = subprocess.run([str(home / ".local" / "bin" / "cortex"), "--version"], capture_output=True, text=True, env=env, timeout=60)
                 self.assertEqual(v.returncode, 0, v.stderr)
                 # an archive with one top folder (a terminal archive, not the feed's control package) installs too
                 data = archive.read_bytes()
@@ -126,7 +126,7 @@ class Feed(unittest.TestCase):
                 home3.mkdir()
                 r = subprocess.run(["sh", str(feed / "install.sh")], capture_output=True, text=True, env={**env, "HOME": str(home3)}, timeout=240)
                 self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-                self.assertTrue((home3 / ".local" / "share" / "strata" / "terminal" / "9.9.9" / "bin" / "strata").exists())
+                self.assertTrue((home3 / ".local" / "share" / "cortex" / "terminal" / "9.9.9" / "bin" / "cortex").exists())
                 (feed / "install-manifest.txt").write_text(" ".join(line) + chr(10))
                 # a damaged download is refused and nothing is installed
                 data = (feed / line[2]).read_bytes()
@@ -136,7 +136,7 @@ class Feed(unittest.TestCase):
                 r = subprocess.run(["sh", str(feed / "install.sh")], capture_output=True, text=True, env={**env, "HOME": str(home2)}, timeout=240)
                 self.assertNotEqual(r.returncode, 0)
                 self.assertIn("does not match the release's checksum", r.stderr)
-                self.assertFalse((home2 / ".local" / "share" / "strata" / "terminal" / "9.9.9").exists())
+                self.assertFalse((home2 / ".local" / "share" / "cortex" / "terminal" / "9.9.9").exists())
             finally:
                 server.shutdown()
 
@@ -172,15 +172,15 @@ class Feed(unittest.TestCase):
             try:
                 home = work / "home"
                 home.mkdir()
-                env = {**os.environ, "HOME": str(home), "STRATA_FEED": f"http://127.0.0.1:{server.server_address[1]}",
-                       "STRATA_INSTALL_TEST_TRUST": "1", "STRATA_PYTHON": sys.executable, "STRATA_NO_ACQUIRE": ""}
-                for k in ("XDG_DATA_HOME", "STRATA_UPDATE_TRUSTED_KEYS"):
+                env = {**os.environ, "HOME": str(home), "CORTEX_FEED": f"http://127.0.0.1:{server.server_address[1]}",
+                       "CORTEX_INSTALL_TEST_TRUST": "1", "CORTEX_PYTHON": sys.executable, "CORTEX_NO_ACQUIRE": ""}
+                for k in ("XDG_DATA_HOME", "CORTEX_UPDATE_TRUSTED_KEYS"):
                     env.pop(k, None)
                 r = subprocess.run(["sh", str(release / "install.sh")], capture_output=True, text=True, env=env, timeout=240)
                 self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
                 self.assertIn("Checksum ok", r.stdout)
                 self.assertIn("Signature ok", r.stdout)
-                self.assertTrue((home / ".local" / "bin" / "strata").exists())
+                self.assertTrue((home / ".local" / "bin" / "cortex").exists())
             finally:
                 server.shutdown()
 

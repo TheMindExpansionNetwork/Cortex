@@ -1,9 +1,9 @@
 // --remote-expert-opt (Remote Expert Decode Optimization) needs a second CUDA device as an expert tier; the SYCL port
 // has no such tier (the peer-expert and remote-expert helpers are single-device stubs). The class exists so the shared
 // headers and generate.cpp build; init() refuses with a message, so the option reports itself unsupported.
-#include "strata/core/remote_expert_opt.hpp"
+#include "cortex/core/remote_expert_opt.hpp"
 
-namespace strata::core {
+namespace cortex::core {
 
 RemoteExpertOpt::~RemoteExpertOpt() = default;
 
@@ -35,4 +35,4 @@ bool RemoteExpertOpt::reduce(RemoteExperts&, const void*, std::string&) { return
 
 void RemoteExpertOpt::accumulate(const RemoteExperts&) {}
 
-}  // namespace strata::core
+}  // namespace cortex::core

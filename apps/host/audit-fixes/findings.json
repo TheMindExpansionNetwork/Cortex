@@ -632,7 +632,7 @@
  {
   "screen": "engine-adapter-details",
   "sev": "L",
-  "issue": "\"llama.cpp adapter… native Strata configuration requires a different adapter\"",
+  "issue": "\"llama.cpp adapter… native Cortex configuration requires a different adapter\"",
   "fix": "move to Expert › About engine",
   "task": "T10"
  },

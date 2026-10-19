@@ -29,7 +29,7 @@ explicitly people who find computers intimidating, so every step has to answer
    download is running.
 3. ~~Step 3 asks questions the user cannot answer.~~ **Fixed.** Each field now
    carries the consequence of its current value on the row itself — `Comfortable
-   · about 1.9 GB of 12 GB`, `Text only — nothing extra loaded`, `Strata decides,
+   · about 1.9 GB of 12 GB`, `Text only — nothing extra loaded`, `Cortex decides,
    and adjusts as it goes` — using the same `/api/engine/validate` preview the
    Engine tuning screen uses, so the two screens cannot give different answers to
    the same question.

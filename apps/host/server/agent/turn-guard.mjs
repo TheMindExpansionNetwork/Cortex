@@ -32,7 +32,7 @@ const NOTES = {
   'searches-failed': 'Web search is limited right now, so I stopped searching and went on with what I have. Try again in a minute, or add a search key in Settings → Tools → Web search.',
   searches: 'I searched a lot and stopped so this chat does not fill up. This is what I have so far. Tell me what to look into next.',
   rewrites: 'I kept rewriting the plan, so I stopped here with the latest version. Tell me what to change, or approve it.',
-  context: 'I ran out of room in this chat, so I stopped. Strata is summarising the older messages to make space. Say “continue” to go on, or start a new chat.',
+  context: 'I ran out of room in this chat, so I stopped. Cortex is summarising the older messages to make space. Say “continue” to go on, or start a new chat.',
   empty: 'I stopped without writing an answer. Send your message again, or say “continue”.',
 };
 export const GUARD_NOTES = Object.freeze({ ...NOTES });

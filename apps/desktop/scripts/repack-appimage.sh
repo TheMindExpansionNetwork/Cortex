@@ -4,7 +4,7 @@
 #   apps/desktop/scripts/repack-appimage.sh <in.AppImage> <out.AppImage> [--resources <src-tauri/resources>] [--check]
 #
 # Why: Tauri hands the AppDir to linuxdeploy, which treats every ELF file under usr/lib as a library to fix up: it rewrites the RPATH of
-# the engine (strata, libstrata_kq.so, libcudart), of the bundled Python and Node and of the Harness's native modules. The files then no
+# the engine (cortex, libcortex_kq.so, libcudart), of the bundled Python and Node and of the Harness's native modules. The files then no
 # longer match the SHA-256 and size their manifests list (engine-component.json), so the host refuses the bundled engine, and the
 # installer's own integrity promise ("what we staged is what runs") is broken. This script unpacks the AppImage, copies the staged
 # folders (control, harness, node, engine-bundle) over the AppDir byte for byte, and packs it again with the same runtime.
@@ -25,13 +25,13 @@ while [ $# -gt 0 ]; do
 done
 
 OFFSET="$("$IN" --appimage-offset)"
-WORK="$(mktemp -d -t strata-repack.XXXXXX)"
+WORK="$(mktemp -d -t cortex-repack.XXXXXX)"
 trap 'rm -rf "$WORK"' EXIT
 unsquashfs -no-progress -o "$OFFSET" -d "$WORK/AppDir" "$IN" >/dev/null
 # the product folder under usr/lib (Tauri names it after productName)
 LIB="$(find "$WORK/AppDir/usr/lib" -maxdepth 2 -type d -name engine-bundle -printf '%h\n' | head -1)"
 [ -n "$LIB" ] || LIB="$(find "$WORK/AppDir/usr/lib" -maxdepth 2 -type d -name control -printf '%h\n' | head -1)"
-[ -n "$LIB" ] || { echo "no Strata resource folder in the AppImage" >&2; exit 1; }
+[ -n "$LIB" ] || { echo "no Cortex resource folder in the AppImage" >&2; exit 1; }
 
 if [ "$CHECK" = 1 ]; then
   bad=0
@@ -50,12 +50,12 @@ for d in control harness node engine-bundle; do
   rsync -aL --checksum --delete --exclude .gitignore "$RES/$d/" "$LIB/$d/"
 done
 # The launcher records the environment the AppImage was started from, before its own hooks add the AppImage's libraries and GTK/GIO
-# settings (LD_LIBRARY_PATH, GTK_*, XDG_DATA_DIRS ...). The host gives it back to every program that is not Strata's own (zenity,
+# settings (LD_LIBRARY_PATH, GTK_*, XDG_DATA_DIRS ...). The host gives it back to every program that is not Cortex's own (zenity,
 # kdialog, xdg-open, the assistant's shell): apps/host/server/external-env.mjs. Without it a system program loads the AppImage's libssl
 # and dies ("OPENSSL_3.2.0 not found"). The line goes right after `this_dir=...`, ahead of every hook.
-if ! grep -q STRATA_ORIGINAL_ENV "$WORK/AppDir/AppRun"; then
-  sed -i '/^this_dir=/a # Strata: the environment this AppImage was started from (given back to programs that are not Strata'"'"'s own)\nexport STRATA_ORIGINAL_ENV="$(env -0 | base64 -w0)"' "$WORK/AppDir/AppRun"
-  grep -q STRATA_ORIGINAL_ENV "$WORK/AppDir/AppRun" || { echo "could not add the environment record to AppRun" >&2; exit 1; }
+if ! grep -q CORTEX_ORIGINAL_ENV "$WORK/AppDir/AppRun"; then
+  sed -i '/^this_dir=/a # Cortex: the environment this AppImage was started from (given back to programs that are not Cortex'"'"'s own)\nexport CORTEX_ORIGINAL_ENV="$(env -0 | base64 -w0)"' "$WORK/AppDir/AppRun"
+  grep -q CORTEX_ORIGINAL_ENV "$WORK/AppDir/AppRun" || { echo "could not add the environment record to AppRun" >&2; exit 1; }
 fi
 mksquashfs "$WORK/AppDir" "$WORK/app.squashfs" -root-owned -noappend -comp zstd -b 131072 -no-progress >/dev/null
 head -c "$OFFSET" "$IN" > "$OUT"

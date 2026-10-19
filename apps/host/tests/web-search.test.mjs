@@ -40,7 +40,7 @@ test('requests to one source are spaced 2.5 s or more apart, never in a burst', 
 
 test('the request looks like the page\'s own form post: browser headers, Referer, Origin, no hidden tricks', async () => {
   const w = world(() => page(DDG));
-  await w.search.search({ query: 'strata' });
+  await w.search.search({ query: 'cortex' });
   const [c] = w.calls;
   assert.equal(c.method, 'POST');
   assert.match(c.headers['user-agent'], /Mozilla\/5\.0 .*Chrome\/\d+/);
@@ -53,17 +53,17 @@ test('the request looks like the page\'s own form post: browser headers, Referer
 test('the same question is answered from the session cache, even while DuckDuckGo is refusing', async () => {
   let refuse = false;
   const w = world(call => (duck(call.url) ? (refuse ? page(ANOMALY, 202) : page(DDG)) : page(BING)));
-  const a = await w.search.search({ query: 'Strata  Engine' });
+  const a = await w.search.search({ query: 'Cortex  Engine' });
   assert.equal(a.sources.length, 2);
   refuse = true;
-  const b = await w.search.search({ query: 'strata engine' });
+  const b = await w.search.search({ query: 'cortex engine' });
   assert.deepEqual(b.sources, a.sources);
   assert.equal(w.calls.length, 1, 'no second request');
   w.advance(20 * 60_000);
-  assert.equal((await w.search.search({ query: 'STRATA ENGINE' })).sources.length, 2, 'still cached after 20 minutes');
+  assert.equal((await w.search.search({ query: 'CORTEX ENGINE' })).sources.length, 2, 'still cached after 20 minutes');
   assert.equal(w.calls.length, 1);
   w.advance(11 * 60_000);
-  await w.search.search({ query: 'strata engine' });
+  await w.search.search({ query: 'cortex engine' });
   assert.ok(w.calls.length > 1, 'asked again after the cache is 30 minutes old');
 });
 

@@ -1,13 +1,13 @@
-// src/kernels/cuda/kv_q8.cu - see include/strata/kernels/kv_q8.hpp.
-#include "strata/kernels/kv_q8.hpp"
-#include "strata/kernels/f16_bits.hpp"
+// src/kernels/cuda/kv_q8.cu - see include/cortex/kernels/kv_q8.hpp.
+#include "cortex/kernels/kv_q8.hpp"
+#include "cortex/kernels/f16_bits.hpp"
 
 #include <cuda_runtime.h>
 
 #include <cstdio>
 #include <cstdlib>
 
-namespace strata::kernels {
+namespace cortex::kernels {
 namespace {
 
 void check(const char* what) {
@@ -27,7 +27,7 @@ void validate(const QsaShapes& s, const char* what) {
 }
 
 // One block = one 64-value group of one KV head of K (blockIdx.z = 0) or V (1); 64 threads, one value each.
-// MULTI (S26 STRATA_LFUSE): blockIdx.z = 2 * token + (K / V); token j reads step + j * step_stride and its rows at
+// MULTI (S26 CORTEX_LFUSE): blockIdx.z = 2 * token + (K / V); token j reads step + j * step_stride and its rows at
 // kcur / vcur + j * cur_stride - every token's code is the single launch's
 template <bool MULTI = false>
 __global__ void kv_append_q8_kernel(int8_t* __restrict__ k_q, int8_t* __restrict__ v_q,
@@ -107,12 +107,12 @@ __global__ void kv_gather_q8_kernel(const int8_t* __restrict__ k_q, const int8_t
     reinterpret_cast<ushort4*>(v_scratch)[dst] = vo;
 }
 
-#if defined(STRATA_EXPERIMENTAL_SM60)
+#if defined(CORTEX_EXPERIMENTAL_SM60)
 // One thread = 8 consecutive values of one cell and head: an 8-byte `uint2` load of codes and a 16-byte `uint4`
 // store of the dequantized fp16.  The 8 values share one 64-value group, so one scale is loaded per thread and
 // the arithmetic stays `(float) code * scale -> f16_from_f32`, i.e. bitwise the same as the previous 4-wide
 // version (whose char4 loads became these uint2 loads).  `load8_q8` in qsa_decode_attn.cu reads 8 int8 the
-// same way; this is the gather's other half.  Only in the experimental build (-DSTRATA_EXPERIMENTAL_SM60=ON):
+// same way; this is the gather's other half.  Only in the experimental build (-DCORTEX_EXPERIMENTAL_SM60=ON):
 // the ready-made engine keeps exactly the 4-wide kernel above, so its gather is bit for bit the release engine's.
 __device__ __forceinline__ uint32_t q8_pair_to_f16x2(const int8_t* c, float s) {
     return (uint32_t) f16_from_f32((float) c[0] * s) | ((uint32_t) f16_from_f32((float) c[1] * s) << 16);
@@ -152,12 +152,12 @@ __global__ void kv_gather_q8_wide_kernel(const int8_t* __restrict__ k_q, const i
     reinterpret_cast<uint4*>(v_scratch)[dst] = vo;
 }
 
-// The current device is below sm_75 (per device: a layer split can mix cards); STRATA_Q8_GATHER_WIDE=0 turns the
+// The current device is below sm_75 (per device: a layer split can mix cards); CORTEX_Q8_GATHER_WIDE=0 turns the
 // 8-wide gather off (A/B).  The wide kernel is bitwise identical, so this only decides speed.  Mirrors
 // qsa_decode_attn.cu's pre75_attn.
 bool pre75_q8_gather() {
     static const bool off = [] {
-        const char* e = std::getenv("STRATA_Q8_GATHER_WIDE");
+        const char* e = std::getenv("CORTEX_Q8_GATHER_WIDE");
         return e != nullptr && e[0] == '0';
     }();
     static int cc[64] = {};
@@ -175,7 +175,7 @@ bool pre75_q8_gather() {
     }
     return cc[dev] < 75;
 }
-#endif  // STRATA_EXPERIMENTAL_SM60
+#endif  // CORTEX_EXPERIMENTAL_SM60
 
 }  // namespace
 
@@ -207,7 +207,7 @@ void kv_gather_q8_step(const int8_t* k_q, const int8_t* v_q, const uint16_t* k_s
                        const QsaShapes& s, uint16_t* k_scratch, uint16_t* v_scratch, void* stream) {
     validate(s, "kv_gather_q8");
     if (max_ids <= 0) return;
-#if defined(STRATA_EXPERIMENTAL_SM60)
+#if defined(CORTEX_EXPERIMENTAL_SM60)
     if (pre75_q8_gather()) {
         const long long total = max_ids * s.n_head_kv * (s.head_dim / 8);
         const unsigned blocks = (unsigned) ((total + 255) / 256);
@@ -226,4 +226,4 @@ void kv_gather_q8_step(const int8_t* k_q, const int8_t* v_q, const uint16_t* k_s
     check("kv_gather_q8 launch");
 }
 
-}  // namespace strata::kernels
+}  // namespace cortex::kernels

@@ -26,7 +26,7 @@ export function inspectLocalModel(input){
   try{selected=readGGUF(file);}catch{throw new Error('The first shard is missing or invalid. Keep all model shards in the same folder.');}
  }
  const m=selected.metadata,arch=m['general.architecture'];
- if(!ARCHITECTURES.has(arch))throw new Error(`The declared architecture ${clean(arch)||'(missing)'} is not supported by this importer. This model type isn’t supported by the Strata engine; add it as a Custom model API (llama-server) instead.`);
+ if(!ARCHITECTURES.has(arch))throw new Error(`The declared architecture ${clean(arch)||'(missing)'} is not supported by this importer. This model type isn’t supported by the Cortex engine; add it as a Custom model API (llama-server) instead.`);
  if(m['general.type']&&m['general.type']!=='model')throw new Error('This is an adapter or auxiliary file. Choose the full model GGUF.');
  if(!m['tokenizer.ggml.model']||!m['tokenizer.ggml.tokens']?.count)throw new Error('This GGUF does not include its tokenizer. Choose the full model, not an adapter. A picture reader (mmproj) goes next to its model, not in its place.');
  const integer=(key,min,max)=>{const value=m[key];if(!Number.isInteger(value)||value<min||value>max)throw new Error(`Missing or invalid ${key} metadata. This model cannot be configured safely.`);return value;};

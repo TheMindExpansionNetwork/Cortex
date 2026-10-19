@@ -1,46 +1,46 @@
-// src/core/verify.cpp - see include/strata/core/verify.hpp.
+// src/core/verify.cpp - see include/cortex/core/verify.hpp.
 #define DPCT_PROFILING_ENABLED
 #include <sycl/sycl.hpp>
 #include <dpct/dpct.hpp>
-#include "strata/sycl_queue.hpp"
-#include "strata/core/verify.hpp"
-#include "strata/core/remote_expert_opt.hpp"
-#include "strata/core/dma_batch.hpp"
+#include "cortex/sycl_queue.hpp"
+#include "cortex/core/verify.hpp"
+#include "cortex/core/remote_expert_opt.hpp"
+#include "cortex/core/dma_batch.hpp"
 #if defined(_WIN32)
 #include <intrin.h>
 #endif
 
-#include "strata/core/native_head.hpp"
-#include "strata/core/on_device.hpp"
-#include "strata/core/peer_experts.hpp"
-#include "strata/kernels/iq_kernels.hpp"
-#include "strata/kernels/cpu/expert_layout.hpp"
-#include "strata/kernels/bf16_gemv.hpp"
-#include "strata/kernels/native_router.hpp"
-#include "strata/kernels/native_moe.hpp"
-#include "strata/kernels/cpu/expert.hpp"
-#include "strata/kernels/elementwise.hpp"
-#include "strata/kernels/fused_gr.hpp"
-#include "strata/kernels/cvec.hpp"
-#include "strata/kernels/gr.hpp"
-#include "strata/kernels/kv_q4.hpp"
-#include "strata/kernels/kv_q8.hpp"
-#include "strata/kernels/native_mmvq.hpp"
-#include "strata/kernels/native_qsa.hpp"
-#include "strata/kernels/native_qsa_indexer.hpp"
-#include "strata/kernels/native_rope.hpp"
-#include "strata/kernels/ngram.hpp"
-#include "strata/kernels/ple.hpp"
-#include "strata/kernels/qsa.hpp"
-#include "strata/kernels/qsa_decode_attn.hpp"
-#include "strata/kernels/qsa_select.hpp"
-#include "strata/kernels/quantize_act.hpp"
-#include "strata/kernels/rope.hpp"
-#include "strata/kernels/s2_expert_grouped.hpp"
-#include "strata/kernels/sampler.hpp"
-#include "strata/core/progress.hpp"
-#include "strata/kernels/shared_expert.hpp"
-#include "strata/kernels/verify_kernels.hpp"
+#include "cortex/core/native_head.hpp"
+#include "cortex/core/on_device.hpp"
+#include "cortex/core/peer_experts.hpp"
+#include "cortex/kernels/iq_kernels.hpp"
+#include "cortex/kernels/cpu/expert_layout.hpp"
+#include "cortex/kernels/bf16_gemv.hpp"
+#include "cortex/kernels/native_router.hpp"
+#include "cortex/kernels/native_moe.hpp"
+#include "cortex/kernels/cpu/expert.hpp"
+#include "cortex/kernels/elementwise.hpp"
+#include "cortex/kernels/fused_gr.hpp"
+#include "cortex/kernels/cvec.hpp"
+#include "cortex/kernels/gr.hpp"
+#include "cortex/kernels/kv_q4.hpp"
+#include "cortex/kernels/kv_q8.hpp"
+#include "cortex/kernels/native_mmvq.hpp"
+#include "cortex/kernels/native_qsa.hpp"
+#include "cortex/kernels/native_qsa_indexer.hpp"
+#include "cortex/kernels/native_rope.hpp"
+#include "cortex/kernels/ngram.hpp"
+#include "cortex/kernels/ple.hpp"
+#include "cortex/kernels/qsa.hpp"
+#include "cortex/kernels/qsa_decode_attn.hpp"
+#include "cortex/kernels/qsa_select.hpp"
+#include "cortex/kernels/quantize_act.hpp"
+#include "cortex/kernels/rope.hpp"
+#include "cortex/kernels/s2_expert_grouped.hpp"
+#include "cortex/kernels/sampler.hpp"
+#include "cortex/core/progress.hpp"
+#include "cortex/kernels/shared_expert.hpp"
+#include "cortex/kernels/verify_kernels.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -61,19 +61,19 @@
 #include <sched.h>
 #endif
 
-namespace strata::core {
+namespace cortex::core {
 namespace {
 
 constexpr float EPS = 1e-6f;
 using Clock = std::chrono::steady_clock;
 double ms_since(Clock::time_point t) { return std::chrono::duration<double, std::milli>(Clock::now() - t).count(); }
-const bool g_dbg = std::getenv("STRATA_VERIFY_DEBUG") != nullptr;
-inline bool g_lfuse() { static const bool on = [] { const char* v = std::getenv("STRATA_LFUSE"); return v != nullptr && v[0] == '1'; }(); return on; }
-inline bool g_lfuse_gate() { static const bool on = [] { const char* v = std::getenv("STRATA_LFUSE_GATE"); return v == nullptr || v[0] != '0'; }(); return on; }
-inline bool g_lfuse_pair() { static const bool on = [] { const char* v = std::getenv("STRATA_LFUSE_PAIR"); return v == nullptr || v[0] != '0'; }(); return on; }
-inline bool g_qdedup() { static const bool on = [] { const char* v = std::getenv("STRATA_VERIFY_QDEDUP"); return v != nullptr && std::atoi(v) != 0; }(); return on; }
-// S26 STRATA_QFUSE=1: activation q8_1 images written by their producers (the GDN output norm) - the same bytes
-inline bool g_qfuse() { static const bool on = [] { const char* v = std::getenv("STRATA_QFUSE"); return v != nullptr && std::atoi(v) != 0; }(); return on; }
+const bool g_dbg = std::getenv("CORTEX_VERIFY_DEBUG") != nullptr;
+inline bool g_lfuse() { static const bool on = [] { const char* v = std::getenv("CORTEX_LFUSE"); return v != nullptr && v[0] == '1'; }(); return on; }
+inline bool g_lfuse_gate() { static const bool on = [] { const char* v = std::getenv("CORTEX_LFUSE_GATE"); return v == nullptr || v[0] != '0'; }(); return on; }
+inline bool g_lfuse_pair() { static const bool on = [] { const char* v = std::getenv("CORTEX_LFUSE_PAIR"); return v == nullptr || v[0] != '0'; }(); return on; }
+inline bool g_qdedup() { static const bool on = [] { const char* v = std::getenv("CORTEX_VERIFY_QDEDUP"); return v != nullptr && std::atoi(v) != 0; }(); return on; }
+// S26 CORTEX_QFUSE=1: activation q8_1 images written by their producers (the GDN output norm) - the same bytes
+inline bool g_qfuse() { static const bool on = [] { const char* v = std::getenv("CORTEX_QFUSE"); return v != nullptr && std::atoi(v) != 0; }(); return on; }
 #define VDBG(...) do { if (g_dbg) { std::fprintf(stderr, "verify dbg: " __VA_ARGS__); std::fflush(stderr); } } while (0)
 
 struct Bump {
@@ -87,33 +87,33 @@ struct Bump {
 };
 
 // #649 (HIP, opt-in A/Bs for the gfx1030 verify timeouts; CUDA never reads them)
-//   STRATA_VERIFY_COHERENT=1  the handshake words and rows in explicitly coherent (fine-grained) host memory
-//   STRATA_DOORBELL_STORE=1   the GPU stores each step's ring instead of read-modify-writing it over PCIe
+//   CORTEX_VERIFY_COHERENT=1  the handshake words and rows in explicitly coherent (fine-grained) host memory
+//   CORTEX_DOORBELL_STORE=1   the GPU stores each step's ring instead of read-modify-writing it over PCIe
 bool env_on(const char* name) {
     const char* e = std::getenv(name);
     return e != nullptr && e[0] != 0 && e[0] != '0';
 }
-#if defined(STRATA_USE_HIP)
-const bool g_coherent = env_on("STRATA_VERIFY_COHERENT");
-const bool g_doorbell_store = env_on("STRATA_DOORBELL_STORE");
+#if defined(CORTEX_USE_HIP)
+const bool g_coherent = env_on("CORTEX_VERIFY_COHERENT");
+const bool g_doorbell_store = env_on("CORTEX_DOORBELL_STORE");
 #endif
-const bool g_trace = env_on("STRATA_VERIFY_TRACE");
-// STRATA_VERIFY_STEPPED=1 (opt-in, Arc A-series): see Verifier::step_hook_.  STRATA_VERIFY_PIPE=0 serves without the
+const bool g_trace = env_on("CORTEX_VERIFY_TRACE");
+// CORTEX_VERIFY_STEPPED=1 (opt-in, Arc A-series): see Verifier::step_hook_.  CORTEX_VERIFY_PIPE=0 serves without the
 // helper thread (serial segments) for A/B runs.
-const bool g_stepped = env_on("STRATA_VERIFY_STEPPED");
+const bool g_stepped = env_on("CORTEX_VERIFY_STEPPED");
 
-// STRATA_PIPE_HELPER_SIBLING=1 (opt-in, stepped mode): the host thread is pinned to one logical CPU and a std::thread
+// CORTEX_PIPE_HELPER_SIBLING=1 (opt-in, stepped mode): the host thread is pinned to one logical CPU and a std::thread
 // inherits that mask, so the pipelined serve's pool helper and the main thread's flag-A wait share one CPU and the
 // early segment is mostly submitted only after the pool finished.  With this set the helper runs on the host CPU's SMT
 // sibling instead.  -1: keep the inherited mask (unset, not pinned to one CPU, or no sibling).
 int pipe_helper_cpu() {
 #if defined(__linux__)
     static const int cpu = [] {
-        if (!env_on("STRATA_PIPE_HELPER_SIBLING")) return -1;
+        if (!env_on("CORTEX_PIPE_HELPER_SIBLING")) return -1;
         cpu_set_t s;
         CPU_ZERO(&s);
         if (pthread_getaffinity_np(pthread_self(), sizeof s, &s) != 0 || CPU_COUNT(&s) != 1) {
-            std::fprintf(stderr, "strata verify: STRATA_PIPE_HELPER_SIBLING: host thread is not pinned to one CPU; unchanged\n");
+            std::fprintf(stderr, "cortex verify: CORTEX_PIPE_HELPER_SIBLING: host thread is not pinned to one CPU; unchanged\n");
             return -1;
         }
         int host = -1;
@@ -139,7 +139,7 @@ int pipe_helper_cpu() {
             }
             std::fclose(f);
         }
-        std::fprintf(stderr, "strata verify: pipelined pool helper on CPU %d (host thread CPU %d)%s\n", sib, host,
+        std::fprintf(stderr, "cortex verify: pipelined pool helper on CPU %d (host thread CPU %d)%s\n", sib, host,
                      sib < 0 ? ": no SMT sibling, unchanged" : "");
         return sib;
     }();
@@ -148,21 +148,21 @@ int pipe_helper_cpu() {
     return -1;
 #endif
 }
-const bool g_no_multi_gr = env_on("STRATA_NO_MULTI_GR");   // #783 PR-g: per-token GR reads/writes and generic-T kernels again
-const bool g_no_batch_kv = env_on("STRATA_NO_BATCH_KV_STEP");   // #783 PR-d: per-token K/V and indexer appends again
+const bool g_no_multi_gr = env_on("CORTEX_NO_MULTI_GR");   // #783 PR-g: per-token GR reads/writes and generic-T kernels again
+const bool g_no_batch_kv = env_on("CORTEX_NO_BATCH_KV_STEP");   // #783 PR-d: per-token K/V and indexer appends again
 
 // The shared expert runs on its own stream, forked off and joined back per layer (`sh_fork` in record_window).  The
 // overlap pays off on CUDA, where it was added (cfd3b72).  On HIP a cross-stream event dependency costs more than the
 // shared expert takes to run, so there the fork starts off: same binary, same 48,067-token prompt, three runs each on a
 // Radeon AI PRO R9700 (gfx1201, ROCm 6.4.3), the fork off decodes at 62.9 t/s against 43.4 t/s with it on.  The
 // profiler turns the fork off to time the stages, so a profiled run never showed that.  #816 reports the same fall on a
-// gfx1030 (RX 6800, Windows, 42.5 -> 56.4 t/s).  STRATA_SH_STREAM overrides either default: `=1` forks, `=0` does not.
+// gfx1030 (RX 6800, Windows, 42.5 -> 56.4 t/s).  CORTEX_SH_STREAM overrides either default: `=1` forks, `=0` does not.
 // Strix Halo (gfx1151, unified memory) is the exception: the fork pays there (+1.8% UD-IQ4_XS, +6.7% UD-Q4_K_XL decode
-// at 8K, ids identical), so the gfx1151 arch table sets STRATA_SH_STREAM=1.  Read on first use, after that table ran.
+// at 8K, ids identical), so the gfx1151 arch table sets CORTEX_SH_STREAM=1.  Read on first use, after that table ran.
 bool sh_stream_on() {
     static const bool on = [] {
-        if (const char* v = std::getenv("STRATA_SH_STREAM")) return v[0] != '0';
-#if defined(STRATA_USE_HIP)
+        if (const char* v = std::getenv("CORTEX_SH_STREAM")) return v[0] != '0';
+#if defined(CORTEX_USE_HIP)
         return false;
 #else
         return true;
@@ -173,15 +173,15 @@ bool sh_stream_on() {
 
 // A one-token window always keeps its token, so its graph advances the sequence state itself (the GDN conv history
 // and recurrence state) and Verifier::commit launches no commit graph after it (eddoursul's fork, F7).  CUDA only:
-// HIP keeps the commit graph after every window (STRATA_ONE_TOKEN_COMMIT=0 does too).
+// HIP keeps the commit graph after every window (CORTEX_ONE_TOKEN_COMMIT=0 does too).
 // The head's hyper-connection read for the window's tokens in one launch set (CUDA; HIP keeps gr_read per token;
-// STRATA_HEAD_MIX_MULTI=0 does too): bitwise the same sums.
+// CORTEX_HEAD_MIX_MULTI=0 does too): bitwise the same sums.
 bool head_mix_multi_enabled() {
-#if defined(STRATA_USE_HIP)
+#if defined(CORTEX_USE_HIP)
     return false;
 #else
     static const bool on = [] {
-        const char* v = std::getenv("STRATA_HEAD_MIX_MULTI");
+        const char* v = std::getenv("CORTEX_HEAD_MIX_MULTI");
         return v == nullptr || std::atoi(v) != 0;
     }();
     return on;
@@ -189,11 +189,11 @@ bool head_mix_multi_enabled() {
 }
 
 bool one_token_self_commit() {
-#if defined(STRATA_USE_HIP)
+#if defined(CORTEX_USE_HIP)
     return false;
 #else
     static const bool on = [] {
-        const char* v = std::getenv("STRATA_ONE_TOKEN_COMMIT");
+        const char* v = std::getenv("CORTEX_ONE_TOKEN_COMMIT");
         return v == nullptr || std::atoi(v) != 0;
     }();
     return on;
@@ -201,28 +201,28 @@ bool one_token_self_commit() {
 }
 
 // True when the GPU runs under the i915 kernel driver (Arc Alchemist: A310-A770), read from sysfs.
-bool intel_i915_gpu() { return strata::intel_gpu_driver() == "i915"; }
+bool intel_i915_gpu() { return cortex::intel_gpu_driver() == "i915"; }
 
 // How long the host waits for a layer's doorbell before it gives the window up (#267).  20 s by default; the first
 // window of a run on a card that JIT-compiles its kernels (no AOT: an Arc A750 needs FP64 emulation) can take longer
-// to start, so STRATA_RING_TIMEOUT_S raises it.
-std::chrono::seconds strata_ring_timeout() {
+// to start, so CORTEX_RING_TIMEOUT_S raises it.
+std::chrono::seconds cortex_ring_timeout() {
     static const long s = [] {
-        const char* v = std::getenv("STRATA_RING_TIMEOUT_S");
+        const char* v = std::getenv("CORTEX_RING_TIMEOUT_S");
         const long n = v ? std::atol(v) : 20;
         return n >= 1 ? n : 20L;
     }();
     return std::chrono::seconds(s);
 }
 
-// STRATA_VERIFY_STEPPED: no kernel of the window reads a host store while it runs, and no host reads a kernel's store
+// CORTEX_VERIFY_STEPPED: no kernel of the window reads a host store while it runs, and no host reads a kernel's store
 // while it runs - every flag is raised before the segment that waits on it is submitted, and the host reads a
 // segment's rings and payload after the segment drained. So the window's mapped buffers need no uncached host memory
 // (sycl_queue.hpp) and its doorbell publishes need no uncached payload stores (sycl_doorbell.hpp). Both cost the
 // window time on an A770 (xe, Coder IQ1_M, 8K prompt): the GPU waited ~70 ms a window for the CPU with them, ~42
-// without; decode 22.8-25.0 -> 26.9-28.9 tok/s. STRATA_VERIFY_HOST_UNCACHED=1 keeps both.
+// without; decode 22.8-25.0 -> 26.9-28.9 tok/s. CORTEX_VERIFY_HOST_UNCACHED=1 keeps both.
 bool window_host_uncached() {
-    static const bool v = !g_stepped || env_on("STRATA_VERIFY_HOST_UNCACHED");
+    static const bool v = !g_stepped || env_on("CORTEX_VERIFY_HOST_UNCACHED");
     return v;
 }
 
@@ -234,7 +234,7 @@ bool mapped(size_t bytes, void **h, void **d) try {
     */
     // polled by the window's kernels: uncached host memory (sycl_queue.hpp); a buffer only read or written between
     // kernels (the stepped window's payload) is ordinary host USM
-    if (DPCT_CHECK_ERROR(*h = window_host_uncached() ? strata::host_malloc_polled(bytes, dpct::get_in_order_queue())
+    if (DPCT_CHECK_ERROR(*h = window_host_uncached() ? cortex::host_malloc_polled(bytes, dpct::get_in_order_queue())
                                      : sycl::malloc_host(bytes, dpct::get_in_order_queue())) !=
         0 || *h == nullptr) return false;
     std::memset(*h, 0, bytes);
@@ -246,7 +246,7 @@ catch (sycl::exception const &exc) {
   std::exit(1);
 }
 
-strata::kernels::QsaShapes shapes_of(const ModelGeometry& g) { return qsa_shapes(g); }
+cortex::kernels::QsaShapes shapes_of(const ModelGeometry& g) { return qsa_shapes(g); }
 
 const WeightRef* need(const LayerView& v, const char* suffix, std::string& err) {
     const WeightRef* r = v.get(suffix);
@@ -279,13 +279,13 @@ void release_live_verifiers(std::FILE* f) {
             const Clock::time_point t0 = Clock::now();
             const bool done = v->release_gpu_waits(5000);
             if (f != nullptr)
-                std::fprintf(f, "strata: released the verify window's GPU waits (#267): the GPU %s\n",
+                std::fprintf(f, "cortex: released the verify window's GPU waits (#267): the GPU %s\n",
                              done ? ("finished in " + std::to_string((long long) ms_since(t0)) + " ms").c_str()
                                   : "did not finish within 5 s");
         }
     if (f != nullptr) std::fflush(f);
 }
-// #649: the host side of STRATA_VERIFY_TRACE - a ring of the last kTraceN handshake events of every verifier
+// #649: the host side of CORTEX_VERIFY_TRACE - a ring of the last kTraceN handshake events of every verifier
 struct TraceEv {
     int64_t t_ns;
     const void* who;
@@ -303,10 +303,10 @@ std::string released_note(bool drained) {
     return drained ? "; its GPU waits were released and the GPU finished (#267)"
                    : "; its GPU waits were released but the GPU did not finish within 5 s (#267)";
 }
-// #267 test hook: STRATA_TEST_VERIFY_STALL=N withholds the last layer's flag in the N-th window (1-based), so the
+// #267 test hook: CORTEX_TEST_VERIFY_STALL=N withholds the last layer's flag in the N-th window (1-based), so the
 // GPU spins on a flag nobody raises - the bounded window wait and the release are then what ends it.  Unset: never.
 const int64_t g_test_stall = [] {
-    const char* e = std::getenv("STRATA_TEST_VERIFY_STALL");
+    const char* e = std::getenv("CORTEX_TEST_VERIFY_STALL");
     return e != nullptr ? (int64_t) std::atoll(e) : (int64_t) 0;
 }();
 }  // namespace
@@ -355,7 +355,7 @@ void Verifier::trace_dump(std::FILE* f) const {
                                           "PCIe grp", "waitCPU", "combine", "", "head", "", "", "", "", "", ""};
     const uint64_t end = g_trace_next.load();
     const uint64_t n = end < 160 ? end : 160;
-    std::fprintf(f, "strata verify trace (#649): the last %llu handshake events (host clock, us before the last; "
+    std::fprintf(f, "cortex verify trace (#649): the last %llu handshake events (host clock, us before the last; "
                     "words: seq = GPU rang, flag = CPU served, A = plan, B = copies)\n", (unsigned long long) n);
     const int64_t t_last = n ? g_trace_ring[(end - 1) % kTraceN].t_ns : 0;
     for (uint64_t i = end - n; i < end; ++i) {
@@ -373,7 +373,7 @@ void Verifier::trace_dump(std::FILE* f) const {
         if (t != 0 && t < t0) t0 = t;
     }
     if (t0 == ~0ull) {
-        std::fprintf(f, "strata verify trace: no GPU breadcrumb in this window (the GPU never started it)\n");
+        std::fprintf(f, "cortex verify trace: no GPU breadcrumb in this window (the GPU never started it)\n");
         return;
     }
     int64_t last_l = -1;
@@ -381,7 +381,7 @@ void Verifier::trace_dump(std::FILE* f) const {
         for (int i = 0; i < kProfPer; ++i)
             for (int grp = 0; grp < 2; ++grp)
                 if (trace_h_[(size_t) ((l * kProfPer + i) * 2 + grp)] != 0) last_l = l;
-    std::fprintf(f, "strata verify trace: GPU breadcrumbs (us after the window's first), the GPU got as far as layer "
+    std::fprintf(f, "cortex verify trace: GPU breadcrumbs (us after the window's first), the GPU got as far as layer "
                     "%lld:\n", (long long) last_l);
     for (int64_t l = std::max<int64_t>(0, last_l - 2); l <= std::min<int64_t>(g_->n_layers, last_l + 1); ++l)
         for (int grp = 0; grp < 2; ++grp) {
@@ -407,7 +407,7 @@ void Verifier::diag(std::FILE* f) const {
     std::fprintf(f, "  verify window%s: %d tokens at position %lld, host at layer step %u; the GPU rang %u; flags: "
                     "served %u, plan (A) %u, copies (B) %u\n", current ? "" : " (last window, not the current stage)",
                  last_t_, (long long) last_pos0_, cur_layer_ + 1, rd(h_seq_), rd(h_flag_), rd(h_flagA_), rd(h_flagB_));
-    trace_dump(f);   // #649: STRATA_VERIFY_TRACE=1 only
+    trace_dump(f);   // #649: CORTEX_VERIFY_TRACE=1 only
 }
 
 Verifier::~Verifier() try {
@@ -450,7 +450,7 @@ Verifier::~Verifier() try {
     void* hosts[] = {h_tok_, h_step_, h_pos_, h_commit_, h_ple_, h_out_, h_x_, h_ids_, h_w_, h_seq_, h_flag_, h_ymiss_,
                      h_flagA_, h_plan_, h_flagB_, h_plan_err_};
     for (void* h : hosts)
-        if (h) strata::host_free_polled(h, dpct::get_in_order_queue());
+        if (h) cortex::host_free_polled(h, dpct::get_in_order_queue());
 } catch (...) {
 }
 
@@ -468,7 +468,7 @@ bool Verifier::init(const WeightTable &wt, const ModelGeometry &g,
     device_ = dpct::get_current_device_id(); // a layer split's stage on another
                                              // GPU: its streams, graphs and
                                              // buffers live there
-    strata::kernels::fused_gr_check();   // once per card: which bitwise-equal hyper-connection read runs there
+    cortex::kernels::fused_gr_check();   // once per card: which bitwise-equal hyper-connection read runs there
     wt_ = &wt;
     g_ = &g;
     ss_ = &ss;
@@ -477,8 +477,8 @@ bool Verifier::init(const WeightTable &wt, const ModelGeometry &g,
     max_t_ = max_t;
     sampling_.greedy = true;      // a fresh verifier samples greedily until set_sampling says otherwise
     sampling_.temperature = 0.0f;
-    if (max_t < 2 || max_t > strata::kernels::kVerifyMaxT || max_t > strata::kernels::cpu::MAXT) {
-        err = "verify: the window must hold 2.." + std::to_string(strata::kernels::kVerifyMaxT) + " tokens";
+    if (max_t < 2 || max_t > cortex::kernels::kVerifyMaxT || max_t > cortex::kernels::cpu::MAXT) {
+        err = "verify: the window must hold 2.." + std::to_string(cortex::kernels::kVerifyMaxT) + " tokens";
         return false;
     }
     if (hits.d_res == nullptr || hits.cache_base == nullptr || hits.blob <= 0) {
@@ -493,7 +493,7 @@ bool Verifier::init(const WeightTable &wt, const ModelGeometry &g,
         err = "verify: " + why + " (the verify window reproduces the default native decode path)";
         return false;
     }
-    if (!strata::kernels::fused_gr_supported(g.n_embd, g.hc, g.hc_lr) || ss.k != 10 || g.ssm_state_size != 128 ||
+    if (!cortex::kernels::fused_gr_supported(g.n_embd, g.hc, g.hc_lr) || ss.k != 10 || g.ssm_state_size != 128 ||
         g.ssm_d_conv != 4) {
         err = "verify: geometry differs from the artifact's";
         return false;
@@ -508,23 +508,23 @@ bool Verifier::init(const WeightTable &wt, const ModelGeometry &g,
     if (wo == nullptr) { err = "verify: output.weight is missing"; return false; }
     n_vocab_ = wo->ne1;
 
-    const strata::kernels::QsaShapes s = shapes_of(g);
-    cap_ = strata::kernels::qsa_selection_width(strata::kernels::kTopkMaxCells, s);
+    const cortex::kernels::QsaShapes s = shapes_of(g);
+    cap_ = cortex::kernels::qsa_selection_width(cortex::kernels::kTopkMaxCells, s);
     max_blocks_ = ss.qsa_states[ss.qsa_primary()].max_cells / s.idx_block + 2;
-    attn_scratch_floats_ = (int64_t) strata::kernels::qsa_decode_attn_scratch_floats(cap_, s);
+    attn_scratch_floats_ = (int64_t) cortex::kernels::qsa_decode_attn_scratch_floats(cap_, s);
 
     const uint64_t T = (uint64_t) max_t, N = (uint64_t) g.n_embd, HC = (uint64_t) g.hc, K = (uint64_t) ss.k;
     const uint64_t C = (uint64_t) g.ssm_conv_channels, ZV = (uint64_t) g.ssm_value_dim, HV = (uint64_t) g.ssm_v_heads;
     const uint64_t NH = (uint64_t) g.n_head, HD = (uint64_t) g.head_dim, NKV = (uint64_t) g.n_head_kv;
     const uint64_t IQ = (uint64_t) g.idx_q_heads, ID = (uint64_t) g.idx_key_dim;
     const uint64_t nG = (uint64_t) g.n_gdn_layers(), nQ = (uint64_t) g.n_qsa_layers();
-    const uint64_t HS = (uint64_t) strata::kernels::NG_HIST * strata::kernels::NG_HC_DIM;
+    const uint64_t HS = (uint64_t) cortex::kernels::NG_HIST * cortex::kernels::NG_HC_DIM;
     const uint64_t TS = (uint64_t) (s.idx_block - 1) * ID;
     const int max_in = (int) std::max<uint64_t>(std::max<uint64_t>(N, ZV), NH * HD);
 
     // ---- mapped staging
     bool ok = mapped(T * 4, (void**) &h_tok_, (void**) &m_tok_) &&
-              mapped(T * strata::kernels::kStepCount * 4, (void**) &h_step_, (void**) &m_step_) &&
+              mapped(T * cortex::kernels::kStepCount * 4, (void**) &h_step_, (void**) &m_step_) &&
               mapped(T * (NH + NKV + IQ) * 4, (void**) &h_pos_, (void**) &m_pos_) &&
               mapped((2 + T) * 4 + 16, (void**) &h_commit_, (void**) &m_commit_) &&
               mapped(T * N * 4, (void**) &h_ple_, (void**) &m_ple_) &&
@@ -564,14 +564,14 @@ bool Verifier::init(const WeightTable &wt, const ModelGeometry &g,
 
     // ---- the device arena: the same sequence counted, then carved
     auto carve = [&](Bump& b) {
-        tok_ = b.take<int32_t>(T); step_ = b.take<int32_t>(T * strata::kernels::kStepCount);
+        tok_ = b.take<int32_t>(T); step_ = b.take<int32_t>(T * cortex::kernels::kStepCount);
         pos_ = b.take<int32_t>(T * (NH + NKV + IQ)); commit_ = b.take<int32_t>(2 + T);
         ple_ = b.take<float>(T * N); emb_ = b.take<float>(T * N); R_ = b.take<float>(T * HC * N);
         mixed_ = b.take<float>(T * N); bo_ = b.take<float>(T * N);
         inj_ = b.take<float>(T * HC); inj2_ = b.take<float>(T * HC);
         lo_ = b.take<float>(T * (uint64_t) g.hc_lr); rs_ = b.take<float>(T * HC); xn_ = b.take<float>(T * HC * N);
-        xq_ = b.take<uint8_t>(strata::kernels::native_q8_1_bytes(max_in, (int) T));
-        sh_xq_ = b.take<uint8_t>(strata::kernels::native_q8_1_bytes(max_in, (int) T));
+        xq_ = b.take<uint8_t>(cortex::kernels::native_q8_1_bytes(max_in, (int) T));
+        sh_xq_ = b.take<uint8_t>(cortex::kernels::native_q8_1_bytes(max_in, (int) T));
         qkv_L_ = b.take<float>(nG * T * C); h_L_ = b.take<float>(nG * T * C);
         gate_L_ = b.take<float>(nG * T * HV); beta_L_ = b.take<float>(nG * T * HV);
         z_ = b.take<float>(T * ZV); y_ = b.take<float>(T * ZV); y_dummy_ = b.take<float>(T * ZV);
@@ -586,46 +586,46 @@ bool Verifier::init(const WeightTable &wt, const ModelGeometry &g,
         shared_ = b.take<float>(T * N); parts_ = b.take<float>(T * K * N); hit_out_ = b.take<float>(T * K * N);
         hit_slot_ = b.take<int32_t>(T * K); hit_dst_ = b.take<int32_t>(T * K); hit_count_ = b.take<int32_t>(4);
         plan_ = b.take<int32_t>(2 * ((uint64_t) plan_i32_ + 16));
-        staging_ = b.take<uint8_t>((uint64_t) kStagingBlobs * strata::kernels::cpu::expert_layout().max_blob);
+        staging_ = b.take<uint8_t>((uint64_t) kStagingBlobs * cortex::kernels::cpu::expert_layout().max_blob);
         hit_xq_ = b.take<uint8_t>(T * (N / 32) * 34); hit_xs_ = b.take<float>(T * (N / 32));
         nat_xq_ = b.take<uint8_t>(T * (N / 32) * 36);
         hit_scratch_ = b.take<uint8_t>(std::max<uint64_t>(
-            strata::kernels::moe_hit_grouped_scratch_bytes((int64_t) (T * K), g.n_embd, g.n_ff),
-            strata::kernels::native_expert_scratch_bytes((int64_t) (T * K), g.n_ff)));
+            cortex::kernels::moe_hit_grouped_scratch_bytes((int64_t) (T * K), g.n_embd, g.n_ff),
+            cortex::kernels::native_expert_scratch_bytes((int64_t) (T * K), g.n_ff)));
         head_mixed_ = b.take<float>(T * N); head_inj_ = b.take<float>(HC);
         sh_bf16_ = b.take<uint16_t>(T * N); sh_gate_ = b.take<float>(T * (uint64_t) g.n_ff);
         sh_up_ = b.take<float>(T * (uint64_t) g.n_ff); sh_g_ = b.take<float>(T + 4);
         head_logits_ = b.take<float>(T * (uint64_t) n_vocab_);
-        arg_scratch_ = b.take<uint8_t>(strata::kernels::argmax_rows_scratch_bytes((int) T));
+        arg_scratch_ = b.take<uint8_t>(cortex::kernels::argmax_rows_scratch_bytes((int) T));
         one_ = b.take<int32_t>(4);
         hist_snap_ = b.take<float>(T * HS);
-        ple_key_ = b.take<float>(T * (uint64_t) strata::kernels::NG_HC_DIM); ple_val_ = b.take<float>(T * N);
+        ple_key_ = b.take<float>(T * (uint64_t) cortex::kernels::NG_HC_DIM); ple_val_ = b.take<float>(T * N);
     };
     Bump count;
     carve(count);
-    if (DPCT_CHECK_ERROR(arena_ = (void *)strata::malloc_device_guarded(
+    if (DPCT_CHECK_ERROR(arena_ = (void *)cortex::malloc_device_guarded(
                              count.used, dpct::get_in_order_queue())) != 0) {
         err = "verify: the device arena (" + std::to_string(count.used >> 20) + " MiB) does not fit";
         return false;
     }
-    strata::big_fill_zero(dpct::get_in_order_queue(), arena_, count.used);
+    cortex::big_fill_zero(dpct::get_in_order_queue(), arena_, count.used);
     if (g_trace && trace_h_ == nullptr) {   // #649: the breadcrumbs, mapped so they read while the GPU hangs
         trace_n_ = (size_t) (g.n_layers + 1) * kProfPer * 2;
         if (!mapped(trace_n_ * 8, (void**) &trace_h_, (void**) &trace_m_)) {
             trace_h_ = trace_m_ = nullptr;
             trace_n_ = 0;
         }
-#if defined(STRATA_USE_HIP)
-        std::fprintf(stderr, "strata verify trace (#649): on; coherent words %s, doorbell %s, HIP_HOST_COHERENT=%s "
+#if defined(CORTEX_USE_HIP)
+        std::fprintf(stderr, "cortex verify trace (#649): on; coherent words %s, doorbell %s, HIP_HOST_COHERENT=%s "
                              "HSA_ENABLE_SDMA=%s GPU_MAX_HW_QUEUES=%s\n", g_coherent ? "explicit" : "default",
                      g_doorbell_store ? "stored" : "incremented", std::getenv("HIP_HOST_COHERENT") ? std::getenv("HIP_HOST_COHERENT") : "-",
                      std::getenv("HSA_ENABLE_SDMA") ? std::getenv("HSA_ENABLE_SDMA") : "-",
                      std::getenv("GPU_MAX_HW_QUEUES") ? std::getenv("GPU_MAX_HW_QUEUES") : "-");
 #else
-        std::fprintf(stderr, "strata verify trace (#649): on\n");
+        std::fprintf(stderr, "cortex verify trace (#649): on\n");
 #endif
     }
-    prof_on_ = std::getenv("STRATA_VERIFY_PROFILE") != nullptr;
+    prof_on_ = std::getenv("CORTEX_VERIFY_PROFILE") != nullptr;
     if (prof_on_) {
         const size_t np = (size_t) g.n_layers * kProfPer + 4;
         /*
@@ -698,7 +698,7 @@ bool Verifier::init(const WeightTable &wt, const ModelGeometry &g,
     h_res_ = hits.h_res;
     if (h_plan_err_ != nullptr) *(volatile uint32_t*) h_plan_err_ = 0;
     if (hits.h_res != nullptr && hits.d_res != nullptr && hits.cache_base != nullptr) {
-        const char* v_ar = std::getenv("STRATA_VERIFY_ALL_RESIDENT");
+        const char* v_ar = std::getenv("CORTEX_VERIFY_ALL_RESIDENT");
         if (v_ar == nullptr || std::atoi(v_ar) != 0) {
             bool all_ok = true;
             for (int64_t l = lb_; l < le_ && all_ok; ++l) {
@@ -712,14 +712,14 @@ bool Verifier::init(const WeightTable &wt, const ModelGeometry &g,
             all_resident_ = all_ok;
         }
     }
-    // E-6: a layer whose routed experts are all resident is planned on the device (STRATA_VERIFY_DEVICE_PLAN=1: on;
+    // E-6: a layer whose routed experts are all resident is planned on the device (CORTEX_VERIFY_DEVICE_PLAN=1: on;
     // exact, but neutral on RIBPC 1-2 GPUs: off by default)
     {
-        const char* v = std::getenv("STRATA_VERIFY_DEVICE_PLAN");
+        const char* v = std::getenv("CORTEX_VERIFY_DEVICE_PLAN");
         // (not with set_always_publish: the device table may lag the host's while windows are in flight)
         device_plan_ = !all_resident_ && !always_publish_ && (v != nullptr && std::atoi(v) != 0);
     }
-    // (halo's STRATA_VERIFY_RESIDENT=1 is this window's all_resident_ graph above, which 0.1.39 has on by default)
+    // (halo's CORTEX_VERIFY_RESIDENT=1 is this window's all_resident_ graph above, which 0.1.39 has on by default)
     if (g_qfuse()) {   // S26: the HC read's q8_1 group counters, zeroed once (each launch leaves them zero)
         if (DPCT_CHECK_ERROR(qcnt_ = sycl::malloc_device<unsigned int>(
                                  (size_t)(g.n_embd / 32),
@@ -762,11 +762,11 @@ bool Verifier::init(const WeightTable &wt, const ModelGeometry &g,
         */
         if (!ok2) {; all_resident_ = false; device_plan_ = false; }
     }
-    if (std::getenv("STRATA_VERIFY_DEBUG") != nullptr) {   // SYCL port: the per-layer residual ladder (token 0)
+    if (std::getenv("CORTEX_VERIFY_DEBUG") != nullptr) {   // SYCL port: the per-layer residual ladder (token 0)
         dbgR_ = (float*) sycl::malloc_device((size_t) g.n_layers * g.n_embd * 4, dpct::get_in_order_queue());
         dbgM_ = (float*) sycl::malloc_device((size_t) g.n_layers * g.n_embd * 4, dpct::get_in_order_queue());
     }
-    std::fprintf(stderr, "strata verify: window up to %d tokens, %.1f MiB of device buffers%s\n", max_t,
+    std::fprintf(stderr, "cortex verify: window up to %d tokens, %.1f MiB of device buffers%s\n", max_t,
                  (double) count.used / 1048576.0,
                  all_resident_ ? " (100% VRAM resident: zero-doorbell graph)" : "");
     return true;
@@ -790,14 +790,14 @@ const float* Verifier::final_R(int t) const { return R_ + (size_t) t * (size_t) 
 // while the GPU combines A and runs A's layer l+1.  B's mixer only needs A's mixer of the same layer (K/V, GDN
 // state), never A's experts, so nothing waits that did not wait before.  Every token's arithmetic is unchanged.
 bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     const ModelGeometry& g = *g_;
-    // 0.1.43 (STRATA_VERIFY_LEAN=0 turns it off): with the device plan under STRATA_VERIFY_NO_HOST no host ever answers a doorbell, so
+    // 0.1.43 (CORTEX_VERIFY_LEAN=0 turns it off): with the device plan under CORTEX_VERIFY_NO_HOST no host ever answers a doorbell, so
     // a layer's doorbell publish, the three flag waits, the plan copy, the PCIe-share group and its staging kernels are nodes of
     // the graph that only wait for each other or do nothing: ~9 nodes (~1.4 ms) per layer-window less.  The VRAM / mirror groups, the
     // combine and the answers are the same kernels on the same data.
-    static const bool lean_env = [] { const char* v = std::getenv("STRATA_VERIFY_LEAN"); return !(v && v[0] == '0'); }();
-    static const bool no_host_env = [] { const char* v = std::getenv("STRATA_VERIFY_NO_HOST"); return v && *v && std::strcmp(v, "0") != 0; }();
+    static const bool lean_env = [] { const char* v = std::getenv("CORTEX_VERIFY_LEAN"); return !(v && v[0] == '0'); }();
+    static const bool no_host_env = [] { const char* v = std::getenv("CORTEX_VERIFY_NO_HOST"); return v && *v && std::strcmp(v, "0") != 0; }();
     // Not for a batch window (batch_rec_): unless the stage is all-resident, run_slot_rows / batch_poll wait for each
     // layer's doorbell, so a lean batch graph finishes with the ring silent ("verify batch: layer 0 never rang (graph
     // finished)", then the engine dies). Batch windows keep the doorbell nodes; the solo window stays lean.
@@ -817,10 +817,10 @@ bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
     auto Rt = [&](int t) { return R_ + (size_t) t * HC * N; };
     const int G = (split_ && T >= 2 && !batch_rec_) ? 2 : 1;   // a batch window is one group
     const bool self_commit = T == 1 && !batch_rec_ && !g_qfuse() && one_token_self_commit();   // see Verifier::commit
-    static const bool dec_batch = [] { const char* v = std::getenv("STRATA_DEC_BATCH"); return v == nullptr || std::atoi(v) != 0; }();
-    // SYCL port, STRATA_VERIFY_EAGER=1: the window runs on the queue instead of as a graph, and each stage stamp is
+    static const bool dec_batch = [] { const char* v = std::getenv("CORTEX_DEC_BATCH"); return v == nullptr || std::atoi(v) != 0; }();
+    // SYCL port, CORTEX_VERIFY_EAGER=1: the window runs on the queue instead of as a graph, and each stage stamp is
     // a host-side wait + clock (there is no %globaltimer here), so the existing stage profiler reports ms per stage.
-    static const bool eager = std::getenv("STRATA_VERIFY_EAGER") != nullptr;
+    static const bool eager = std::getenv("CORTEX_VERIFY_EAGER") != nullptr;
     auto stamp = [&](int64_t l, int i, int grp) {
         if (trace_m_ != nullptr) gpu_stamp(trace_m_, (int) ((l * kProfPer + i) * 2 + grp), cs);   // #649
         if (!prof_on_ || grp != 0) return;
@@ -828,7 +828,7 @@ bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
         else gpu_stamp(prof_, (int) (l * kProfPer + i), cs);
     };
     const int tb_[2] = {0, (T + 1) / 2}, te_[2] = {G == 2 ? (T + 1) / 2 : T, T};
-    // S26 STRATA_LFUSE=1: where the shared expert's gate / scale fusions apply (the paths they replace are the ones taken)
+    // S26 CORTEX_LFUSE=1: where the shared expert's gate / scale fusions apply (the paths they replace are the ones taken)
     auto lfuse_on = [&](int n) {
         return g_lfuse() && ar_on() && native_moe_combine_enabled() && dec_batch && n > 1 && n <= 8 &&
                shared_expert_native_bf16_enabled();
@@ -909,16 +909,16 @@ bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
             }
             float* normalized = (float*) ((uint8_t*) ss.ple.scratch + ple_block_scratch_bytes());
             static const bool ple_batch_env = [] {
-                const char* e = std::getenv("STRATA_PLE_BATCH");
+                const char* e = std::getenv("CORTEX_PLE_BATCH");
                 return !e || e[0] != '0';
             }();
             const bool ple_batch_kv = ple_batch_env && dec_batch && n > 1 && ss.ple.w.key_bf16 != nullptr &&
                                       ss.ple.w.value_bf16 != nullptr && ple_native_bf16_enabled() &&
                                       ple_native_postops_enabled();
-            // S25 (STRATA_PLE_BATCH=1): the key and value projections depend only on each row's n-gram embedding, so
+            // S25 (CORTEX_PLE_BATCH=1): the key and value projections depend only on each row's n-gram embedding, so
             // the group's rows run through the multi-row forms of the same kernels (the weights read once); every
             // row's arithmetic is the single-row call's. The history-dependent rest stays row by row.
-            static const bool ple_batch = [] { const char* e = std::getenv("STRATA_PLE_BATCH"); return e && e[0] == '1'; }();
+            static const bool ple_batch = [] { const char* e = std::getenv("CORTEX_PLE_BATCH"); return e && e[0] == '1'; }();
             PleWeights pw = ss.ple.w;
             const bool nkey = pw.key_native_data != nullptr && pw.key_bf16 == nullptr;
             const bool batched = !ple_batch_kv && ple_batch && n > 1 && (pw.key_bf16 != nullptr || nkey) && ple_native_bf16_enabled();
@@ -948,7 +948,7 @@ bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
                     return false;
                 }
             }
-            // #783 PR-g (stuchapin909): the window's residual writes in one launch (STRATA_NO_MULTI_GR=1: per token)
+            // #783 PR-g (stuchapin909): the window's residual writes in one launch (CORTEX_NO_MULTI_GR=1: per token)
             const bool multi_write = dec_batch && !g_no_multi_gr && n > 1;
             if (multi_write) gr_write_multi(Rt(tb), bo_ + tb * N, inj2_ + tb * HC, gs, Rt(tb), n, cs);
             for (int t = tb; t < te; ++t) {
@@ -986,16 +986,16 @@ bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
                 a.q8_inject = (const uint8_t*) wi[half]->hc_q8;
                 a.eps = EPS; a.lo = lo_ + t * g.hc_lr; a.rs = rs_ + t * HC;
                 a.inject_out = inj_out + t * HC; a.mixed = mixed_ + t * N;
-                if (qcnt_ != nullptr) {   // S26 STRATA_QFUSE: the consumer's q8_1 image written by the read itself
+                if (qcnt_ != nullptr) {   // S26 CORTEX_QFUSE: the consumer's q8_1 image written by the read itself
                     a.q8_cnt = qcnt_;
                     if (half == 0) a.q8_mixed = xq_ + (size_t) (t - tb) * (N / 32) * 36;
-                    else if (strata::kernels::cpu::expert_layout().native) a.q8_mixed = nat_xq_ + (size_t) t * (N / 32) * 36;
+                    else if (cortex::kernels::cpu::expert_layout().native) a.q8_mixed = nat_xq_ + (size_t) t * (N / 32) * 36;
                 }
             }
             return fused_gr_read_multi(fa, n, xn_ + (size_t) tb * HC * N, cs, (prof_on_ && grp == 0) ? prof_ : nullptr,
                                 (int) (l * kProfPer + (half == 0 ? 27 : 30)));
         };
-        const bool q8_attn = gr_read_group(0, pending, inj2_, inj_);   // true: xq_ holds mixed's q8_1 (STRATA_QFUSE)
+        const bool q8_attn = gr_read_group(0, pending, inj2_, inj_);   // true: xq_ holds mixed's q8_1 (CORTEX_QFUSE)
         stamp(l, 1, grp);
         float* xm = mixed_ + tb * N;
         try {
@@ -1057,7 +1057,7 @@ bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
                 gdn_step_norm_multi(state, hb, (int) C, gate, beta, z_, (const float*) wnm->data, EPS, y_, (int) HK,
                                     (int) HV, te, self_commit ? one_ : nullptr, cs, tb, g_qfuse() ? (void*) xq_ : nullptr);
                 stamp(l, 6, grp);
-                if (!g_qfuse()) native_quantize_q8_1(y_ + (size_t) tb * ZV, xq_, (int) ZV, n, cs);   // STRATA_QFUSE: done above
+                if (!g_qfuse()) native_quantize_q8_1(y_ + (size_t) tb * ZV, xq_, (int) ZV, n, cs);   // CORTEX_QFUSE: done above
                 native_mmvq(wout->native_type, wout->native_data, xq_, bo_ + tb * N, (int) ZV, (int) N, n, cs);
             } else {
                 // ======================= QSA =======================
@@ -1073,7 +1073,7 @@ bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
                     !native_of(wv, v.name("attn_v.weight"), err) || !native_of(wo, v.name("attn_output.weight"), err))
                     return false;
                 // #783 PR-f (stuchapin909): the per-head RMSNorm and the rope in one launch, bit-identical to the pair
-                // (rope_parity check 6); STRATA_NO_NORM_ROPE=1 keeps the two; off on HIP until its parity check passes
+                // (rope_parity check 6); CORTEX_NO_NORM_ROPE=1 keeps the two; off on HIP until its parity check passes
                 const bool fuse_nr = native_qsa_enabled() && native_rope_enabled() && native_norm_rope_usable((int) HD, (int) s.n_rot);
                 auto norm_rope = [&](float* data, const WeightRef* norm, int rows, int cols, const int32_t* pos) {
                     if (fuse_nr && native_norm_rope_usable(cols, (int) s.n_rot)) {
@@ -1088,7 +1088,7 @@ bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
                 };
                 float* idx_raw = idx_raw_L_ + (size_t) qi * MT * ID;
                 // the per-token GEMVs / norms / RoPEs / copies of this layer as one launch over the
-                // window's rows each - row-wise identical arithmetic (STRATA_DEC_BATCH=0: token by token)
+                // window's rows each - row-wise identical arithmetic (CORTEX_DEC_BATCH=0: token by token)
                 const bool qb = dec_batch && n > 1 && native_qsa_enabled() && native_rope_enabled() && !st.kv_q4;
                 if (!q8_attn) native_quantize_q8_1(xm, xq_, (int) N, n, cs);
                 if (qb) bf16_gemv_fp32_mmvf_multi(mixed_ + tb * N, N, (const uint16_t*) wik->data, idx_raw + tb * ID, ID, N, ID, n, cs);
@@ -1278,11 +1278,11 @@ bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
             return false;
         }
         stamp(l, 16, grp);
-        const bool q8_ffn = gr_read_group(1, true, inj_, inj2_);   // true: nat_xq_ holds the MoE input's q8_1 (STRATA_QFUSE)
+        const bool q8_ffn = gr_read_group(1, true, inj_, inj2_);   // true: nat_xq_ holds the MoE input's q8_1 (CORTEX_QFUSE)
         // with CPU experts in the window the shared expert forks off once the doorbell is published (it no longer
-        // competes with it for the GPU's first microseconds); STRATA_SH_FORK_LATE=0 forks at the top as before
+        // competes with it for the GPU's first microseconds); CORTEX_SH_FORK_LATE=0 forks at the top as before
         static const bool sh_fork_late_env = [] {
-            const char* e = std::getenv("STRATA_SH_FORK_LATE");
+            const char* e = std::getenv("CORTEX_SH_FORK_LATE");
             return !e || e[0] != '0';
         }();
         const bool sh_fork = sh_stream_on() && !prof_on_ && !g_stepped &&
@@ -1295,9 +1295,9 @@ bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
             (sh_cs_)->ext_oneapi_submit_barrier({*ev_fork_});
         }
         // the window's rows routed in 2 launches (one router GEMV reading the weight once, one
-        // top-10) instead of 2 per token; every row's arithmetic is the single-token call's (STRATA_DEC_BATCH=0: old)
+        // top-10) instead of 2 per token; every row's arithmetic is the single-token call's (CORTEX_DEC_BATCH=0: old)
         const WeightRef* w_router = v.get("ffn_gate_inp.weight");
-        // S26 STRATA_LFUSE=1: the shared expert's gate row rides in the router GEMV launch, its sigmoid + row scale
+        // S26 CORTEX_LFUSE=1: the shared expert's gate row rides in the router GEMV launch, its sigmoid + row scale
         // move into the combine, gate + up share one launch (all bitwise; resident combine path, 2-8 rows only)
         const WeightRef* w_sgi = lfuse_on(n) && g_lfuse_gate() ? v.get("ffn_gate_inp_shexp.weight") : nullptr;
         bool sg_ready = false;
@@ -1312,11 +1312,11 @@ bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
                                           NE, n, cs);
                 native_router_top10_multi_ne(logits_ + tb * NE, ids_ + tb * K, w_ + tb * K, n, (int) NE, cs);
             } catch (const std::exception& e) { err = "verify router: " + std::string(e.what()); return false; }
-#if defined(STRATA_HIP_GFX906)
+#if defined(CORTEX_HIP_GFX906)
         } else if (dec_batch) {
             // gfx906: the Coder's 256-expert router (the native router is 512 x 10 only) for the whole window in one
             // multi-column BF16 projection and one top-k, bitwise the per-token calls (route_window_parity); ~3 ms
-            // of a ~55 ms verify window on 2x MI50.  STRATA_ROUTE_PER_TOKEN=1: the per-token calls.
+            // of a ~55 ms verify window on 2x MI50.  CORTEX_ROUTE_PER_TOKEN=1: the per-token calls.
             if (!moe_route_window(wt, g, l, K, ss.moe, mixed_ + tb * N, logits_ + tb * NE, ids_ + tb * K, w_ + tb * K, n,
                                   cs, err))
                 return false;
@@ -1337,7 +1337,7 @@ bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
                               hits_.cache_base, slot_off_d_, (long long) hits_.blob,
                               plan_ + (size_t) grp * (size_t) (plan_i32_ + 16), (long long) max_t_ * K, skip_ + grp,
                               (uint32_t) ((l - lb_) * G + grp + 1), cs);
-#if defined(STRATA_USE_HIP)
+#if defined(CORTEX_USE_HIP)
             if (g_doorbell_store)   // #649 A/B: the step's ring stored, not incremented over PCIe
                 doorbell_publish_value(xm, ids_ + tb * K, w_ + tb * K, (int64_t) n * N, (int64_t) n * K, m_x_ + tb * N,
                                        m_ids_ + tb * K, m_w_ + tb * K, m_seq_, (uint32_t) ((l - lb_) * G + grp + 1), cs);
@@ -1360,7 +1360,7 @@ bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
             if (step_hook_ && !step_hook_(l, grp)) { if (err.empty()) err = "verify: stepped serve failed"; return false; }
         }
         stamp(l, 17, grp);
-        bool qdedup = false;   // STRATA_VERIFY_QDEDUP took effect: the experts' q8_1 image of xm is already made
+        bool qdedup = false;   // CORTEX_VERIFY_QDEDUP took effect: the experts' q8_1 image of xm is already made
         {
             const WeightRef *wgi = need(v, "ffn_gate_inp_shexp.weight", err), *wsg = need(v, "ffn_gate_shexp.weight", err),
                             *wsu = need(v, "ffn_up_shexp.weight", err), *wsd = need(v, "ffn_down_shexp.weight", err);
@@ -1373,10 +1373,10 @@ bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
             nsw.up_type = wsu->native_type; nsw.up_data = wsu->native_data;
             nsw.down_type = wsd->native_type; nsw.down_data = wsd->native_data;
             nsw.q8_1 = sh_fork ? sh_xq_ : xq_;
-            // STRATA_VERIFY_QDEDUP=1 (not with the forked shared-expert stream, which quantizes into its own buffer): the
+            // CORTEX_VERIFY_QDEDUP=1 (not with the forked shared-expert stream, which quantizes into its own buffer): the
             // experts' q8_1 image of xm is made first and the shared expert's gate/up read it (quantize_q8_1_rows and
             // native_quantize_q8_1 write the same bytes)
-            qdedup = g_qdedup() && !sh_fork && strata::kernels::cpu::expert_layout().native;
+            qdedup = g_qdedup() && !sh_fork && cortex::kernels::cpu::expert_layout().native;
             if (qdedup && !q8_ffn) quantize_q8_1_rows(xm, n, N, nat_xq_ + (size_t) tb * (N / 32) * 36, cs);
             if (!shared_expert_native_bf16_enabled()) {
                 if (dec_batch) f32_to_bf16_bulk(mixed_ + tb * N, sh_bf16_ + tb * N, (int64_t) n * N, sh_stream);   // contiguous rows
@@ -1394,7 +1394,7 @@ bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
             }
             if (sh_fork) dpct::sync_barrier(ev_join_, sh_cs_);
         }
-        if (strata::kernels::cpu::expert_layout().native) {
+        if (cortex::kernels::cpu::expert_layout().native) {
             if (!qdedup)
                 if (!q8_ffn) quantize_q8_1_rows(xm, n, N, nat_xq_ + (size_t) tb * (N / 32) * 36, cs);
         } else
@@ -1405,7 +1405,7 @@ bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
 
     // ---------------------------------------------------------------- post(l, group): experts, combine
     static const bool fuse_head_gr_env = [] {
-        const char* e = std::getenv("STRATA_FUSE_HEAD_GR");
+        const char* e = std::getenv("CORTEX_FUSE_HEAD_GR");
         return e && e[0] == '1';
     }();
     const bool fuse_head_gr = fuse_head_gr_env && (le_ == g.n_layers) && (head_ != nullptr && head_->loaded()) &&
@@ -1425,7 +1425,7 @@ bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
         const int32_t* p_start2 = pl + ptr_off + 4 * capx;
         float* hit_out = hit_out_ + (size_t) tb * K * N;
         float* parts_out = parts_ + (size_t) tb * K * N;
-        const auto& lay = strata::kernels::cpu::expert_layout();
+        const auto& lay = cortex::kernels::cpu::expert_layout();
         // plan v0.3 P6: the VRAM groups now; the PCIe groups once the copy engine has landed them in staging.
         // `gy`: the native launch's groups side by side (0: cap, one block row per possible group).
         auto grouped = [&](const unsigned long long* gp, const int32_t* gs, const int32_t* gn, int64_t gy, float* dst_buf) {
@@ -1494,7 +1494,7 @@ bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
             ev_join_ != nullptr) {
             cs->ext_oneapi_submit_barrier({*ev_join_});
         }
-        if (sg_gated_[grp]) {   // STRATA_LFUSE: the shared expert's gate was not applied: the combine applies it (all rows are hits)
+        if (sg_gated_[grp]) {   // CORTEX_LFUSE: the shared expert's gate was not applied: the combine applies it (all rows are hits)
             try {
                 native_moe_combine_multi_hits_gated(parts_out, w_ + tb * K, shared_ + tb * N, sh_g_ + tb, bo_ + tb * N, N, K, n, cs);
             } catch (const std::exception& e) { err = "verify combine: " + std::string(e.what()); return false; }
@@ -1549,7 +1549,7 @@ bool Verifier::record_window(int T, dpct::queue_ptr cs, std::string &err) {
         const WeightRef *hn = wt.find("output_hc_norm.weight"), *hd = wt.find("output_hc_down.weight"),
                         *hu = wt.find("output_hc_up.weight");
         if (!hn || !hd || !hu) { err = "verify: an output_hc_* weight is missing"; return false; }
-        // S25 (STRATA_HC_Q8=1): the final mixer from the GGUF's Q8_0 projections too, through the same multi read
+        // S25 (CORTEX_HC_Q8=1): the final mixer from the GGUF's Q8_0 projections too, through the same multi read
         // (no pending write, no inject)
         const bool mix_q8 = hd->hc_q8 != nullptr && hu->hc_q8 != nullptr && head_ != nullptr && head_->loaded();
         if (mix_q8) {
@@ -1673,7 +1673,7 @@ void Verifier::refresh_ar() {
     const bool off = lo < 0;
     if (off != ar_off_) {
         ar_off_ = off;
-        std::fprintf(stderr, "strata verify: layers [%lld, %lld) %s\n", (long long) lb_, (long long) (le_ < 0 ? g_->n_layers : le_),
+        std::fprintf(stderr, "cortex verify: layers [%lld, %lld) %s\n", (long long) lb_, (long long) (le_ < 0 ? g_->n_layers : le_),
                      off ? "have experts out of VRAM (a prompt loan, a shrink or a swap): the doorbell graph runs the windows"
                          : "are 100% VRAM resident again: the zero-doorbell graph");
     }
@@ -1683,8 +1683,8 @@ bool Verifier::capture_segments(int T, std::string& err) try {
     if (!seg_[T].empty()) return true;
     // every segment's payload is read after the segment drained: its publishes store plainly (elementwise.dp.cpp)
     struct PlainPayload {
-        PlainPayload() { strata::kernels::doorbell_plain_payload(!window_host_uncached()); }
-        ~PlainPayload() { strata::kernels::doorbell_plain_payload(false); }
+        PlainPayload() { cortex::kernels::doorbell_plain_payload(!window_host_uncached()); }
+        ~PlainPayload() { cortex::kernels::doorbell_plain_payload(false); }
     } plain_payload;
     namespace sx = sycl::ext::oneapi::experimental;
     auto close_segment = [&]() -> bool {
@@ -1704,7 +1704,7 @@ bool Verifier::capture_segments(int T, std::string& err) try {
     };
     dpct::experimental::begin_recording(cs_);
     step_hook_ = [&](int64_t l, int grp) { return boundary(l, grp, 1); };
-    static const bool split_on = [] { const char* e = std::getenv("STRATA_VERIFY_SPLIT"); return !(e && e[0] == '0'); }();
+    static const bool split_on = [] { const char* e = std::getenv("CORTEX_VERIFY_SPLIT"); return !(e && e[0] == '0'); }();
     if (split_on) step_hook2_ = [&](int64_t l, int grp) { return boundary(l, grp, 0); };
     std::string rerr;
     const bool ok = record_window(T, cs_, rerr);
@@ -1717,8 +1717,8 @@ bool Verifier::capture_segments(int T, std::string& err) try {
         if (err.empty()) err = "verify: segment capture: " + rerr;
         return false;
     }
-    if (std::getenv("STRATA_VERIFY_NODES") != nullptr)
-        std::fprintf(stderr, "strata verify: the %d-token window as %zu graph segments\n", T, seg_[T].size());
+    if (std::getenv("CORTEX_VERIFY_NODES") != nullptr)
+        std::fprintf(stderr, "cortex verify: the %d-token window as %zu graph segments\n", T, seg_[T].size());
     return true;
 }
 catch (sycl::exception const& exc) {
@@ -1729,11 +1729,11 @@ catch (sycl::exception const& exc) {
 bool Verifier::capture(int T, std::string &err) try {
     // stepped mode: the doorbell window as segments; the all-resident (zero-doorbell) graph has no serves and is
     // captured whole below, its one host flag raised before launch (run)
-    if (g_stepped && !ar_on() && std::getenv("STRATA_VERIFY_EAGER") == nullptr) return capture_segments(T, err);
+    if (g_stepped && !ar_on() && std::getenv("CORTEX_VERIFY_EAGER") == nullptr) return capture_segments(T, err);
     dpct::experimental::command_graph_exec_ptr &exec_t =
         ar_off_ ? exec_nr_[T] : exec_[T];
     if (exec_t != nullptr) return true;
-    if (std::getenv("STRATA_VERIFY_EAGER") != nullptr) return true;   // SYCL port: no graph, run() replays the body
+    if (std::getenv("CORTEX_VERIFY_EAGER") != nullptr) return true;   // SYCL port: no graph, run() replays the body
     if (DPCT_CHECK_ERROR(dpct::experimental::begin_recording(cs_)) != 0) {
         err = "verify: begin capture failed";
         return false;
@@ -1764,7 +1764,7 @@ bool Verifier::capture(int T, std::string &err) try {
               dpct::get_error_string_dummy(ce);
         return false;
     }
-    if (std::getenv("STRATA_VERIFY_NODES") != nullptr) {   // what the window graph holds
+    if (std::getenv("CORTEX_VERIFY_NODES") != nullptr) {   // what the window graph holds
         size_t nn = 0;
         dpct::experimental::get_nodes(graph, nullptr, &nn);
         std::vector<dpct::experimental::node_ptr> nodes(nn);
@@ -1785,7 +1785,7 @@ bool Verifier::capture(int T, std::string &err) try {
         std::vector<std::pair<int, std::string>> v;
         for (auto& [k2, c] : kinds) v.push_back({c, k2});
         std::sort(v.rbegin(), v.rend());
-        std::fprintf(stderr, "strata verify: the %d-token window graph has %zu nodes:", T, nn);
+        std::fprintf(stderr, "cortex verify: the %d-token window graph has %zu nodes:", T, nn);
         for (size_t i = 0; i < v.size() && i < 40; ++i) std::fprintf(stderr, " %d x %.60s;", v[i].first, v[i].second.c_str());
         std::fprintf(stderr, "\n");
     }
@@ -1817,7 +1817,7 @@ bool Verifier::capture(int T, std::string &err) try {
     const dpct::err0 us = DPCT_CHECK_ERROR(cs_->wait());
     std::fprintf(
         stderr,
-        "strata verify: captured the %d-token window (upload %s, sync %s)\n", T,
+        "cortex verify: captured the %d-token window (upload %s, sync %s)\n", T,
         /*
         DPCT1009: SYCL reports errors using exceptions and does not use error
         codes. Please replace the "get_error_string_dummy(...)" with a real
@@ -1834,7 +1834,7 @@ catch (sycl::exception const &exc) {
 
 bool Verifier::capture_commit(std::string &err) try {
     if (commit_exec_ != nullptr) return true;
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     const ModelGeometry& g = *g_;
     SessionState& ss = *ss_;
     const QsaShapes s = shapes_of(g);
@@ -1921,7 +1921,7 @@ catch (sycl::exception const &exc) {
 }
 
 void Verifier::stage_inputs(int T, const int32_t* tokens, int64_t pos0) {
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     const ModelGeometry& g = *g_;
     const QsaShapes s = shapes_of(g);
     int32_t* const pk = h_pos_ + (size_t) max_t_ * g.n_head;
@@ -1947,7 +1947,7 @@ void Verifier::stage_inputs(int T, const int32_t* tokens, int64_t pos0) {
 }
 
 void Verifier::collect_profile() {
-    if (std::getenv("STRATA_VERIFY_EAGER") == nullptr)   // eager (SYCL port): prof_h_ already holds the host clocks
+    if (std::getenv("CORTEX_VERIFY_EAGER") == nullptr)   // eager (SYCL port): prof_h_ already holds the host clocks
         dpct::get_in_order_queue()
             .memcpy(prof_h_.data(), prof_, prof_h_.size() * 8)
             .wait();
@@ -1990,7 +1990,7 @@ void Verifier::accumulate_profile(const unsigned long long* stamps) {
 
 bool Verifier::run(int T, const int32_t *tokens, int64_t pos0, PoolMultiFn pool,
                    void *user, int32_t *out, std::string &err) try {
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     const OnDevice on_device(device_);
     last_batch_ = false;
     if (T < 1 || T > max_t_) { err = "verify: window size out of range"; return false; }
@@ -2027,22 +2027,22 @@ bool Verifier::run(int T, const int32_t *tokens, int64_t pos0, PoolMultiFn pool,
         // started when it was launched behind that work still in flight on another queue (no GPU breadcrumb, 20 s
         // timeout, the engine dies). Letting the other queues drain before every window removes it (9 of 9 three-request runs pass; before, almost all
         // failed; the gap rule alone (=2) did not help, so it is the windows after each other, not only the first). The cost is
-        // the overlap of a window with the previous commit's tail.  STRATA_WINDOW_SYNC=1 always drains, =0 never, =2 the gap rule; the default is 1 on an i915 card, 0 elsewhere.
+        // the overlap of a window with the previous commit's tail.  CORTEX_WINDOW_SYNC=1 always drains, =0 never, =2 the gap rule; the default is 1 on an i915 card, 0 elsewhere.
         // #2194: the same never-starting first window on an Arc A770 under xe (main thread in this function's stepped
         // serve, queue::wait, no xe reset) - an Alchemist card, whatever its driver. Reproduced on the A750 with
-        // STRATA_WINDOW_SYNC=0 (stepped, --resident-experts, IQ3_XXS): 1 of 6 runs hung there (same stack), against 0 of 11
+        // CORTEX_WINDOW_SYNC=0 (stepped, --resident-experts, IQ3_XXS): 1 of 6 runs hung there (same stack), against 0 of 11
         // with the drain. So the default drain is per GPU generation now: every Alchemist card (i915 or xe), as before
         // every i915 card; Battlemage and the others are unchanged (0).
-        static const char* wv = std::getenv("STRATA_WINDOW_SYNC");
+        static const char* wv = std::getenv("CORTEX_WINDOW_SYNC");
         static const int wmode = wv ? std::atoi(wv)
-                                    : ((intel_i915_gpu() || strata::intel_gpu_gen(cs_->get_device()) == strata::IntelGpuGen::Alchemist) ? 1 : 0);
+                                    : ((intel_i915_gpu() || cortex::intel_gpu_gen(cs_->get_device()) == cortex::IntelGpuGen::Alchemist) ? 1 : 0);
         const bool first_or_gap = t_prev_end.time_since_epoch().count() == 0 || (t_launch - t_prev_end) > std::chrono::milliseconds(20);
         if (wmode == 1 || (wmode == 2 && first_or_gap)) dpct::get_current_device().queues_wait_and_throw();
     }
-    // STRATA_VERIFY_STEPPED (Arc A-series): the doorbell window runs as segments with the CPU experts served at the
+    // CORTEX_VERIFY_STEPPED (Arc A-series): the doorbell window runs as segments with the CPU experts served at the
     // queue boundaries between them (no mid-kernel host signalling); the all-resident graph gets its one flag (the PLE
     // rows are in place) before launch.
-    const bool stepped_run = g_stepped && !ar_on() && std::getenv("STRATA_VERIFY_EAGER") == nullptr && !seg_[T].empty();
+    const bool stepped_run = g_stepped && !ar_on() && std::getenv("CORTEX_VERIFY_EAGER") == nullptr && !seg_[T].empty();
     const bool stepped_ar = g_stepped && ar_on() && !(g_test_stall > 0 && windows + 1 == g_test_stall);
     if (stepped_ar) {
         if (do_ple) {
@@ -2057,7 +2057,7 @@ bool Verifier::run(int T, const int32_t *tokens, int64_t pos0, PoolMultiFn pool,
     }
     dpct::err0 le = 0;
     if (stepped_run) {
-        if (remote_opt_) { err = "verify: STRATA_VERIFY_STEPPED does not serve --remote-expert-opt"; return false; }
+        if (remote_opt_) { err = "verify: CORTEX_VERIFY_STEPPED does not serve --remote-expert-opt"; return false; }
         const int Gs = groups_[T] > 0 ? groups_[T] : 1;
         double st_wait = 0, st_pool = 0;
         std::vector<char> submitted(seg_[T].size(), 0);
@@ -2090,7 +2090,7 @@ bool Verifier::run(int T, const int32_t *tokens, int64_t pos0, PoolMultiFn pool,
             };
             // segment nxt ends at a split point: it is the plan copy + VRAM groups, whose only host wait is flag A
             const bool split = nxt < seg_kind_[T].size() && seg_kind_[T][nxt] == 0;
-            static const bool pipe = [] { const char* e = std::getenv("STRATA_VERIFY_PIPE"); return !(e && e[0] == '0'); }();
+            static const bool pipe = [] { const char* e = std::getenv("CORTEX_VERIFY_PIPE"); return !(e && e[0] == '0'); }();
             if (pipe && split) {
                 std::atomic<bool> done{false};
                 std::string herr;
@@ -2151,7 +2151,7 @@ bool Verifier::run(int T, const int32_t *tokens, int64_t pos0, PoolMultiFn pool,
         ms_pool += st_pool;
         if (le != 0) return false;
     } else {
-        le = (std::getenv("STRATA_VERIFY_EAGER") != nullptr)
+        le = (std::getenv("CORTEX_VERIFY_EAGER") != nullptr)
                  ? (record_window(T, cs_, err) ? 0 : 1)   // SYCL port: eager replay of the window body
                  : DPCT_CHECK_ERROR((cs_)->ext_oneapi_graph(*(ar_off_ ? exec_nr_[T] : exec_[T])));
     }
@@ -2181,9 +2181,9 @@ bool Verifier::run(int T, const int32_t *tokens, int64_t pos0, PoolMultiFn pool,
     // SYCL port: with every routed expert resident the GPU takes its own plan (`device_plan_`) and skips every
     // host flag, so the host has nothing to do per layer - and on this platform a kernel's writes to host-mapped
     // memory are not reliably visible while the graph runs (measured: the ring is seen late or not at all),
-    // so waiting on them per layer fails. STRATA_VERIFY_NO_HOST=1 waits for the whole window instead. Only for
+    // so waiting on them per layer fails. CORTEX_VERIFY_NO_HOST=1 waits for the whole window instead. Only for
     // an all-resident cache: a missed expert would leave the GPU waiting for a plan that never comes.
-    static const bool no_host = [] { const char* v = std::getenv("STRATA_VERIFY_NO_HOST"); return v && *v && std::strcmp(v, "0") != 0; }();
+    static const bool no_host = [] { const char* v = std::getenv("CORTEX_VERIFY_NO_HOST"); return v && *v && std::strcmp(v, "0") != 0; }();
     const int64_t steps = (le_ - lb_) * G;
     const bool test_stall = g_test_stall > 0 && windows + 1 == g_test_stall;   // #267 test hook (off: false)
     if (stepped_run || stepped_ar) {
@@ -2236,7 +2236,7 @@ bool Verifier::run(int T, const int32_t *tokens, int64_t pos0, PoolMultiFn pool,
                     return false;
                 }
             }
-            if (now - a > strata_ring_timeout()) {
+            if (now - a > cortex_ring_timeout()) {
                 // #267: the caller ends the engine; no spin kernel may outlive it
                 trace_ev("TIMEOUT", k, l, (int64_t) !cs_->ext_oneapi_empty());   // SYCL port: 1 = still running
                 if (g_trace) {
@@ -2257,7 +2257,7 @@ bool Verifier::run(int T, const int32_t *tokens, int64_t pos0, PoolMultiFn pool,
         set_plan_slot(grp);
         const int tb = gtb[grp], n = gte[grp] - gtb[grp];
         // the ring can arrive before its payload (elementwise.hpp): the pool must read a whole one
-        if (!strata::kernels::doorbell_wait_payload(h_seq_, h_x_ + (size_t) tb * g.n_embd, (int64_t) n * g.n_embd,
+        if (!cortex::kernels::doorbell_wait_payload(h_seq_, h_x_ + (size_t) tb * g.n_embd, (int64_t) n * g.n_embd,
                                                     h_ids_ + (size_t) tb * ss.k, h_w_ + (size_t) tb * ss.k,
                                                     (int64_t) n * ss.k, want)) {
             err = "verify: layer " + std::to_string(l) + " rang but its payload never arrived whole";
@@ -2309,7 +2309,7 @@ bool Verifier::run(int T, const int32_t *tokens, int64_t pos0, PoolMultiFn pool,
     const dpct::err0 se = DPCT_CHECK_ERROR(cs_->wait());
     trace_ev("SYNCED", -1, -1, (int64_t) se);
     const Clock::time_point t_done = Clock::now();
-    if (std::getenv("STRATA_VERIFY_DEBUG") != nullptr) {
+    if (std::getenv("CORTEX_VERIFY_DEBUG") != nullptr) {
         std::fprintf(stderr, "verify dbg: T=%d window: since previous window %.1f ms, staging %.1f ms, gpu %.1f ms\n", T,
                      t_prev_end.time_since_epoch().count() ? std::chrono::duration<double, std::milli>(t0 - t_prev_end).count() : 0.0,
                      std::chrono::duration<double, std::milli>(t_launch - t0).count(),
@@ -2331,7 +2331,7 @@ bool Verifier::run(int T, const int32_t *tokens, int64_t pos0, PoolMultiFn pool,
         err = std::string("verify: ") + dpct::get_error_string_dummy(se);
         return false;
     }
-    if (no_host && std::getenv("STRATA_VERIFY_DEBUG") != nullptr) {   // SYCL port: what the window left behind
+    if (no_host && std::getenv("CORTEX_VERIFY_DEBUG") != nullptr) {   // SYCL port: what the window left behind
         const int Gd = groups_[T] > 0 ? groups_[T] : 1;
         std::vector<uint32_t> sk((size_t) Gd, 0);
         std::vector<int32_t> id0((size_t) ss.k, 0);
@@ -2403,7 +2403,7 @@ bool Verifier::run(int T, const int32_t *tokens, int64_t pos0, PoolMultiFn pool,
     }
     if (prof_on_ && G == 1) {   // the window's GPU stage stamps
         collect_profile();
-        if (std::getenv("STRATA_VERIFY_EAGER") != nullptr)   // SYCL port: the stage table per window, host-clocked
+        if (std::getenv("CORTEX_VERIFY_EAGER") != nullptr)   // SYCL port: the stage table per window, host-clocked
             std::fprintf(stderr, "verify stages T=%d (ms/window):%s\n", T, profile_report().c_str());
     }
     // ---- a sampled or penalized request: the head's sampling again, host-side so its parameters are this call's
@@ -2426,7 +2426,7 @@ bool Verifier::run(int T, const int32_t *tokens, int64_t pos0, PoolMultiFn pool,
         }
     }
     for (int t = 0; t < T; ++t) out[t] = ((volatile int32_t*) h_out_)[t];
-    if (static const bool dbg = std::getenv("STRATA_DBG_NAN") != nullptr; dbg) {   // debug: the first non-finite head
+    if (static const bool dbg = std::getenv("CORTEX_DBG_NAN") != nullptr; dbg) {   // debug: the first non-finite head
         static bool reported = false;
         if (!reported) {
             std::vector<float> h((size_t) T * (size_t) n_vocab_);
@@ -2438,7 +2438,7 @@ bool Verifier::run(int T, const int32_t *tokens, int64_t pos0, PoolMultiFn pool,
                 for (int64_t v = 0; v < n_vocab_; ++v) bad += !std::isfinite(h[(size_t) t * n_vocab_ + v]);
                 if (bad) {
                     reported = true;
-                    std::fprintf(stderr, "strata dbg: verify window at position %lld, row %d: %lld of %lld logits non-finite "
+                    std::fprintf(stderr, "cortex dbg: verify window at position %lld, row %d: %lld of %lld logits non-finite "
                                          "(token out %d)\n", (long long) pos0, t, (long long) bad, (long long) n_vocab_, out[t]);
                 }
             }
@@ -2470,7 +2470,7 @@ void Verifier::set_plan_slot(int grp) {
     sink_.start2 = base + ptr_off + 4 * cap;
     const int G = last_batch_ ? 1 : (groups_[last_t_] > 0 ? groups_[last_t_] : 1);
     const int64_t per = G == 2 ? kStagingBlobs / 2 : kStagingBlobs;
-    sink_.staging = (unsigned long long) (staging_ + (size_t) (grp * per) * strata::kernels::cpu::expert_layout().max_blob);
+    sink_.staging = (unsigned long long) (staging_ + (size_t) (grp * per) * cortex::kernels::cpu::expert_layout().max_blob);
     sink_.staging_cap = per;
 }
 
@@ -2500,11 +2500,11 @@ void Verifier::fetch_dma(void *ctx, const uint8_t *const *src, int n,
     if (n <= 0) { raise_flag(v->h_flagB_, want); return; }
     v->copy_used_ = true;
     uint8_t* stage = (uint8_t*) v->sink_.staging;                  // this group's half in a split window
-    // STRATA_DMA_BATCH (midhatn's #807, F12): the group's independent uploads as one cudaMemcpyBatchAsync.  Mode 0 is
+    // CORTEX_DMA_BATCH (midhatn's #807, F12): the group's independent uploads as one cudaMemcpyBatchAsync.  Mode 0 is
     // the loop the engine always ran, errors unchecked (it never stops the engine).  A batch mode whose uploads
     // cannot be submitted stops the engine: flag B must not release the consumers to expert weights that were never
     // copied.
-    const int batch_mode = strata::core::dma_batch_mode();
+    const int batch_mode = cortex::core::dma_batch_mode();
     if (batch_mode == 0) {
         /*
         DPCT1124: cudaMemcpyAsync is migrated to asynchronous memcpy API.
@@ -2515,7 +2515,7 @@ void Verifier::fetch_dma(void *ctx, const uint8_t *const *src, int n,
         for (int i = 0; i < n; ++i)
             v->copy_->memcpy(stage + (size_t)i * bytes, src[i], bytes);
     } else {
-        const auto copied = strata::core::copy_expert_blobs(stage, src, n, bytes, v->copy_, batch_mode);
+        const auto copied = cortex::core::copy_expert_blobs(stage, src, n, bytes, v->copy_, batch_mode);
         /*
         DPCT1000: Error handling if-stmt was detected but could not be
         rewritten.
@@ -2526,7 +2526,7 @@ void Verifier::fetch_dma(void *ctx, const uint8_t *const *src, int n,
             error codes. Please replace the "get_error_string_dummy(...)" with a
             real error-handling function.
             */
-            std::fprintf(stderr, "strata DMA: expert upload failed: %s\n",
+            std::fprintf(stderr, "cortex DMA: expert upload failed: %s\n",
                          dpct::get_error_string_dummy(copied));
             /*
             DPCT1001: The statement could not be removed.
@@ -2589,10 +2589,10 @@ bool Verifier::window_logprobs(const int32_t* targets, int T, int64_t pos0, int3
         std::fprintf(out, "%lld\t%d\t%.9f\t%lld\t%.9f\t%d\t%.9f\t%.9f", (long long) (pos0 + t), (int) tgt,
                      (double) row[tgt] - lse, (long long) top, maxv - lse, (int) (top == (int64_t) tgt), extra,
                      without);
-        // STRATA_LOGPOS_TOPK=K: the K most likely tokens and their log-probabilities too (`id:logprob`), for a
+        // CORTEX_LOGPOS_TOPK=K: the K most likely tokens and their log-probabilities too (`id:logprob`), for a
         // top-k comparison with another engine on the same tokens (docs/UNSLOTH_Q4.md)
         static const int topk = [] {
-            const char* v = std::getenv("STRATA_LOGPOS_TOPK");
+            const char* v = std::getenv("CORTEX_LOGPOS_TOPK");
             return v != nullptr ? std::max(0, std::min(256, std::atoi(v))) : 0;
         }();
         if (topk > 0) {
@@ -2613,7 +2613,7 @@ bool Verifier::window_logprobs(const int32_t* targets, int T, int64_t pos0, int3
 }
 
 namespace { bool g_commit_async = false; }
-void Verifier::set_commit_async(bool on) { g_commit_async = on && std::getenv("STRATA_COMMIT_SYNC") == nullptr; }
+void Verifier::set_commit_async(bool on) { g_commit_async = on && std::getenv("CORTEX_COMMIT_SYNC") == nullptr; }
 
 bool Verifier::commit(int n_keep, std::string &err) try {
     const OnDevice on_device(device_);
@@ -2767,7 +2767,7 @@ bool Verifier::init_slots(const std::vector<SessionState *> &slots,
             return false;
         }
     }
-    const strata::kernels::QsaShapes s = shapes_of(*g_);
+    const cortex::kernels::QsaShapes s = shapes_of(*g_);
     const int64_t S = (int64_t) slots.size(), CB = 2 + max_t_;
     const int64_t TS = (s.idx_block - 1) * g_->idx_key_dim, nQ = g_->n_qsa_layers();
     void* d = nullptr;
@@ -2788,7 +2788,7 @@ bool Verifier::init_slots(const std::vector<SessionState *> &slots,
     tail_snap_b_ = (float*) ((uint8_t*) d + a);
     slots_ = slots;
     slot_sp_.assign(slots.size(), sampling_);   // greedy until set_slot_sampling
-    std::fprintf(stderr, "strata verify: batch windows of up to %lld sequences (layers [%lld, %lld))\n", (long long) S,
+    std::fprintf(stderr, "cortex verify: batch windows of up to %lld sequences (layers [%lld, %lld))\n", (long long) S,
                  (long long) lb_, (long long) le_);
     return true;
 }
@@ -2857,7 +2857,7 @@ bool Verifier::capture_batch(const int *rows, int S, int hbase,
     cs_->wait();
     std::string list;
     for (int t = 0; t < S; ++t) list += (t ? "," : "") + std::to_string(rows[t]);
-    std::fprintf(stderr, "strata verify: captured the batch window over slots %s\n", list.c_str());
+    std::fprintf(stderr, "cortex verify: captured the batch window over slots %s\n", list.c_str());
     return true;
 }
 catch (sycl::exception const &exc) {
@@ -2871,7 +2871,7 @@ bool Verifier::capture_commit_batch(const int *rows, int S, int hbase,
     dpct::experimental::command_graph_exec_ptr &cex =
         commit_bm_[bkey(rows, S, hbase)];
     if (cex != nullptr) return true;
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     const ModelGeometry& g = *g_;
     const QsaShapes s = shapes_of(g);
     const int64_t C = g.ssm_conv_channels, HV = g.ssm_v_heads, ZV = g.ssm_value_dim, ID = g.idx_key_dim, MT = max_t_;
@@ -2978,7 +2978,7 @@ catch (sycl::exception const &exc) {
 bool Verifier::stage_batch(const int *rows, int S, int hbase,
                            const int32_t *tokens, const int64_t *pos,
                            std::string &err) try {
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     if (S < 1 || S > max_t_ || hbase < 0 ||
         (next_ != nullptr && hbase + S > (int) slots_.size())) {
         err = "verify: batch rows out of range (init_slots)";
@@ -3106,7 +3106,7 @@ bool Verifier::run_slots(int S, const int32_t* tokens, const int64_t* pos, PoolM
 bool Verifier::run_slot_rows(const int *rows, int S, const int32_t *tokens,
                              const int64_t *pos, PoolMultiFn pool, void *user,
                              int32_t *out, std::string &err) try {
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     const OnDevice on_device(device_);
     const ModelGeometry& g = *g_;
     if (!stage_batch(rows, S, 0, tokens, pos, err)) return false;
@@ -3201,7 +3201,7 @@ bool Verifier::run_slot_rows(const int *rows, int S, const int32_t *tokens,
                     return false;
                 }
             }
-            if (now - a > strata_ring_timeout()) {
+            if (now - a > cortex_ring_timeout()) {
                 err = "verify batch: timed out at layer " + std::to_string(l) + released_note(release_gpu_waits(5000));
                 return false;
             }
@@ -3345,11 +3345,11 @@ catch (sycl::exception const &exc) {
 bool Verifier::sample_rows(int S, std::string &err) try {
     bool any = false;
     for (int t = 0; t < S; ++t) {
-        strata::kernels::SamplerParams sp = slot_sp_[(size_t) last_rows_[t]];
+        cortex::kernels::SamplerParams sp = slot_sp_[(size_t) last_rows_[t]];
         if (sp.greedy || sp.temperature <= 0.0f) continue;
         sp.counter = (uint64_t) last_pos_b_[t];   // Philox(seed, position): the solo window's draw for this position
         sp.penalty_last_n = 0;
-        strata::kernels::sample_tokens(head_logits_ + (size_t) t * (size_t) n_vocab_, 1, (int) n_vocab_, nullptr, 0, sp,
+        cortex::kernels::sample_tokens(head_logits_ + (size_t) t * (size_t) n_vocab_, 1, (int) n_vocab_, nullptr, 0, sp,
                                        m_out_ + t, cs_);
         any = true;
     }
@@ -3445,7 +3445,7 @@ int Verifier::batch_poll(PoolMultiFn pool, void *user, std::string &err) try {
                     b_running_ = false;
                     return -1;
                 }
-                if (now - b_last_ > strata_ring_timeout()) {
+                if (now - b_last_ > cortex_ring_timeout()) {
                     err = "verify batch: timed out at layer " + std::to_string(lb_ + b_k_) + released_note(release_gpu_waits(5000));
                     b_running_ = false;
                     return -1;
@@ -3598,7 +3598,7 @@ bool Verifier::capture_all(std::string &err) try {
                                functionality is redundant in SYCL.
                                */
     }
-    pl_ple_rows_.assign((size_t) strata::kernels::kVerifyMaxT * strata::kernels::PLE_N_HEADS, 0u);
+    pl_ple_rows_.assign((size_t) cortex::kernels::kVerifyMaxT * cortex::kernels::PLE_N_HEADS, 0u);
     return true;
 }
 catch (sycl::exception const &exc) {
@@ -3610,7 +3610,7 @@ catch (sycl::exception const &exc) {
 // The host staging of a pipelined window: run()'s (stage_inputs), and its PLE rows from `ple_prev` with their pages
 // prefetched (they are gathered into the mapped rows when layer 0 is served, as run() does).
 void Verifier::pl_stage(int T, const int32_t* tokens, int64_t pos0, const int32_t ple_prev[2]) {
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     stage_inputs(T, tokens, pos0);
     staged_ = false;   // a later run() stages its own window
     SessionState& ss = *ss_;
@@ -3777,7 +3777,7 @@ int Verifier::service(PoolMultiFn pool, void *user, std::string &err) try {
         set_plan_slot(grp);
         const int tb = gtb[grp], n = gte[grp] - gtb[grp];
         // the ring can arrive before its payload (elementwise.hpp): the pool must read a whole one
-        if (!strata::kernels::doorbell_wait_payload(h_seq_, h_x_ + (size_t) tb * g.n_embd, (int64_t) n * g.n_embd,
+        if (!cortex::kernels::doorbell_wait_payload(h_seq_, h_x_ + (size_t) tb * g.n_embd, (int64_t) n * g.n_embd,
                                                     h_ids_ + (size_t) tb * ss.k, h_w_ + (size_t) tb * ss.k,
                                                     (int64_t) n * ss.k, want)) {
             err = "verify: layer " + std::to_string(l) + " rang but its payload never arrived whole";
@@ -3850,7 +3850,7 @@ catch (sycl::exception const &exc) {
 }
 
 bool Verifier::pl_finish(int32_t *out, std::string &err) try {
-    using namespace strata::kernels;
+    using namespace cortex::kernels;
     const OnDevice on_device(device_);
     const ModelGeometry& g = *g_;
     fl_active_ = false;
@@ -3964,4 +3964,4 @@ void Verifier::absorb_stats(Verifier& o) {
     o.prof_windows_ = 0;
 }
 
-}  // namespace strata::core
+}  // namespace cortex::core

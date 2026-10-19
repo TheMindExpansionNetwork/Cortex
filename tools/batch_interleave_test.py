@@ -19,8 +19,8 @@ chunks interleaved with their windows), and a conversation's next turn continued
   7b. A in slot 1 to its end, --flush unrelated solo GENs, then F2 (A's question, another reply) into slot 2: its
      start can only come from slot 1's turn checkpoint; equal to F2 solo.  The engine log line says which source was used.
 
-Exact comparisons need the same settings as batch_test.py (this script sets STRATA_IQ_MT_MIN=1):
-  python tools/batch_interleave_test.py --exe build/strata --config strata-<model>.json \\
+Exact comparisons need the same settings as batch_test.py (this script sets CORTEX_IQ_MT_MIN=1):
+  python tools/batch_interleave_test.py --exe build/cortex --config cortex-<model>.json \\
       --extra "--pcie-frac 0 --adapt-every 1000000 --no-prefill-borrow"
 Without --no-prefill-borrow the slots decoding during C's read see the expert cache without the slots C's prompt
 borrowed (those experts run on the CPU, which rounds differently): A's and B's text may then drift from solo.
@@ -93,7 +93,7 @@ def main():
     D = chat(body + "\nWhat are the three most important ideas in the text above?")
     E = chat("Describe the life cycle of a star like the Sun.")
     print(f"prompts: A {len(A)}, B {len(B)}, C {len(C)} tokens", flush=True)
-    eng = Engine(a.exe, cfg, 3, {"STRATA_IQ_MT_MIN": "1"}, a.extra.split())
+    eng = Engine(a.exe, cfg, 3, {"CORTEX_IQ_MT_MIN": "1"}, a.extra.split())
     eng.pending = []
     out = eng.lines()
     ids = lambda v: ",".join(map(str, v))
@@ -305,14 +305,14 @@ def main():
             elif l.startswith("BDONE 2 "):
                 break
         tail = Path(eng.log_path).read_text(errors="replace")[mark:]
-        src = [l for l in tail.splitlines() if "gave back" in l or "strata serve: prompt" in l][:2]
+        src = [l for l in tail.splitlines() if "gave back" in l or "cortex serve: prompt" in l][:2]
         same = got7b == sF2
         ok &= same
         d = next((k for k in range(min(len(got7b), len(sF2))) if got7b[k] != sF2[k]), None)
         print(f"7b: F2 after {a.flush} unrelated GENs, from slot 1: {len(got7b)} tokens, solo {len(sF2)}: "
               f"{'IDENTICAL' if same else f'DIFFERS at {d}'}", flush=True)
         for l in src:
-            print("  7b log:", l.split("strata ")[-1][:160], flush=True)
+            print("  7b log:", l.split("cortex ")[-1][:160], flush=True)
     if a.dump:
         Path(a.dump).write_text(json.dumps({
             "solo": {"A": sA, "A2": sA2, "B": sB, "C": sC, "D": sD, "E": sE, "F": sF, "F2": sF2},
@@ -324,7 +324,7 @@ def main():
     log = Path(eng.log_path).read_text(errors="replace")
     for l in log.splitlines():
         if "drafts accepted" in l:
-            print("  log:", l.split("strata serve: ")[-1][:160], flush=True)
+            print("  log:", l.split("cortex serve: ")[-1][:160], flush=True)
     for key in ("gave back", "its turn checkpoint", "takes", "the prompt was read in", "gives way"):
         print(f"engine log '{key}': {log.count(key)} lines", flush=True)
     return 0 if ok else 2

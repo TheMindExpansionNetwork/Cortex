@@ -1,17 +1,17 @@
 // src/kernels/cpu/native_expert.cpp - plan v0.3 P6: native (GGUF-form) experts on the CPU through ggml-cpu.
-// See the header.  Nothing here is Strata arithmetic: the activation quantizers and the row dot products are
+// See the header.  Nothing here is Cortex arithmetic: the activation quantizers and the row dot products are
 // ggml-cpu's, so an IQ expert computes what llama.cpp's CPU backend computes for it.
-#include "strata/kernels/cpu/native_expert.hpp"
-#include "strata/kernels/cpu/expert.hpp"
-#include "strata/kernels/cpu/iq_avx512.hpp"
-#include "strata/kernels/cpu/iq_avx2.hpp"
-#include "strata/kernels/cpu/iq_avx1.hpp"
-#include "strata/kernels/cpu/kq_avx2.hpp"
-#include "strata/kernels/cpu/nvfp4_avx2.hpp"
-#include "strata/kernels/cpu/nvfp4_avx512.hpp"
-#include "strata/kernels/cpu/expert_layout.hpp"
-#include "strata/kernels/cpu/hadamard.hpp"
-#include "strata/kernels/cpu/tq_cpu.hpp"
+#include "cortex/kernels/cpu/native_expert.hpp"
+#include "cortex/kernels/cpu/expert.hpp"
+#include "cortex/kernels/cpu/iq_avx512.hpp"
+#include "cortex/kernels/cpu/iq_avx2.hpp"
+#include "cortex/kernels/cpu/iq_avx1.hpp"
+#include "cortex/kernels/cpu/kq_avx2.hpp"
+#include "cortex/kernels/cpu/nvfp4_avx2.hpp"
+#include "cortex/kernels/cpu/nvfp4_avx512.hpp"
+#include "cortex/kernels/cpu/expert_layout.hpp"
+#include "cortex/kernels/cpu/hadamard.hpp"
+#include "cortex/kernels/cpu/tq_cpu.hpp"
 
 #include "ggml.h"
 #include "ggml-cpu.h"
@@ -23,12 +23,12 @@
 #include <mutex>
 #include <vector>
 
-namespace strata::kernels::cpu {
+namespace cortex::kernels::cpu {
 namespace {
 
 const ggml_type_traits_cpu* traits(int type) { return ggml_get_type_traits_cpu((ggml_type) type); }
 
-// Do the trellis rows take Strata's own kernels (tq_cpu.hpp)?  Always, unless STRATA_NO_TQ_KERNELS=1 asks for ggml-cpu's
+// Do the trellis rows take Cortex's own kernels (tq_cpu.hpp)?  Always, unless CORTEX_NO_TQ_KERNELS=1 asks for ggml-cpu's
 // vec_dot AND this ggml has the type (the agentionai fork; an upstream ggml does not, and must never be asked about it).
 bool tq_rows_own(int type) {
     if (!tq_supported(type)) return false;
@@ -115,16 +115,16 @@ bool native_fmt(int gu_type, int d_type, int64_t n_embd, int64_t n_ff, NativeFmt
 namespace {
 // Q8_K (the activations of every i-quant row): ggml-cpu's x86 quantizer is the scalar reference, ~3 us per token
 // and layer on the host before the pool can start; q8k_quant_avx2 writes the same bytes.  cpu_avx2_ok() too:
-// iq_avx2.cpp is compiled for AVX2 (an AVX-only CPU, or STRATA_FORCE_ISA=avx, keeps ggml's).  STRATA_NO_Q8K_AVX2=1:
+// iq_avx2.cpp is compiled for AVX2 (an AVX-only CPU, or CORTEX_FORCE_ISA=avx, keeps ggml's).  CORTEX_NO_Q8K_AVX2=1:
 // ggml's on any CPU.
 bool q8k_avx2(int type) {
-    static const bool on = cpu_avx2_ok() && std::getenv("STRATA_NO_Q8K_AVX2") == nullptr;
+    static const bool on = cpu_avx2_ok() && std::getenv("CORTEX_NO_Q8K_AVX2") == nullptr;
     return on && type == (int) GGML_TYPE_Q8_K;
 }
 // the older CPUs' copy (iq_avx1.cpp): byte-identical like the AVX-2 one, and only where AVX2 is absent (same
-// policy as STRATA_NO_IQ128 above; STRATA_NO_Q8K_AVX1=1 keeps ggml's scalar reference on those CPUs).
+// policy as CORTEX_NO_IQ128 above; CORTEX_NO_Q8K_AVX1=1 keeps ggml's scalar reference on those CPUs).
 bool q8k_avx1(int type) {
-    static const bool on = !cpu_avx2_ok() && cpu_avx1_ok() && std::getenv("STRATA_NO_Q8K_AVX1") == nullptr;
+    static const bool on = !cpu_avx2_ok() && cpu_avx1_ok() && std::getenv("CORTEX_NO_Q8K_AVX1") == nullptr;
     return on && type == (int) GGML_TYPE_Q8_K;
 }
 }  // namespace
@@ -156,18 +156,18 @@ void native_quant_h(const NativeFmt& f, const float* h, void* dst) {
 int native_gu_mt_min(int gu_type) {
     // #152: from how many tokens the multi-token kernels run (ggml's vec_dot below that).  The default 2 is the
     // measured-fastest rule, but a token's expert rows then round differently alone than in a group, so greedy output
-    // can depend on how many drafts a verify window held.  STRATA_IQ_MT_MIN=1 (opt-in, 0.1.30) uses the multi-token
+    // can depend on how many drafts a verify window held.  CORTEX_IQ_MT_MIN=1 (opt-in, 0.1.30) uses the multi-token
     // kernels for every group: output independent of the drafting, at a measured -1..-3% decode on IQ3_S (AVX-512).
-    static const char* env = std::getenv("STRATA_IQ_MT_MIN");
+    static const char* env = std::getenv("CORTEX_IQ_MT_MIN");
     static const int mt_min = env ? std::atoi(env) : 2;
-    // IQ3_S where the AVX-2 kernel gathers its grid (cpu_gather_fast, unless STRATA_IQ256_GATHER=0) on a CPU without
+    // IQ3_S where the AVX-2 kernel gathers its grid (cpu_gather_fast, unless CORTEX_IQ256_GATHER=0) on a CPU without
     // AVX-512: there that kernel beats ggml's dot for ONE token too (14900KF P-core, an expert's gate/up rows: 0.34 ->
     // 0.19 ms; its E-cores, which keep the scalar decode: 0.71 -> 0.68), and in decode most CPU experts serve one token
     // of the window.  So IQ3_S takes it for every group, and those rows no longer depend on the drafting.  A machine-
     // wide rule, not a per-core one: every core rounds an expert the same.  Every probe here is in expert_layout.cpp
-    // and cpu_avx2_ok() comes first, so no AVX2 code runs before the check.  STRATA_IQ_MT_MIN set keeps its rule.
-    // Opt-in (STRATA_IQ3S_MT1=1): it changes a lone token's IQ3_S rounding on those CPUs, so the default stays 0.1.39's.
-    static const bool iq3s_one = env == nullptr && std::getenv("STRATA_IQ3S_MT1") != nullptr && cpu_avx2_ok() && std::getenv("STRATA_NO_IQ256") == nullptr &&
+    // and cpu_avx2_ok() comes first, so no AVX2 code runs before the check.  CORTEX_IQ_MT_MIN set keeps its rule.
+    // Opt-in (CORTEX_IQ3S_MT1=1): it changes a lone token's IQ3_S rounding on those CPUs, so the default stays 0.1.39's.
+    static const bool iq3s_one = env == nullptr && std::getenv("CORTEX_IQ3S_MT1") != nullptr && cpu_avx2_ok() && std::getenv("CORTEX_NO_IQ256") == nullptr &&
                                  !cpu_avx512_ok() && iq256_gather_setting() != 0 && cpu_gather_fast();
     return iq3s_one && gu_type == 21 ? 1 : mt_min;
 }
@@ -176,52 +176,52 @@ void native_gu_rows(const NativeFmt& f, const uint8_t* blob, const void* const* 
                     int r0, int r1) {
     // the multi-token kernels decode the weights once for all tokens: 2.0-2.4x ggml-cpu at three tokens, no faster
     // at one (all are bound by the codebook lookups, ~5 GB/s per core), measured by native_expert_parity.  AVX-512
-    // first, then the AVX-2 one (Zen 2/3, Intel 12th-14th gen).  STRATA_NO_IQ512 drops an AVX-512 CPU to the
-    // AVX-2 kernel, STRATA_NO_IQ256 drops the AVX-2 kernel; ggml-cpu's single-token vec_dot is reached only with
-    // both set (and on a CPU without AVX-512, STRATA_NO_IQ512 changes nothing).
-    static const bool avx512 = cpu_avx512_ok() && std::getenv("STRATA_NO_IQ512") == nullptr;
-    // STRATA_NO_IQ256 drops the AVX-2 kernel.  cpu_avx2_ok() is ALSO required: iq_avx2.cpp and kq_avx2.cpp
+    // first, then the AVX-2 one (Zen 2/3, Intel 12th-14th gen).  CORTEX_NO_IQ512 drops an AVX-512 CPU to the
+    // AVX-2 kernel, CORTEX_NO_IQ256 drops the AVX-2 kernel; ggml-cpu's single-token vec_dot is reached only with
+    // both set (and on a CPU without AVX-512, CORTEX_NO_IQ512 changes nothing).
+    static const bool avx512 = cpu_avx512_ok() && std::getenv("CORTEX_NO_IQ512") == nullptr;
+    // CORTEX_NO_IQ256 drops the AVX-2 kernel.  cpu_avx2_ok() is ALSO required: iq_avx2.cpp and kq_avx2.cpp
     // are compiled /arch:AVX2 and use AVX2 and FMA3, so calling them on a CPU without either is an
     // illegal instruction, not a slow path.  The gate sat next to `avx512` above, which does test
     // cpu_avx512_ok(), and that asymmetry is what let a pre-Haswell CPU reach iq256_gu_rows.
     // Without it this falls through to ggml-cpu's vec_dot below, which is compiled for whatever
     // baseline the build selected (AVX1 here) and covers the same types - IQ2_XXS and IQ2_S among
     // them.  That path loops over tokens itself, so it is correct for any `nt`, not just one.
-    static const bool avx2 = cpu_avx2_ok() && std::getenv("STRATA_NO_IQ256") == nullptr;
-    // The older-CPU tier (STRATA_ISA_FLOOR=avx builds): without it every expert on such a CPU runs on ggml-cpu's
+    static const bool avx2 = cpu_avx2_ok() && std::getenv("CORTEX_NO_IQ256") == nullptr;
+    // The older-CPU tier (CORTEX_ISA_FLOOR=avx builds): without it every expert on such a CPU runs on ggml-cpu's
     // scalar _generic dots.  Only where AVX2 is absent, so a modern CPU's rounding never moves (and
-    // STRATA_NO_IQ256=1 there still means ggml, as before).  iq_avx1.cpp is compiled for AVX and gated on
+    // CORTEX_NO_IQ256=1 there still means ggml, as before).  iq_avx1.cpp is compiled for AVX and gated on
     // cpu_avx1_ok().  Measured on an E5-2470 v2 (iq_avx1_parity --bench): 1.2-3.1x ggml's dot from two tokens on,
     // at one token ggml's auto-vectorized generic loop matches the 128-bit kernel - so the same #152 mt_min rule
-    // as the AVX-2 kernels, and STRATA_IQ_MT_MIN=1 takes the kernel for one token too (its rows are then
+    // as the AVX-2 kernels, and CORTEX_IQ_MT_MIN=1 takes the kernel for one token too (its rows are then
     // independent of the drafting: iq_avx1_parity checks every width bit for bit).
-    static const bool avx1 = !cpu_avx2_ok() && cpu_avx1_ok() && std::getenv("STRATA_NO_IQ128") == nullptr;
+    static const bool avx1 = !cpu_avx2_ok() && cpu_avx1_ok() && std::getenv("CORTEX_NO_IQ128") == nullptr;
     // The exact rows are ggml-cpu's AVX2 single-token dot bit for bit, so they need ggml-cpu itself built for AVX2 and
-    // not AVX-512 (ggml_cpu_has_*): a STRATA_ISA_FLOOR build runs ggml's AVX1/SSE dots, a native build on an AVX-512 CPU
-    // run with STRATA_FORCE_AVX2=1 runs its AVX-512 one, and both round differently (#2215's guard).
+    // not AVX-512 (ggml_cpu_has_*): a CORTEX_ISA_FLOOR build runs ggml's AVX1/SSE dots, a native build on an AVX-512 CPU
+    // run with CORTEX_FORCE_AVX2=1 runs its AVX-512 one, and both round differently (#2215's guard).
     static const bool exact_one = [] {
-        const char* v = std::getenv("STRATA_CPU_IQ_ALL_EXACT1");
+        const char* v = std::getenv("CORTEX_CPU_IQ_ALL_EXACT1");
         return v && v[0] == '1' && v[1] == 0 && ggml_cpu_has_avx2() && !ggml_cpu_has_avx512();
     }();
-    // only where ggml's dot runs today (below the #152 multi-token rule): with STRATA_IQ_MT_MIN=1 a lone token keeps the
+    // only where ggml's dot runs today (below the #152 multi-token rule): with CORTEX_IQ_MT_MIN=1 a lone token keeps the
     // multi-token kernel, so a token's rows still do not depend on how many tokens share its expert
     if (exact_one && nt == 1 && nt < native_gu_mt_min(f.gu_type) && avx2 && !cpu_avx512_ok() &&
         (f.gu_type == 16 || f.gu_type == 17 || f.gu_type == 18 || f.gu_type == 21 || f.gu_type == 22)) {
         static std::once_flag announced;
-        std::call_once(announced, [] { std::fprintf(stderr, "strata ab: GATE=STRATA_CPU_IQ_ALL_EXACT1 active=1\n"); });
+        std::call_once(announced, [] { std::fprintf(stderr, "cortex ab: GATE=CORTEX_CPU_IQ_ALL_EXACT1 active=1\n"); });
         iq256_gu_rows_exact_one(f.gu_type, blob, f.gu_row, f.up_off, (int) f.n_embd, act[0], ff[0], r0, r1);
         return;
     }
     const int mt_min = native_gu_mt_min(f.gu_type);   // #152
     // Unsloth UD-Q4_K_XL's Q4_K gate/up: the multi-token kernel is bit-exact against ggml's per-token dot (any group
-    // size, no #152 rule).  Opt-in, STRATA_KQ256=1: measured no faster in the engine (a window's expert groups hold
+    // size, no #152 rule).  Opt-in, CORTEX_KQ256=1: measured no faster in the engine (a window's expert groups hold
     // ~1.4 tokens and the weights stay in L1 across ggml's per-token calls; 1.01-1.13x in native_expert_parity).
-    static const bool kq = [] { const char* v = std::getenv("STRATA_KQ256"); return cpu_avx2_ok() && v != nullptr && std::atoi(v) != 0; }();
+    static const bool kq = [] { const char* v = std::getenv("CORTEX_KQ256"); return cpu_avx2_ok() && v != nullptr && std::atoi(v) != 0; }();
     if (kq && f.gu_type == 12 && nt >= 2) {   // one token: ggml's own dot below (the same bits, less overhead)
         kq256_gu_rows(f.gu_type, blob, f.gu_row, f.up_off, (int) f.n_embd, act, nt, ff, r0, r1);
         return;
     }
-    // The trellis types (TQ2_T / TQK6 / TQK7): Strata's own kernels (tq_cpu.hpp), for every group size - they decode
+    // The trellis types (TQ2_T / TQK6 / TQK7): Cortex's own kernels (tq_cpu.hpp), for every group size - they decode
     // a block once for all the tokens and give each token the same bits whatever the group (no #152 rule needed).
     if (tq_rows_own(f.gu_type)) {
         tq_gu_rows(tq_isa(), f.gu_type, blob, f.gu_row, f.up_off, (int) f.n_embd, act, nt, ff, r0, r1);
@@ -256,15 +256,15 @@ void native_gu_rows(const NativeFmt& f, const uint8_t* blob, const void* const* 
         su = tail[1];
     }
     // NVFP4 in 512-bit lanes: ggml's arithmetic, blocks decoded once per window; 1.8x at one token, 3.7x at seven
-    // (nvfp4_avx512_parity). STRATA_NO_NVFP4_512 falls back to ggml-cpu.
-    static const bool nvfp4_512 = cpu_avx512_ok() && std::getenv("STRATA_NO_NVFP4_512") == nullptr;
+    // (nvfp4_avx512_parity). CORTEX_NO_NVFP4_512 falls back to ggml-cpu.
+    static const bool nvfp4_512 = cpu_avx512_ok() && std::getenv("CORTEX_NO_NVFP4_512") == nullptr;
     if (f.gu_type == kNvfp4Type && nvfp4_512 && nvfp4_512_fits(n)) {
         nvfp4_512_gu_rows(blob, f.gu_row, f.up_off, n, act, nt, ff, r0, r1, sg, su);
         return;
     }
     // Without AVX-512: the same rows in 256-bit lanes, bit-equal to ggml-cpu's AVX2 dot below; 2.0-2.4x it at 4-8
-    // tokens, 2x under DRAM load with 6 threads (nvfp4_avx512_parity). STRATA_NO_NVFP4_256 falls back to ggml-cpu.
-    static const bool nvfp4_256 = cpu_avx2_ok() && std::getenv("STRATA_NO_NVFP4_256") == nullptr;
+    // tokens, 2x under DRAM load with 6 threads (nvfp4_avx512_parity). CORTEX_NO_NVFP4_256 falls back to ggml-cpu.
+    static const bool nvfp4_256 = cpu_avx2_ok() && std::getenv("CORTEX_NO_NVFP4_256") == nullptr;
     if (f.gu_type == kNvfp4Type && nvfp4_256 && nvfp4_256_fits(n)) {
         nvfp4_256_gu_rows(blob, f.gu_row, f.up_off, n, act, nt, ff, r0, r1, sg, su);
         return;
@@ -287,10 +287,10 @@ void native_gu_rows(const NativeFmt& f, const uint8_t* blob, const void* const* 
 void native_down_rows(const NativeFmt& f, const uint8_t* blob, const void* const* hq, int nt, float* const* out,
                       int r0, int r1) {
     // IQ4_NL down rows: the AVX-2 multi-token kernel decodes the nibbles and absolutises the weights once per
-    // block instead of once per token; ggml-cpu's dot is single-token.  STRATA_NO_IQ4NL falls back to it.
-    static const bool iq4nl_mt = std::getenv("STRATA_NO_IQ4NL") == nullptr;
-    static const int mt_min = [] { const char* e = std::getenv("STRATA_IQ_MT_MIN"); return e ? std::atoi(e) : 2; }();
-    static const bool kq = [] { const char* v = std::getenv("STRATA_KQ256"); return v != nullptr && std::atoi(v) != 0; }();
+    // block instead of once per token; ggml-cpu's dot is single-token.  CORTEX_NO_IQ4NL falls back to it.
+    static const bool iq4nl_mt = std::getenv("CORTEX_NO_IQ4NL") == nullptr;
+    static const int mt_min = [] { const char* e = std::getenv("CORTEX_IQ_MT_MIN"); return e ? std::atoi(e) : 2; }();
+    static const bool kq = [] { const char* v = std::getenv("CORTEX_KQ256"); return v != nullptr && std::atoi(v) != 0; }();
     // Both multi-token kernels below are /arch:AVX2 translation units (kq_avx2.cpp and iq_avx2.cpp),
     // so a CPU without AVX2 has to reach ggml-cpu's vec_dot instead - same reasoning as the gate/up
     // rows above, where `avx512` tested cpu_avx512_ok() and `avx2` did not.
@@ -307,7 +307,7 @@ void native_down_rows(const NativeFmt& f, const uint8_t* blob, const void* const
         return;
     }
     // the older-CPU tier: IQ4_NL and Q2_0 down rows in 128-bit (ggml-cpu's dots for both are scalar here)
-    static const bool avx1 = !cpu_avx2_ok() && cpu_avx1_ok() && std::getenv("STRATA_NO_IQ128") == nullptr;
+    static const bool avx1 = !cpu_avx2_ok() && cpu_avx1_ok() && std::getenv("CORTEX_NO_IQ128") == nullptr;
     if (avx1 && iq128_down_supported(f.d_type)) {
         iq128_down_rows(f.d_type, blob + f.down_off, f.d_row, (int) f.n_ff, hq, nt, out, r0, r1);
         return;
@@ -315,12 +315,12 @@ void native_down_rows(const NativeFmt& f, const uint8_t* blob, const void* const
     const int n = (int) f.n_ff;
     float sd = 1.f;                                   // NVFP4: the expert's s_down (see native_gu_rows)
     if (f.tail_off) std::memcpy(&sd, blob + f.tail_off + 2 * sizeof(float), sizeof sd);
-    static const bool nvfp4_512 = cpu_avx512_ok() && std::getenv("STRATA_NO_NVFP4_512") == nullptr;
+    static const bool nvfp4_512 = cpu_avx512_ok() && std::getenv("CORTEX_NO_NVFP4_512") == nullptr;
     if (f.d_type == kNvfp4Type && nvfp4_512 && nvfp4_512_fits(n)) {
         nvfp4_512_rows(blob + f.down_off, f.d_row, n, hq, nt, out, r0, r1, sd);
         return;
     }
-    static const bool nvfp4_256 = cpu_avx2_ok() && std::getenv("STRATA_NO_NVFP4_256") == nullptr;   // see above
+    static const bool nvfp4_256 = cpu_avx2_ok() && std::getenv("CORTEX_NO_NVFP4_256") == nullptr;   // see above
     if (f.d_type == kNvfp4Type && nvfp4_256 && nvfp4_256_fits(n)) {
         nvfp4_256_rows(blob + f.down_off, f.d_row, n, hq, nt, out, r0, r1, sd);
         return;
@@ -336,4 +336,4 @@ void native_down_rows(const NativeFmt& f, const uint8_t* blob, const void* const
     }
 }
 
-}  // namespace strata::kernels::cpu
+}  // namespace cortex::kernels::cpu

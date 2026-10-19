@@ -1,8 +1,8 @@
 // src/kernels/cpu/pool.cpp - P2.S3: the CPU expert pool.  Read pool.hpp first; it explains the protocol.
-#include "strata/kernels/cpu/pool.hpp"
-#include "strata/core/progress.hpp"
-#include "strata/platform/aux_cpus.hpp"
-#include "strata/kernels/cpu/expert_layout.hpp"
+#include "cortex/kernels/cpu/pool.hpp"
+#include "cortex/core/progress.hpp"
+#include "cortex/platform/aux_cpus.hpp"
+#include "cortex/kernels/cpu/expert_layout.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -10,7 +10,7 @@
 #include <chrono>
 #include <immintrin.h>
 #if defined(_MSC_VER)
-#include <intrin.h>   // __cpuidex, __rdtsc (STRATA_POOL_UMWAIT)
+#include <intrin.h>   // __cpuidex, __rdtsc (CORTEX_POOL_UMWAIT)
 #endif
 
 #include <cstdio>
@@ -30,26 +30,26 @@
 #include "pool_affinity_linux.hpp"
 #endif
 
-namespace strata::kernels::cpu {
+namespace cortex::kernels::cpu {
 
 namespace {
-// STRATA_POOL_UMWAIT=<TSC cycles> (experimental, x86 WAITPKG only): a parked worker waits with UMONITOR/UMWAIT on the
+// CORTEX_POOL_UMWAIT=<TSC cycles> (experimental, x86 WAITPKG only): a parked worker waits with UMONITOR/UMWAIT on the
 // epoch's cache line instead of spinning on _mm_pause.  It wakes when the host publishes (a write to that line) or
 // after the cycles, in the light C0.1 state; on a laptop the CPU then gives back the power the spin took, which the
-// GPU's share of the budget gets.  0 or unset (or no WAITPKG): the spin, unchanged.  STRATA_POOL_UMWAIT_C02=1: the
+// GPU's share of the budget gets.  0 or unset (or no WAITPKG): the spin, unchanged.  CORTEX_POOL_UMWAIT_C02=1: the
 // deeper C0.2 state (slower wake).  MSVC x64 only for now (the intrinsics need no target flag there); other builds spin.
 uint64_t umwait_cycles() {
     static const uint64_t c = [] {
-        const char* e = std::getenv("STRATA_POOL_UMWAIT");
+        const char* e = std::getenv("CORTEX_POOL_UMWAIT");
         if (e == nullptr || std::atoll(e) <= 0) return (uint64_t) 0;
 #if defined(_MSC_VER) && defined(_M_X64) && !defined(__clang__)   // MSVC proper: clang-cl (the Windows HIP build) has no WAITPKG intrinsics by default
         int r[4] = {0, 0, 0, 0};
         __cpuidex(r, 7, 0);
         if (((r[2] >> 5) & 1) == 0) {
-            std::fprintf(stderr, "strata: STRATA_POOL_UMWAIT: this CPU has no WAITPKG, the workers spin\n");
+            std::fprintf(stderr, "cortex: CORTEX_POOL_UMWAIT: this CPU has no WAITPKG, the workers spin\n");
             return (uint64_t) 0;
         }
-        std::fprintf(stderr, "strata: STRATA_POOL_UMWAIT: parked workers wait with UMWAIT (%lld cycles)\n", std::atoll(e));
+        std::fprintf(stderr, "cortex: CORTEX_POOL_UMWAIT: parked workers wait with UMWAIT (%lld cycles)\n", std::atoll(e));
         return (uint64_t) std::atoll(e);
 #else
         return (uint64_t) 0;
@@ -58,13 +58,13 @@ uint64_t umwait_cycles() {
     return c;
 }
 unsigned umwait_state() {
-    static const unsigned s = [] { const char* e = std::getenv("STRATA_POOL_UMWAIT_C02"); return e && *e == '1' ? 0u : 1u; }();
+    static const unsigned s = [] { const char* e = std::getenv("CORTEX_POOL_UMWAIT_C02"); return e && *e == '1' ? 0u : 1u; }();
     return s;   // 1 = C0.1 (light), 0 = C0.2
 }
-// STRATA_POOL_UMWAIT_ESC=<TSC cycles> (experimental): an escalating wait - C0.1 for the first cycles of a park, C0.2 after
+// CORTEX_POOL_UMWAIT_ESC=<TSC cycles> (experimental): an escalating wait - C0.1 for the first cycles of a park, C0.2 after
 // (a wait that has lasted that long is a GPU phase, a draft or a prompt read, where a slower wake costs little).
 uint64_t umwait_escalate() {
-    static const uint64_t c = [] { const char* e = std::getenv("STRATA_POOL_UMWAIT_ESC"); return e ? (uint64_t) (std::max)(0LL, std::atoll(e)) : (uint64_t) 0; }();
+    static const uint64_t c = [] { const char* e = std::getenv("CORTEX_POOL_UMWAIT_ESC"); return e ? (uint64_t) (std::max)(0LL, std::atoll(e)) : (uint64_t) 0; }();
     return c;
 }
 
@@ -522,7 +522,7 @@ bool pin_this_thread(int core, [[maybe_unused]] int worker = -1) {
 #else
     const int error = detail::pin_thread_to_cpu(core);
     if (error != 0)
-        std::fprintf(stderr, "strata cpu pool: affinity for worker %d (CPU %d) failed: %d; previous affinity kept\n",
+        std::fprintf(stderr, "cortex cpu pool: affinity for worker %d (CPU %d) failed: %d; previous affinity kept\n",
                      worker, core, error);
     return error == 0;
 #endif
@@ -537,7 +537,7 @@ ThreadAffinity pin_current_thread(int core) {
     ULONG target = 0;
     if (!detail::get_thread_cpu_sets(previous.cpu_sets) || !detail::cpu_set_for_core(core, target) ||
         !SetThreadSelectedCpuSets(GetCurrentThread(), &target, 1)) {
-        std::fprintf(stderr, "strata cpu pool: host CPU Set selection for processor %d failed: %lu; previous placement kept\n",
+        std::fprintf(stderr, "cortex cpu pool: host CPU Set selection for processor %d failed: %lu; previous placement kept\n",
                      core, (unsigned long) GetLastError());
         return {};
     }
@@ -548,7 +548,7 @@ ThreadAffinity pin_current_thread(int core) {
     int error = detail::get_thread_affinity(previous.mask);
     if (error == 0) error = detail::pin_thread_to_cpu(core);
     if (error != 0) {
-        std::fprintf(stderr, "strata cpu pool: host affinity for CPU %d failed: %d; previous affinity kept\n", core, error);
+        std::fprintf(stderr, "cortex cpu pool: host affinity for CPU %d failed: %d; previous affinity kept\n", core, error);
         return {};
     }
     previous.valid = true;
@@ -563,12 +563,12 @@ void restore_thread_affinity(const ThreadAffinity& previous) {
     // turning the caller's implicit Windows 11 affinity into an explicit single-group hard mask.
     if (!SetThreadSelectedCpuSets(GetCurrentThread(), previous.cpu_sets.empty() ? nullptr : previous.cpu_sets.data(),
                                  (ULONG) previous.cpu_sets.size()))
-        std::fprintf(stderr, "strata cpu pool: host CPU Set restoration failed: %lu\n",
+        std::fprintf(stderr, "cortex cpu pool: host CPU Set restoration failed: %lu\n",
                      (unsigned long) GetLastError());
 #else
     const int error = detail::set_thread_affinity(previous.mask);
     if (error != 0)
-        std::fprintf(stderr, "strata cpu pool: host affinity restoration failed: %d\n", error);
+        std::fprintf(stderr, "cortex cpu pool: host affinity restoration failed: %d\n", error);
 #endif
 }
 
@@ -607,7 +607,7 @@ void ExpertPool::diag(std::FILE* f) const {
 ExpertPool::ExpertPool(int n_workers, bool pin, bool host_works, PoolAffinity affinity, int tasks)
     : tasks_(tasks), host_works_(host_works), affinity_(affinity), topo_(detect_cpu_topology(true, affinity)) {
     if (tasks < 0 || tasks > kMaxTasks) throw std::invalid_argument("expert pool tasks must be in 0..4096");
-    if (const char* e = std::getenv("STRATA_POOL_SPIN_US"))   // a test knob; see kSpinBeforeSleep
+    if (const char* e = std::getenv("CORTEX_POOL_SPIN_US"))   // a test knob; see kSpinBeforeSleep
         spin_before_sleep_ = std::chrono::microseconds((std::max)(0, std::atoi(e)));
     const PoolPlanInput plan_in = pool_plan_input(topo_);
     const PoolPlan plan = plan_pool_workers(plan_in);
@@ -616,7 +616,7 @@ ExpertPool::ExpertPool(int n_workers, bool pin, bool host_works, PoolAffinity af
         // recommend, never force: a count above what this CPU uses well runs as configured, with a plain warning
         static std::atomic<bool> warned{false};
         const std::string why = pool_workers_warning(n_workers, plan_in, plan);
-        if (!why.empty() && !warned.exchange(true)) std::fprintf(stderr, "strata cpu pool: warning: %s\n", why.c_str());
+        if (!why.empty() && !warned.exchange(true)) std::fprintf(stderr, "cortex cpu pool: warning: %s\n", why.c_str());
     } else if (topo_.is_hybrid && affinity_ != PoolAffinity::All) {
         n_ = (std::max)(1, topo_.p_cores - 1);
     } else {
@@ -631,14 +631,14 @@ ExpertPool::ExpertPool(int n_workers, bool pin, bool host_works, PoolAffinity af
     for (int i = 0; i < n_; ++i) wstate_[(size_t) i].store(kParked);
     hstate_ms_.store(now_ms());
     g_diag_pool.store(this);
-    strata::core::diag_pool_fn().store(&diag_active_pool);
+    cortex::core::diag_pool_fn().store(&diag_active_pool);
     split_.resize((size_t) kMaxSplit);
     split_multi_.resize((size_t) kMaxSplitMulti);
     threads_.reserve((size_t) n_);
     for (int i = 0; i < n_; ++i) {
         const int core = pin ? (i < (int) topo_.worker_cores.size() ? topo_.worker_cores[(size_t) i] : -1) : -1;
         threads_.emplace_back([this, i, core] {
-            strata::aux_cpus::note_owned_thread();   // --aux-cpus never moves a worker
+            cortex::aux_cpus::note_owned_thread();   // --aux-cpus never moves a worker
             pin_this_thread(core, i);
             worker(i);
         });
@@ -696,7 +696,7 @@ void ExpertPool::worker(int id) {
         while (epoch_.load(std::memory_order_acquire) == seen) {
             if (stop_.load(std::memory_order_relaxed)) return;
 #if defined(_MSC_VER) && defined(_M_X64) && !defined(__clang__)   // MSVC proper: clang-cl (the Windows HIP build) has no WAITPKG intrinsics by default
-            if (um != 0) {   // STRATA_POOL_UMWAIT: wake on the publish's write to epoch_, or after `um` cycles
+            if (um != 0) {   // CORTEX_POOL_UMWAIT: wake on the publish's write to epoch_, or after `um` cycles
                 _umonitor((void*) &epoch_);
                 if (epoch_.load(std::memory_order_acquire) != seen) break;
                 const uint64_t now = __rdtsc();
@@ -747,7 +747,7 @@ int ExpertPool::claim(uint32_t epoch) {
 
 uint32_t ExpertPool::begin_batch(int n) {
     if (n < 0 || n > 0xffff) {
-        std::fprintf(stderr, "strata: expert pool batch of %d jobs is out of range\n", n);
+        std::fprintf(stderr, "cortex: expert pool batch of %d jobs is out of range\n", n);
         std::abort();
     }
     // Every job of the previous batch has completed (`wait_done`), and a claim of it can no longer succeed, so
@@ -770,10 +770,10 @@ void ExpertPool::wait_parked(const char* what) {
         const auto now = std::chrono::steady_clock::now();
         if (spins == 1024u) t0 = now;
         else if (now - t0 > kStall) {
-            std::fprintf(stderr, "strata: the CPU expert pool stalled %s (%u of %d workers parked) - stopping the engine "
+            std::fprintf(stderr, "cortex: the CPU expert pool stalled %s (%u of %d workers parked) - stopping the engine "
                                  "so the server can start it again (issue #29)\n",
                          what, parked_.load(), n_);
-            strata::core::release_gpu_waits(stderr);   // #267: the GPU may be spinning on this layer's flag
+            cortex::core::release_gpu_waits(stderr);   // #267: the GPU may be spinning on this layer's flag
             std::fflush(stderr);
             std::abort();
         }
@@ -793,10 +793,10 @@ void ExpertPool::wait_done(int n) {
         const auto now = std::chrono::steady_clock::now();
         if (spins == 1024u || d != seen) { t0 = now; seen = d; }     // progress restarts the clock
         else if (now - t0 > kStall) {
-            std::fprintf(stderr, "strata: the CPU expert pool stalled: %u of %d jobs done, %u of %d workers parked - "
+            std::fprintf(stderr, "cortex: the CPU expert pool stalled: %u of %d jobs done, %u of %d workers parked - "
                                  "stopping the engine so the server can start it again (issue #29)\n",
                          d, n, parked_.load(), n_);
-            strata::core::release_gpu_waits(stderr);   // #267
+            cortex::core::release_gpu_waits(stderr);   // #267
             std::fflush(stderr);
             std::abort();
         }
@@ -1046,4 +1046,4 @@ void ExpertPool::run(ExpertJob* jobs, int n) {
     ms_repark_ += std::chrono::duration<double, std::milli>(t_d - t_c).count();
 }
 
-}  // namespace strata::kernels::cpu
+}  // namespace cortex::kernels::cpu

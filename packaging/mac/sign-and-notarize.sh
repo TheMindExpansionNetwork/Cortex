@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Sign the Strata Mac app (dmg or .app) and, optionally, the Mac Terminal archive with the owner's Developer ID, then notarise
+# Sign the Cortex Mac app (dmg or .app) and, optionally, the Mac Terminal archive with the owner's Developer ID, then notarise
 # them with Apple, so macOS opens them without the "damaged" / "unidentified developer" warning.
 #
-#   bash sign-and-notarize.sh <Strata-tester-mac.dmg | Strata.app> [--terminal <Strata-Terminal-Mac.zip>] [--updater-archive] [--out DIR] [--dry-run]
-#   bash sign-and-notarize.sh --terminal <Strata-Terminal-Mac.zip>            # the Terminal archive alone
+#   bash sign-and-notarize.sh <Cortex-tester-mac.dmg | Cortex.app> [--terminal <Cortex-Terminal-Mac.zip>] [--updater-archive] [--out DIR] [--dry-run]
+#   bash sign-and-notarize.sh --terminal <Cortex-Terminal-Mac.zip>            # the Terminal archive alone
 #
 # This script runs on the OWNER'S Mac, where the certificate "Developer ID Application: Niko Veit (79LR4R7RSC)" is in the Keychain and the
-# notarytool keychain profile "strata-notary" exists. It never asks for, reads or stores a password or a key: codesign and notarytool
+# notarytool keychain profile "cortex-notary" exists. It never asks for, reads or stores a password or a key: codesign and notarytool
 # take them from the Keychain themselves. Nothing is uploaded except what notarytool sends to Apple's notary service.
 #
 # Environment overrides (the defaults are the owner's values):
 #   SIGN_ID          the signing identity            (default: Developer ID Application: Niko Veit (79LR4R7RSC))
-#   NOTARY_PROFILE   the notarytool keychain profile (default: strata-notary)
+#   NOTARY_PROFILE   the notarytool keychain profile (default: cortex-notary)
 #   TMPDIR           where the work folder is made   (needs about 4 x the size of the input free)
 #
 # --dry-run: no Apple account is touched. Signs with the ad-hoc identity (SIGN_ID=-), skips notarytool/stapler/spctl-accept, and is
@@ -30,16 +30,16 @@
 #   6. notarises the .app, staples it, rebuilds the dmg (same layout as apps/desktop/scripts/make-dmg.sh), signs the dmg, notarises the dmg,
 #      staples it, spctl -a -t open --context context:primary-signature -vv;
 #   7. Terminal archive: signs every Mach-O inside, re-zips, notarises the zip (a zip cannot be stapled: see the note at the end).
-#   8. --updater-archive (opt-in, needs the app input): packs the signed, notarised, stapled .app into Strata.app.tar.gz, the file Tauri's in-app
-#      updater downloads on a Mac (Strata.app at the root of the archive), and checks it by unpacking it again. The archive is NOT signed with the
+#   8. --updater-archive (opt-in, needs the app input): packs the signed, notarised, stapled .app into Cortex.app.tar.gz, the file Tauri's in-app
+#      updater downloads on a Mac (Cortex.app at the root of the archive), and checks it by unpacking it again. The archive is NOT signed with the
 #      Tauri updater key here: this script never touches that key. Sign it on the PC (npx tauri signer sign) and put it in the update file with
-#      packaging/feed_tool.py set-app-platform (see packaging/UPDATES.md). Any Strata.app.tar.gz / .sig that `tauri build` made earlier holds the
+#      packaging/feed_tool.py set-app-platform (see packaging/UPDATES.md). Any Cortex.app.tar.gz / .sig that `tauri build` made earlier holds the
 #      UNSIGNED app and must not be published.
 set -u
 set -o pipefail
 
 SIGN_ID="${SIGN_ID:-Developer ID Application: Niko Veit (79LR4R7RSC)}"
-NOTARY_PROFILE="${NOTARY_PROFILE:-strata-notary}"
+NOTARY_PROFILE="${NOTARY_PROFILE:-cortex-notary}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENT_NODE_SRC="$HERE/entitlements-node.plist"
 
@@ -183,11 +183,11 @@ fi
 mkdir -p "$OUT" || { echo "cannot create $OUT" >&2; exit 2; }
 OUT="$(cd "$OUT" && pwd)"
 TMPBASE="${TMPDIR:-/tmp}"; TMPBASE="${TMPBASE%/}"   # macOS TMPDIR ends in "/": a "//" in the path broke the app self-test
-WORK="$(mktemp -d "$TMPBASE/strata-sign.XXXXXX")" || { echo "cannot make a work folder" >&2; exit 2; }
+WORK="$(mktemp -d "$TMPBASE/cortex-sign.XXXXXX")" || { echo "cannot make a work folder" >&2; exit 2; }
 LOG="$OUT/sign-and-notarize.log"
 : >"$LOG"
 : >"$OUT/SHA256SUMS.txt"
-say "Strata sign-and-notarize, $(date '+%Y-%m-%d %H:%M:%S')"
+say "Cortex sign-and-notarize, $(date '+%Y-%m-%d %H:%M:%S')"
 say "  identity : $SIGN_ID"
 if [ "$DRY" -eq 1 ]; then say "  mode     : DRY RUN (ad-hoc, no notarisation)"; else say "  profile  : $NOTARY_PROFILE"; fi
 say "  work     : $WORK"
@@ -383,7 +383,7 @@ smoke_app() {   # app
   export PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1   # a smoke test must not write into the sealed bundle
 
   # 1. the app's own headless self-test: private node, host, UI, Control on the bundled python
-  run_timeout 150 env HOME="$home" "$app/Contents/MacOS/strata-desktop" --self-test="$rep" >"$WORK/selftest.out" 2>&1; rc=$?
+  run_timeout 150 env HOME="$home" "$app/Contents/MacOS/cortex-desktop" --self-test="$rep" >"$WORK/selftest.out" 2>&1; rc=$?
   cat "$WORK/selftest.out" >>"$LOG"
   if [ "$rc" -eq 0 ]; then rec OK "smoke: app --self-test (host, UI, Control)"
   else
@@ -433,12 +433,12 @@ print("python ok", sys.version.split()[0])' >>"$LOG" 2>&1); then rec OK "smoke: 
     if run_timeout 30 "$f" --version >"$WORK/engine-version.txt" 2>&1; then say "        $(head -n 1 "$WORK/engine-version.txt")"; else
       cat "$WORK/engine-version.txt" >>"$LOG"; fails=$((fails + 1)); say "        engine did not start: $f"
     fi
-  done < <(find "$res/engine-bundle" -mindepth 2 -maxdepth 2 -type f \( -name strata -o -name strata-device \) 2>/dev/null)
+  done < <(find "$res/engine-bundle" -mindepth 2 -maxdepth 2 -type f \( -name cortex -o -name cortex-device \) 2>/dev/null)
   [ "$fails" -eq 0 ] || fail "smoke: bundled engine starts" "$fails engine(s) did not start under the hardened runtime"
   if [ -x "$py" ] && [ -d "$res/engine-bundle" ]; then
     out="$(cd "$ctl" && env HOME="$home" "$py" -c '
 import sys, pathlib
-from strata_control import engine_component as ec
+from cortex_control import engine_component as ec
 bad = 0; n = 0
 for m in sorted(pathlib.Path(sys.argv[1]).glob("*/engine-component.json")):
     n += 1
@@ -455,17 +455,17 @@ sys.exit(1 if bad or not n else 0)' "$res/engine-bundle" 2>&1)"; rc=$?
 }
 
 smoke_terminal() {   # extracted terminal folder
-  local root=$1 py f strata home="$WORK/termhome" out
+  local root=$1 py f cortex home="$WORK/termhome" out
   mkdir -p "$home"
   export PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1
   py="$(find "$root" -maxdepth 4 -path '*/python/bin/python3' \( -type f -o -type l \) 2>/dev/null | head -n 1)"
   if [ -n "$py" ]; then
     if env HOME="$home" "$py" -c 'import ctypes, ssl, sqlite3, zlib; print("python ok")' >>"$LOG" 2>&1; then rec OK "smoke: terminal python starts"
     else fail "smoke: terminal python" "does not start under the hardened runtime"; fi
-    strata="$(dirname "$py")/../../bin/strata"
-    if [ -x "$strata" ]; then
-      if out="$(env HOME="$home" STRATA_NO_ACQUIRE=1 "$strata" --version 2>&1)"; then rec OK "smoke: strata --version" "$(printf '%s' "$out" | head -n 1)"
-      else printf '%s\n' "$out" | tail -n 5 | sed 's/^/        /'; fail "smoke: strata --version" "the Terminal launcher does not start"; fi
+    cortex="$(dirname "$py")/../../bin/cortex"
+    if [ -x "$cortex" ]; then
+      if out="$(env HOME="$home" CORTEX_NO_ACQUIRE=1 "$cortex" --version 2>&1)"; then rec OK "smoke: cortex --version" "$(printf '%s' "$out" | head -n 1)"
+      else printf '%s\n' "$out" | tail -n 5 | sed 's/^/        /'; fail "smoke: cortex --version" "the Terminal launcher does not start"; fi
     fi
   else
     rec SKIP "smoke: terminal python" "no bundled python in this archive"
@@ -473,7 +473,7 @@ smoke_terminal() {   # extracted terminal folder
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     run_timeout 30 "$f" --version >>"$LOG" 2>&1 || fail "smoke: engine in the Terminal archive" "$f does not start"
-  done < <(find "$root" -type f \( -name strata -o -name strata-device \) -perm -u+x 2>/dev/null | while IFS= read -r c; do file "$c" | grep -q 'Mach-O' && printf '%s\n' "$c"; done)
+  done < <(find "$root" -type f \( -name cortex -o -name cortex-device \) -perm -u+x 2>/dev/null | while IFS= read -r c; do file "$c" | grep -q 'Mach-O' && printf '%s\n' "$c"; done)
 }
 
 # ----------------------------------------------------------------------------------------------------------------- the app
@@ -485,7 +485,7 @@ process_app() {
     app_src="${INPUT%/}"
     ditto --norsrc --noextattr --noqtn "$app_src" "$appdir/$(basename "$app_src")" || fail "copy the app" "ditto failed"
     app="$appdir/$(basename "$app_src")"
-    dmg_name="Strata.dmg"
+    dmg_name="Cortex.dmg"
     rec OK "copy the app" "from $INPUT"
   elif [ -f "$INPUT" ] && [[ "$INPUT" == *.dmg ]]; then
     mnt="$WORK/mnt-in"; mkdir -p "$mnt"
@@ -531,7 +531,7 @@ process_app() {
   fi
 
   # the dmg, same layout as apps/desktop/scripts/make-dmg.sh: the app, an Applications link, the volume icon, no Finder arrangement
-  vol="Strata ${version:-app}"
+  vol="Cortex ${version:-app}"
   mkdir -p "$WORK/final"
   out_dmg="$WORK/final/$dmg_name"
   build_dmg "$bundle_real" "$out_dmg" "$vol" || fail "build the dmg" "hdiutil failed (see the log)"
@@ -600,7 +600,7 @@ build_dmg() {   # app out.dmg volname
   MOUNTS+=("$mnt")
   ditto --norsrc --noextattr --noqtn "$app" "$mnt/$(basename "$app")" || return 1
   ln -s /Applications "$mnt/Applications"
-  icon="$app/Contents/Resources/Strata.icns"
+  icon="$app/Contents/Resources/Cortex.icns"
   if [ -f "$icon" ] && command -v SetFile >/dev/null 2>&1; then cp "$icon" "$mnt/.VolumeIcon.icns" && SetFile -a C "$mnt" 2>/dev/null; fi
   sync
   until hdiutil detach "$mnt" >/dev/null 2>&1; do

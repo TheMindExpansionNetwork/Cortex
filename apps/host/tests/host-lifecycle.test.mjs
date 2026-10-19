@@ -24,7 +24,7 @@ async function until(fn, ms = 15000) { const end = Date.now() + ms; while (Date.
 test('start asks Control to end the engine with this host; cleanup asks it to end what a lost owner left', async () => {
   const seen = [];
   const control = createControl({
-    control: { dir: '/c', python: '/p', cli: '/c/strata.py', bundle: { version: '9' } },
+    control: { dir: '/c', python: '/p', cli: '/c/cortex.py', bundle: { version: '9' } },
     run: async args => { seen.push(args.join(' ')); return { code: 0, json: { ok: true }, text: '', stderr: '' }; },
   });
   await control.start('app-1');
@@ -40,11 +40,11 @@ test('start asks Control to end the engine with this host; cleanup asks it to en
 });
 
 async function startHost(extraEnv = {}, spawnOptions = {}) {
-  const home = await mkdtemp(join(tmpdir(), 'strata-host-life-'));
+  const home = await mkdtemp(join(tmpdir(), 'cortex-host-life-'));
   const port = await freePort();
   const host = spawn(process.execPath, ['server/index.mjs'], {
     cwd: root, stdio: 'ignore', ...spawnOptions,
-    env: { ...process.env, STRATA_HOME: home, STRATA_MODELS_DIR: join(home, 'models'), STRATA_PORT: String(port), STRATA_SHARE_PORT: String(await freePort()), STRATA_TUNNEL_PORT: String(await freePort()), STRATA_REAL_ENGINE: '1', ...extraEnv },
+    env: { ...process.env, CORTEX_HOME: home, CORTEX_MODELS_DIR: join(home, 'models'), CORTEX_PORT: String(port), CORTEX_SHARE_PORT: String(await freePort()), CORTEX_TUNNEL_PORT: String(await freePort()), CORTEX_REAL_ENGINE: '1', ...extraEnv },
   });
   let up = false;
   for (let i = 0; i < 120 && !up; i++) { try { up = (await fetch(`http://127.0.0.1:${port}/api/health`)).ok; } catch { await delay(100); } }
@@ -64,14 +64,14 @@ test('SIGTERM and SIGHUP end the host through the clean shutdown (exit 0)', { sk
   }
 });
 
-test('Started by the shell (STRATA_EXIT_WITH_PARENT=1), the host leaves when its parent is killed', async t => {
+test('Started by the shell (CORTEX_EXIT_WITH_PARENT=1), the host leaves when its parent is killed', async t => {
   // a stand-in shell: it starts the host and then waits to be killed hard
-  const home = await mkdtemp(join(tmpdir(), 'strata-host-parent-'));
+  const home = await mkdtemp(join(tmpdir(), 'cortex-host-parent-'));
   t.after(() => rm(home, { recursive: true, force: true }));
   const port = await freePort();
   const shell = spawn(process.execPath, ['-e', `
     const {spawn}=require('node:child_process');
-    const h=spawn(process.execPath,['server/index.mjs'],{cwd:${JSON.stringify(root)},stdio:'ignore',env:{...process.env,STRATA_EXIT_WITH_PARENT:'1',STRATA_HOME:${JSON.stringify(home)},STRATA_MODELS_DIR:${JSON.stringify(join(home, 'models'))},STRATA_PORT:'${port}',STRATA_SHARE_PORT:'${await freePort()}',STRATA_TUNNEL_PORT:'${await freePort()}',STRATA_REAL_ENGINE:'1'}});
+    const h=spawn(process.execPath,['server/index.mjs'],{cwd:${JSON.stringify(root)},stdio:'ignore',env:{...process.env,CORTEX_EXIT_WITH_PARENT:'1',CORTEX_HOME:${JSON.stringify(home)},CORTEX_MODELS_DIR:${JSON.stringify(join(home, 'models'))},CORTEX_PORT:'${port}',CORTEX_SHARE_PORT:'${await freePort()}',CORTEX_TUNNEL_PORT:'${await freePort()}',CORTEX_REAL_ENGINE:'1'}});
     console.log(h.pid);
     setInterval(()=>{},1000);
   `], { cwd: root, stdio: ['ignore', 'pipe', 'inherit'] });
@@ -88,7 +88,7 @@ test('Started by the shell (STRATA_EXIT_WITH_PARENT=1), the host leaves when its
   assert.equal(reachable, false, 'the port is free again');
 });
 
-test('Without STRATA_EXIT_WITH_PARENT a host started from a source checkout does not follow its parent', async t => {
+test('Without CORTEX_EXIT_WITH_PARENT a host started from a source checkout does not follow its parent', async t => {
   const h = await startHost();
   t.after(h.done);
   t.after(() => h.host.kill('SIGKILL'));

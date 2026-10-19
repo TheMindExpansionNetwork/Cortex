@@ -1,4 +1,4 @@
-// The saved Monitor screenshot starts with the Strata logo alone (no "Monitor" headline); the live Monitor page keeps its title.
+// The saved Monitor screenshot starts with the Cortex logo alone (no "Monitor" headline); the live Monitor page keeps its title.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';

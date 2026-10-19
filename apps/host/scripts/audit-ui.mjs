@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Strata UI audit.
+ * Cortex UI audit.
  *
  *   node scripts/audit-ui.mjs
  *

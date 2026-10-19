@@ -1,16 +1,16 @@
 // batch_read.hpp: the pieces of a --batch prompt read, where the concurrent read runs (synthetic: no model, no GPU).
-#include "strata/program/batch_read.hpp"
+#include "cortex/program/batch_read.hpp"
 
 #include <cstdio>
 #include <cstring>
 #include <iterator>
 
-using strata::program::batch_read_piece;
-using strata::program::concurrent_read_off;
-using strata::program::ConcurrentReadSetup;
-using strata::program::piped_decode_budget_ms;
-using strata::program::piped_read_lead_in;
-using strata::program::piped_read_piece;
+using cortex::program::batch_read_piece;
+using cortex::program::concurrent_read_off;
+using cortex::program::ConcurrentReadSetup;
+using cortex::program::piped_decode_budget_ms;
+using cortex::program::piped_read_lead_in;
+using cortex::program::piped_read_piece;
 
 static int fails = 0;
 #define CHECK(c) do { if (!(c)) { std::printf("FAIL %s:%d %s\n", __FILE__, __LINE__, #c); ++fails; } } while (0)
@@ -27,14 +27,14 @@ int main() {
     // layer split, nobody decoding: pieces of 8 chunks - the BYIELD of a shorter request can be taken (it was one run)
     CHECK(batch_read_piece(true, false, true, false, 2048, 8) == 8 * 2048);
     CHECK(batch_read_piece(true, false, true, false, 1024, 4) == 4096);
-    // STRATA_BATCH_YIELD_CHUNKS=0 keeps the old single run
+    // CORTEX_BATCH_YIELD_CHUNKS=0 keeps the old single run
     CHECK(batch_read_piece(true, false, true, false, 2048, 0) == 0);
     // a degenerate chunk never gives a zero piece
     CHECK(batch_read_piece(true, false, false, false, 0, 8) == 1);
     // a piece is always a multiple of the chunk
     for (int64_t c : {256, 1000, 2048, 4096})
         for (int64_t k : {1, 3, 8, 16}) CHECK(batch_read_piece(true, false, true, false, c, k) % c == 0);
-    // concurrent_read_off (STRATA_PIPED_CONCURRENT): runs with nothing set; each setting alone keeps it off, named
+    // concurrent_read_off (CORTEX_PIPED_CONCURRENT): runs with nothing set; each setting alone keeps it off, named
     CHECK(concurrent_read_off({}) == nullptr);
     bool ConcurrentReadSetup::*const each[] = {
         &ConcurrentReadSetup::prefill_help, &ConcurrentReadSetup::split_mtp_batch, &ConcurrentReadSetup::fs_slots,
@@ -49,7 +49,7 @@ int main() {
         CHECK(named[i] != nullptr);
         for (size_t j = 0; j < i; ++j) CHECK(!same(named[i], named[j]));   // a reason of its own
     }
-    CHECK(same(named[0], "STRATA_PREFILL_HELP"));
+    CHECK(same(named[0], "CORTEX_PREFILL_HELP"));
     CHECK(same(named[3], "--pcie-mode dma"));
     // with several, the first in the struct's order is named
     for (size_t i = 0; i < std::size(each); ++i) {

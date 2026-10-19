@@ -4,7 +4,7 @@
 #include <hip/hip_fp16.h>
 
 #include "wmma_gemm.h"
-#include "strata/kernels/gfx_arch.hpp"
+#include "cortex/kernels/gfx_arch.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -158,11 +158,11 @@ CaseStatus run_gemm_case(DeviceBuffer& dx, DeviceBuffer& dw, DeviceBuffer& dy,
     HIP_CHECK(hipMemcpyAsync(dw.p, w.data(), w_count * sizeof(uint16_t), hipMemcpyHostToDevice, stream));
     HIP_CHECK(hipMemcpyAsync(dy.p, initial_y.data(), y_count * sizeof(float), hipMemcpyHostToDevice, stream));
 
-    const bool launched = is_bf16 ? strata_wmma_gemm_bf16(static_cast<const uint16_t*>(dx.p),
+    const bool launched = is_bf16 ? cortex_wmma_gemm_bf16(static_cast<const uint16_t*>(dx.p),
                                                            static_cast<const uint16_t*>(dw.p),
                                                            static_cast<float*>(dy.p),
                                                            T, N, K, ldy, beta, stream)
-                                  : strata_wmma_gemm_f16(static_cast<const uint16_t*>(dx.p),
+                                  : cortex_wmma_gemm_f16(static_cast<const uint16_t*>(dx.p),
                                                           static_cast<const uint16_t*>(dw.p),
                                                           static_cast<float*>(dy.p),
                                                           T, N, K, ldy, beta, stream);
@@ -232,9 +232,9 @@ CaseStatus run_gemm_case(DeviceBuffer& dx, DeviceBuffer& dw, DeviceBuffer& dy,
             // this reference sums in double and rounds to nearest, so a correct result may differ by one ULP
             // (measured: every mismatch on this hardware is <= 1 ULP and toward zero).  Compare against a
             // tolerance of 4 ULP - tight enough to stay diagnostic, since a wrong row, column, stride or tile
-            // boundary differs by O(value) rather than by 1e-7.  STRATA_WMMA_PARITY_EXACT=1 demands bit
+            // boundary differs by O(value) rather than by 1e-7.  CORTEX_WMMA_PARITY_EXACT=1 demands bit
             // equality for anyone who wants to see the raw deltas.
-            static const bool exact = std::getenv("STRATA_WMMA_PARITY_EXACT") != nullptr;
+            static const bool exact = std::getenv("CORTEX_WMMA_PARITY_EXACT") != nullptr;
             const double tol = exact ? 0.0
                                      : 4.0 * (double)std::numeric_limits<float>::epsilon() *
                                            std::max(1.0, std::abs(static_cast<double>(ref_y[idx])));
@@ -272,7 +272,7 @@ int main() {
                 device, properties.name, properties.gcnArchName, properties.warpSize);
     // No matrix cores (RDNA2 and older, gfx906): the kernel declines every shape, so the suite has nothing to compare
     // and reports that as a skip (exit 77, SKIP_RETURN_CODE in CMake), as hip_prompt_attn_wmma does, not a failure.
-    if (!strata::kernels::gfx_arch_is_gfx11_wmma(properties.gcnArchName)) {
+    if (!cortex::kernels::gfx_arch_is_gfx11_wmma(properties.gcnArchName)) {
         std::printf("WMMA GEMM parity SKIPPED: %s has no WMMA matrix cores (the kernel declines every shape here)\n",
                     properties.gcnArchName);
         return 77;
@@ -335,11 +335,11 @@ int main() {
     MismatchRecord first_mismatch{};
     uint32_t case_seed = 0x574d4d41u;
 
-    const bool verbose = (std::getenv("STRATA_TEST_VERBOSE") != nullptr);
+    const bool verbose = (std::getenv("CORTEX_TEST_VERBOSE") != nullptr);
 
     for (bool is_bf16 : {false, true}) {
         const char* dtype_str = is_bf16 ? "bf16" : "f16";
-        std::printf("Testing strata_wmma_gemm_%s across %zu shapes (%zu execution configs)...\n",
+        std::printf("Testing cortex_wmma_gemm_%s across %zu shapes (%zu execution configs)...\n",
                     dtype_str, k_t_values.size() * k_n_values.size() * k_k_values.size(), kConfigs.size());
 
         for (int64_t T : k_t_values) {
@@ -392,11 +392,11 @@ int main() {
         // Test declined shapes: the kernel must return false and be skipped.
         for (const auto& decl : kDeclinedShapes) {
             const bool launched = is_bf16
-                ? strata_wmma_gemm_bf16(static_cast<const uint16_t*>(dx.p),
+                ? cortex_wmma_gemm_bf16(static_cast<const uint16_t*>(dx.p),
                                         static_cast<const uint16_t*>(dw.p),
                                         static_cast<float*>(dy.p),
                                         decl.T, decl.N, decl.K, decl.ldy, decl.beta, stream)
-                : strata_wmma_gemm_f16(static_cast<const uint16_t*>(dx.p),
+                : cortex_wmma_gemm_f16(static_cast<const uint16_t*>(dx.p),
                                        static_cast<const uint16_t*>(dw.p),
                                        static_cast<float*>(dy.p),
                                        decl.T, decl.N, decl.K, decl.ldy, decl.beta, stream);

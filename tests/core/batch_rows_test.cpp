@@ -1,6 +1,6 @@
-// The batch window's row layout (include/strata/core/batch_rows.hpp): plain one-row slots, a slot's contiguous group of
+// The batch window's row layout (include/cortex/core/batch_rows.hpp): plain one-row slots, a slot's contiguous group of
 // proposed rows (--batch-mtp), and the hand-off capacity of a layer split's stages.  Header-only, CPU.
-#include "strata/core/batch_rows.hpp"
+#include "cortex/core/batch_rows.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -17,12 +17,12 @@ void check(bool ok, const char* what) {
 const char* run(const int* rows, const long long* p, int S, int n_slots, int max_t, int hbase, bool handoff) {
     int64_t pos[8];
     for (int t = 0; t < S; ++t) pos[t] = p[t];
-    return strata::core::batch_rows_error(rows, S, pos, n_slots, max_t, hbase, handoff, 8);
+    return cortex::core::batch_rows_error(rows, S, pos, n_slots, max_t, hbase, handoff, 8);
 }
 }  // namespace
 
 int main() {
-    using strata::core::batch_rows_error;
+    using cortex::core::batch_rows_error;
     // plain batch: one row per slot, any positions
     {
         const int rows[] = {0, 1, 2};

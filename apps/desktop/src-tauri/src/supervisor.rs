@@ -9,11 +9,11 @@
 //!
 //! If the window process dies for any reason except the person closing the window (a signal such as SIGSEGV, an abort, a failed
 //! start, a missing library), the shell keeps the host running, tells the host to open the page in the default browser and to
-//! show one notification, and prints the same sentence on the terminal. This is "browser mode"; `--browser` or STRATA_UI=browser
-//! starts in it on purpose. In browser mode closing the tab does not stop the engine: the page has "Quit Strata", and `--quit`
-//! ends a running Strata from the command line. The host listens on 127.0.0.1 only (the shell sets STRATA_BIND itself).
+//! show one notification, and prints the same sentence on the terminal. This is "browser mode"; `--browser` or CORTEX_UI=browser
+//! starts in it on purpose. In browser mode closing the tab does not stop the engine: the page has "Quit Cortex", and `--quit`
+//! ends a running Cortex from the command line. The host listens on 127.0.0.1 only (the shell sets CORTEX_BIND itself).
 //!
-//! The session file (`~/.strata/app-session.json`, mode 0600: process id, port, the secret only this user can read, the mode) is how
+//! The session file (`~/.cortex/app-session.json`, mode 0600: process id, port, the secret only this user can read, the mode) is how
 //! a second start finds the first one: it focuses the window (window mode) or opens another tab (browser mode) instead of
 //! starting a second host.
 
@@ -24,14 +24,14 @@ use std::time::{Duration, Instant};
 
 use crate::desktoplog::{self, say, Log, Ring};
 
-pub const BROWSER_NOTICE: &str = "Strata opened in your browser because the app window couldn't start on this computer.";
+pub const BROWSER_NOTICE: &str = "Cortex opened in your browser because the app window couldn't start on this computer.";
 
 /// What the command line asked for.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Options {
-    /// `--browser` or STRATA_UI=browser: no app window, the page opens in the default browser.
+    /// `--browser` or CORTEX_UI=browser: no app window, the page opens in the default browser.
     pub browser: bool,
-    /// `--quit`: end a running Strata and leave.
+    /// `--quit`: end a running Cortex and leave.
     pub quit: bool,
     /// `--window-child`: the window process (started by the shell, not by a person).
     pub window_child: bool,
@@ -55,26 +55,26 @@ pub fn parse_args(args: &[String], ui_env: Option<&str>) -> Options {
     o
 }
 
-pub const HELP: &str = "Strata\n\
-  (no option)  open the Strata app window\n\
-  --browser    open Strata in your default browser instead of the app window (same as STRATA_UI=browser)\n\
-  --quit       stop a running Strata (its engine too) and leave\n\
+pub const HELP: &str = "Cortex\n\
+  (no option)  open the Cortex app window\n\
+  --browser    open Cortex in your default browser instead of the app window (same as CORTEX_UI=browser)\n\
+  --quit       stop a running Cortex (its engine too) and leave\n\
   --save-logs  put the logs (including the log of an app window crash) into one file in your Downloads folder, to send to us\n\
-Closing the browser tab does not stop Strata in browser mode: use Quit Strata in the menu, or --quit.\n";
+Closing the browser tab does not stop Cortex in browser mode: use Quit Cortex in the menu, or --quit.\n";
 
-/// The command a person types to run this app again, for the messages ("run: Strata.AppImage --quit").
+/// The command a person types to run this app again, for the messages ("run: Cortex.AppImage --quit").
 pub fn command_name() -> String {
     if let Ok(image) = std::env::var("APPIMAGE") {
         if let Some(name) = std::path::Path::new(&image).file_name() {
             return format!("./{}", name.to_string_lossy());
         }
     }
-    std::env::current_exe().ok().and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned())).unwrap_or_else(|| "strata-desktop".into())
+    std::env::current_exe().ok().and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned())).unwrap_or_else(|| "cortex-desktop".into())
 }
 
 pub fn browser_chosen_line(port: u16) -> String {
     format!(
-        "Strata is open in your browser at http://127.0.0.1:{port}/. Closing the tab does not stop Strata: choose Quit Strata in the menu, or run {} --quit.",
+        "Cortex is open in your browser at http://127.0.0.1:{port}/. Closing the tab does not stop Cortex: choose Quit Cortex in the menu, or run {} --quit.",
         command_name()
     )
 }
@@ -94,11 +94,11 @@ pub struct Session {
 }
 
 fn session_path() -> PathBuf {
-    if let Some(p) = std::env::var_os("STRATA_APP_SESSION_FILE") {
+    if let Some(p) = std::env::var_os("CORTEX_APP_SESSION_FILE") {
         return PathBuf::from(p);
     }
     let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
-    home.join(".strata").join("app-session.json")
+    home.join(".cortex").join("app-session.json")
 }
 
 pub fn write_session(s: &Session) {
@@ -118,7 +118,7 @@ pub fn write_session(s: &Session) {
         Ok(mut f) => {
             let _ = f.write_all(text.as_bytes());
         }
-        Err(e) => eprintln!("[strata] could not write {}: {e}", path.display()),
+        Err(e) => eprintln!("[cortex] could not write {}: {e}", path.display()),
     }
 }
 
@@ -151,7 +151,7 @@ fn pid_alive(pid: u32) -> bool {
     }
 }
 
-/// A Strata that is really running: its shell process exists and its host answers.
+/// A Cortex that is really running: its shell process exists and its host answers.
 pub fn live_session() -> Option<Session> {
     let s = read_session()?;
     if s.pid != std::process::id() && pid_alive(s.pid) && crate::ureq_get_ok(&format!("http://127.0.0.1:{}/api/health", s.port)).unwrap_or(false) {
@@ -165,7 +165,7 @@ pub fn live_session() -> Option<Session> {
 
 /// POST to the host as the shell (the secret in the header). Returns the response body.
 fn host_post(port: u16, token: &str, path: &str, body: &serde_json::Value) -> Result<String, String> {
-    let (status, text) = crate::http_request_body("POST", &format!("http://127.0.0.1:{port}{path}"), &[("x-strata-shutdown", token), ("content-type", "application/json")], Some(&body.to_string()))?;
+    let (status, text) = crate::http_request_body("POST", &format!("http://127.0.0.1:{port}{path}"), &[("x-cortex-shutdown", token), ("content-type", "application/json")], Some(&body.to_string()))?;
     if status.contains(" 200") || status.contains(" 202") {
         Ok(text)
     } else {
@@ -185,18 +185,18 @@ pub fn switch_host_to_browser(port: u16, token: &str, reason: &str, notice: &str
     match host_post(port, token, "/api/control/ui", &body) {
         Ok(answer) => {
             if !opened(&answer) {
-                eprintln!("[strata] {}", open_by_hand_line(port));
+                eprintln!("[cortex] {}", open_by_hand_line(port));
             }
         }
-        Err(e) => eprintln!("[strata] could not tell the host to open your browser ({e}). Open http://127.0.0.1:{port}/ in your browser."),
+        Err(e) => eprintln!("[cortex] could not tell the host to open your browser ({e}). Open http://127.0.0.1:{port}/ in your browser."),
     }
 }
 
-/// Open the page in the default browser without changing the host's mode (a second start while Strata runs).
+/// Open the page in the default browser without changing the host's mode (a second start while Cortex runs).
 fn open_page_only(port: u16, token: &str) {
     match host_post(port, token, "/api/control/ui", &serde_json::json!({ "open": true })) {
         Ok(answer) if opened(&answer) => {}
-        _ => eprintln!("[strata] {}", open_by_hand_line(port)),
+        _ => eprintln!("[cortex] {}", open_by_hand_line(port)),
     }
 }
 
@@ -230,44 +230,44 @@ fn spawn_window(port: u16, token: &str) -> std::io::Result<Child> {
     let exe = std::env::current_exe()?;
     Command::new(exe)
         .arg("--window-child")
-        .env("STRATA_WINDOW_PORT", port.to_string())
-        .env("STRATA_SHUTDOWN_TOKEN", token)
+        .env("CORTEX_WINDOW_PORT", port.to_string())
+        .env("CORTEX_SHUTDOWN_TOKEN", token)
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn()
 }
 
-/// `--quit`: end a running Strata (the window, the host, the engines it started) and wait for it.
+/// `--quit`: end a running Cortex (the window, the host, the engines it started) and wait for it.
 pub fn quit_running() -> i32 {
     let Some(s) = live_session() else {
-        println!("Strata is not running.");
+        println!("Cortex is not running.");
         let _ = std::fs::remove_file(session_path());
         return 0;
     };
     match host_post(s.port, &s.token, "/api/control/shutdown", &serde_json::json!({})) {
         Ok(_) => {}
         Err(e) => {
-            eprintln!("[strata] could not ask Strata to stop ({e}).");
+            eprintln!("[cortex] could not ask Cortex to stop ({e}).");
             return 1;
         }
     }
     let deadline = Instant::now() + Duration::from_secs(crate::HOST_STOP_SECONDS + 10);
     while Instant::now() < deadline {
         if !pid_alive(s.pid) {
-            println!("Strata has stopped.");
+            println!("Cortex has stopped.");
             return 0;
         }
         std::thread::sleep(Duration::from_millis(200));
     }
-    eprintln!("[strata] Strata is still stopping its engine. Try again in a moment.");
+    eprintln!("[cortex] Cortex is still stopping its engine. Try again in a moment.");
     1
 }
 
-/// A second start while Strata already runs: focus the window, or open another tab. Starts no second host.
+/// A second start while Cortex already runs: focus the window, or open another tab. Starts no second host.
 fn join_running(s: &Session, browser: bool) -> i32 {
     if browser || s.mode == "browser" {
-        println!("Strata is already running. Opening it in your browser.");
+        println!("Cortex is already running. Opening it in your browser.");
         open_page_only(s.port, &s.token);
         return 0;
     }
@@ -275,12 +275,12 @@ fn join_running(s: &Session, browser: bool) -> i32 {
     match spawn_window(s.port, &s.token).and_then(|mut c| c.wait()) {
         Ok(status) if status.success() => 0,
         Ok(status) => {
-            eprintln!("[strata] The app window stopped ({}). Opening Strata in your browser.", describe_exit(&status));
+            eprintln!("[cortex] The app window stopped ({}). Opening Cortex in your browser.", describe_exit(&status));
             open_page_only(s.port, &s.token);
             0
         }
         Err(e) => {
-            eprintln!("[strata] could not start the app window ({e}). Opening Strata in your browser.");
+            eprintln!("[cortex] could not start the app window ({e}). Opening Cortex in your browser.");
             open_page_only(s.port, &s.token);
             0
         }
@@ -326,7 +326,7 @@ pub fn run(opts: &Options) -> i32 {
                 0
             }
             Err(e) => {
-                eprintln!("[strata] could not save the logs: {e}");
+                eprintln!("[cortex] could not save the logs: {e}");
                 1
             }
         };
@@ -358,9 +358,9 @@ pub fn run(opts: &Options) -> i32 {
             return 1;
         }
     };
-    cmd.env("STRATA_UI_MODE", mode).env("STRATA_APP_VERSION", env!("CARGO_PKG_VERSION"));
+    cmd.env("CORTEX_UI_MODE", mode).env("CORTEX_APP_VERSION", env!("CARGO_PKG_VERSION"));
     if opts.browser {
-        cmd.env("STRATA_UI_REASON", "chosen");
+        cmd.env("CORTEX_UI_REASON", "chosen");
     }
     let mut host = match spawn_logged(&mut cmd, "host", &host_ring, &log) {
         Ok(c) => c,
@@ -389,7 +389,7 @@ pub fn run(opts: &Options) -> i32 {
     } else {
         let started = std::env::current_exe().and_then(|exe| {
             let mut c = Command::new(exe);
-            c.arg("--window-child").env("STRATA_WINDOW_PORT", port.to_string()).env("STRATA_SHUTDOWN_TOKEN", &token).stdin(Stdio::null());
+            c.arg("--window-child").env("CORTEX_WINDOW_PORT", port.to_string()).env("CORTEX_SHUTDOWN_TOKEN", &token).stdin(Stdio::null());
             spawn_logged(&mut c, "window", &window_ring, &log)
         });
         match started {
@@ -403,14 +403,14 @@ pub fn run(opts: &Options) -> i32 {
 
     let code = loop {
         std::thread::sleep(Duration::from_millis(200));
-        // The host ended (Quit Strata, a crash, someone killed it): nothing is left to show.
+        // The host ended (Quit Cortex, a crash, someone killed it): nothing is left to show.
         if let Ok(Some(status)) = host.try_wait() {
             if let Some(w) = window.as_mut() {
                 let _ = w.kill();
                 let _ = w.wait();
             }
             if status.success() {
-                log.line("shell", "the host stopped (Quit Strata or the window was closed)");
+                log.line("shell", "the host stopped (Quit Cortex or the window was closed)");
                 break 0;
             }
             say(&log, &format!("The App Host stopped ({}). The last lines it printed are in {}.", describe_exit(&status), log.path.as_ref().map(|p| p.display().to_string()).unwrap_or_default()));
@@ -426,7 +426,7 @@ pub fn run(opts: &Options) -> i32 {
             crate::stop_host_child(&mut host, Some(port), Some(&token));
             break 0;
         }
-        // The window stopped without being closed: keep Strata running and move to the browser.
+        // The window stopped without being closed: keep Cortex running and move to the browser.
         window_failed(&describe_exit(&status), window_pid, &window_ring, &host_ring, &log, port, &token);
         write_session(&Session { pid: me, port, token: token.clone(), mode: "browser".into() });
     };
@@ -439,7 +439,7 @@ mod tests {
     use super::*;
 
     fn args(list: &[&str]) -> Vec<String> {
-        std::iter::once("strata-desktop").chain(list.iter().copied()).map(String::from).collect()
+        std::iter::once("cortex-desktop").chain(list.iter().copied()).map(String::from).collect()
     }
 
     #[test]
@@ -459,17 +459,17 @@ mod tests {
 
     #[test]
     fn the_browser_message_is_the_plain_sentence_and_names_the_way_out() {
-        assert_eq!(BROWSER_NOTICE, "Strata opened in your browser because the app window couldn't start on this computer.");
+        assert_eq!(BROWSER_NOTICE, "Cortex opened in your browser because the app window couldn't start on this computer.");
         let line = browser_chosen_line(47831);
-        assert!(line.contains("http://127.0.0.1:47831/") && line.contains("--quit") && line.contains("Quit Strata"));
+        assert!(line.contains("http://127.0.0.1:47831/") && line.contains("--quit") && line.contains("Quit Cortex"));
         assert!(open_by_hand_line(47831).contains("127.0.0.1:47831"));
     }
 
     #[test]
     fn a_session_round_trips_and_is_private() {
-        let dir = std::env::temp_dir().join(format!("strata-session-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("cortex-session-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        std::env::set_var("STRATA_APP_SESSION_FILE", dir.join("s.json"));
+        std::env::set_var("CORTEX_APP_SESSION_FILE", dir.join("s.json"));
         assert!(read_session().is_none());
         let s = Session { pid: 4242, port: 47831, token: "ab".repeat(32), mode: "browser".into() };
         write_session(&s);
@@ -484,7 +484,7 @@ mod tests {
         assert!(read_session().is_some());
         remove_session(4242);
         assert!(read_session().is_none());
-        std::env::remove_var("STRATA_APP_SESSION_FILE");
+        std::env::remove_var("CORTEX_APP_SESSION_FILE");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -1,4 +1,4 @@
-// src/kernels/hc_persist_parity.cpp - the STRATA_HC_PERSIST=1 hyper-connection read (one persistent kernel) against the
+// src/kernels/hc_persist_parity.cpp - the CORTEX_HC_PERSIST=1 hyper-connection read (one persistent kernel) against the
 // default multi read (fused_gr_read_multi).
 //
 // Real geometry (n_embd 2560, hc 4, hc_lr 320), every T = 1..8, the pending write applied and the inject rows on, as the
@@ -6,9 +6,9 @@
 // row, the inject outputs, the written R) must be finite and within 1e-4 of the default read relative to its largest
 // magnitude, and two runs of the persistent read must agree bit for bit. Where the card does not hold the 80 blocks at
 // once (or on CUDA, where the read is not built) the read reports that it did not run and the test passes as a skip.
-// `--off`: with STRATA_HC_PERSIST unset the persistent read must never run (the default path is untouched).
+// `--off`: with CORTEX_HC_PERSIST unset the persistent read must never run (the default path is untouched).
 // GPU, synthetic, no model.
-#include "strata/kernels/fused_gr.hpp"
+#include "cortex/kernels/fused_gr.hpp"
 
 #include <cuda_runtime.h>
 
@@ -20,7 +20,7 @@
 #include <random>
 #include <vector>
 
-namespace k = strata::kernels;
+namespace k = cortex::kernels;
 
 namespace {
 constexpr int N = 2560, HC = 4, D = N * HC, LR = 320, TM = 8;
@@ -52,8 +52,8 @@ T* dev(size_t n) {
 
 int main(int argc, char** argv) {
     const bool off = argc > 1 && std::strcmp(argv[1], "--off") == 0;
-    if (off) unsetenv("STRATA_HC_PERSIST");
-    else setenv("STRATA_HC_PERSIST", "1", 1);
+    if (off) unsetenv("CORTEX_HC_PERSIST");
+    else setenv("CORTEX_HC_PERSIST", "1", 1);
     k::fused_gr_check();
     k::fused_gr_persist_init();
 
@@ -120,7 +120,7 @@ int main(int argc, char** argv) {
         }
         if (off) {
             if (used) {
-                std::printf("T=%d: the persistent read ran with STRATA_HC_PERSIST unset  FAIL\n", T);
+                std::printf("T=%d: the persistent read ran with CORTEX_HC_PERSIST unset  FAIL\n", T);
                 ++bad;
             }
             continue;
@@ -144,7 +144,7 @@ int main(int argc, char** argv) {
                     finite ? "finite" : "NON-FINITE", same ? "bitwise equal" : "DIFFER", ok ? "ok" : "FAIL");
         if (!ok) ++bad;
     }
-    if (off) std::printf("%s: STRATA_HC_PERSIST unset, the persistent read never ran\n", bad ? "FAIL" : "PASS");
+    if (off) std::printf("%s: CORTEX_HC_PERSIST unset, the persistent read never ran\n", bad ? "FAIL" : "PASS");
     else if (ran == 0) std::printf("SKIP: the persistent read is not used on this card\n");
     else std::printf("%s: %d token counts checked\n", bad ? "FAIL" : "PASS", ran);
     return bad ? 1 : 0;

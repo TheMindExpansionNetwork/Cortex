@@ -1,4 +1,4 @@
-// Needs: a throwaway host (STRATA_UI_BASE, default http://127.0.0.1:18791) and tests/helpers/scripted-worker.mjs listening on 18899 as the model (see ui-drive.mjs ensureMock).
+// Needs: a throwaway host (CORTEX_UI_BASE, default http://127.0.0.1:18791) and tests/helpers/scripted-worker.mjs listening on 18899 as the model (see ui-drive.mjs ensureMock).
 // Pictures in the real app page: paste, "+" and drag-and-drop attach a picture; the OFF switch (per API model) refuses it with a plain message.
 import { deflateSync } from 'node:zlib';
 import { writeFileSync, mkdirSync } from 'node:fs';

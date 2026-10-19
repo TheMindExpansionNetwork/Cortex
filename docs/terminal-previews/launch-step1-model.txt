@@ -1,7 +1,7 @@
-# strata launch preview: step1-model
+# cortex launch preview: step1-model
 # (text of the screen as drawn at the size named in tests/terminal/launch_previews.py)
 
- STRATA  Set up   Step 1 of 9: Model
+ CORTEX  Set up   Step 1 of 9: Model
  ────────────────────────────────────────────────────────────────────────────────────────────────────────────
  Which model?                                          This computer: RTX 5070 12 GB · 64 GB RAM · 47 GB free
    Model                                     Download  Needs (RAM + VRAM)  On this computer

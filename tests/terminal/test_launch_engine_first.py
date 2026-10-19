@@ -1,5 +1,5 @@
-"""`strata launch` settles the engine before it touches the model. With no usable engine and none to get it does NOT refuse (owner decision,
-2026-10-18): it warns in plain words (the reason from `strata update`, and the next step), asks whether to download the model anyway (the
+"""`cortex launch` settles the engine before it touches the model. With no usable engine and none to get it does NOT refuse (owner decision,
+2026-10-18): it warns in plain words (the reason from `cortex update`, and the next step), asks whether to download the model anyway (the
 answer is yes unless the person says no; --yes skips the question), downloads, and ends with a message that names the engine problem and the
 next step, exit code 0. Nothing is started without an engine."""
 
@@ -12,9 +12,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from strata_cli.launch import settings as S
-from strata_cli.launch.runner import LaunchError, NO_ENGINE_STEP, Runner, no_engine_final, no_engine_warning
-from strata_control import engine_component as ec
+from cortex_cli.launch import settings as S
+from cortex_cli.launch.runner import LaunchError, NO_ENGINE_STEP, Runner, no_engine_final, no_engine_warning
+from cortex_control import engine_component as ec
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -49,7 +49,7 @@ def runner(spawned: list) -> Runner:
 
 class EngineBeforeModel(unittest.TestCase):
     def run_ensure(self, statuses: list[dict], events: list[dict], code: int = 0):
-        """ensure_engine() with a fake `strata update` and a sequence of engine reports. Returns (spawn count, the error or None)."""
+        """ensure_engine() with a fake `cortex update` and a sequence of engine reports. Returns (spawn count, the error or None)."""
         spawns, err, _r = self.run_ensure_runner(statuses, events, code)
         return spawns, err
 
@@ -91,7 +91,7 @@ class EngineBeforeModel(unittest.TestCase):
         warning = no_engine_warning(note)
         self.assertEqual(r.events[-1].text, warning)
         self.assertEqual(r.events[-1].level, "warn")
-        self.assertIn("Strata couldn't find an engine for this computer (The feed has no engine package for this PC)", warning)
+        self.assertIn("Cortex couldn't find an engine for this computer (The feed has no engine package for this PC)", warning)
         self.assertIn("The model will download, but it may not run until you install the right engine (next step:", warning)
         self.assertIn(NO_ENGINE_STEP, warning)
         self.assertNotIn("The app never downloads", warning)          # not the generic line
@@ -101,7 +101,7 @@ class EngineBeforeModel(unittest.TestCase):
         self.assertIsNone(err)
         self.assertEqual(r.engine_problem, WRONG_FAMILY)
         text = r.events[-1].text
-        self.assertIn("This build of Strata is for AMD RX 7000 cards. This computer has an AMD RX 9000 card (gfx1201).", text)
+        self.assertIn("This build of Cortex is for AMD RX 7000 cards. This computer has an AMD RX 9000 card (gfx1201).", text)
         self.assertIn("Ask for the RX 9000 build)", text)
 
     def test_installed_wrong_family_package_uses_its_plain_notice(self):
@@ -114,7 +114,7 @@ class EngineBeforeModel(unittest.TestCase):
         spawns, err, r = self.run_ensure_runner([UNUSABLE, UNUSABLE], update_events("none-for-this-pc", "No engine here."),
                                                 confirm=lambda title, text: asked.append((title, text)) or False, gb=66.0)
         self.assertEqual(len(asked), 1)
-        self.assertIn("Strata couldn't find an engine for this computer (No engine here)", asked[0][1])
+        self.assertIn("Cortex couldn't find an engine for this computer (No engine here)", asked[0][1])
         self.assertIn("Download the model now (about 66 GB)?", asked[0][1])
         self.assertIsInstance(err, LaunchError)
         self.assertEqual(err.code, 130)
@@ -145,7 +145,7 @@ class EngineBeforeModel(unittest.TestCase):
         started = []
         with mock.patch.object(ec, "status", return_value=UNUSABLE), \
                 mock.patch.object(Runner, "_spawn", return_value=FakeProc(update_events("none-for-this-pc", WRONG_FAMILY))), \
-                mock.patch.object(Runner, "ensure_model", return_value=Path("/x/strata-q.json")) as model, \
+                mock.patch.object(Runner, "ensure_model", return_value=Path("/x/cortex-q.json")) as model, \
                 mock.patch.object(Runner, "build_config", return_value=Path("/x/launch.json")), \
                 mock.patch.object(Runner, "ensure_profile"), mock.patch.object(Runner, "tune") as tune, \
                 mock.patch.object(Runner, "start", side_effect=lambda: started.append(1)):
@@ -157,7 +157,7 @@ class EngineBeforeModel(unittest.TestCase):
         self.assertEqual(result.urls, [])
         self.assertEqual(result.engine_problem, WRONG_FAMILY)
         self.assertEqual(result.final_text, no_engine_final(WRONG_FAMILY))
-        self.assertIn("The model is ready, but Strata can't start it yet", result.final_text)
+        self.assertIn("The model is ready, but Cortex can't start it yet", result.final_text)
         self.assertIn("Ask for the RX 9000 build)", result.final_text)
         self.assertIn(NO_ENGINE_STEP, result.final_text)
 
@@ -180,8 +180,8 @@ class EngineBeforeModel(unittest.TestCase):
         with mock.patch.object(Runner, "installed_state", return_value=(None, None)), mock.patch.object(Runner, "_spawn", spawn):
             with self.assertRaises(Boom):
                 r.ensure_model()
-        self.assertEqual(seen["env"].get("STRATA_ALLOW_NO_ENGINE"), "1")
-        self.assertNotIn("STRATA_NEED_ENGINE", seen["env"])
+        self.assertEqual(seen["env"].get("CORTEX_ALLOW_NO_ENGINE"), "1")
+        self.assertNotIn("CORTEX_NEED_ENGINE", seen["env"])
 
     def test_a_failed_update_still_reports_the_old_message(self):
         spawns, err = self.run_ensure([UNUSABLE], [{"event": "error", "error": {"message": "cannot reach the feed"}}], code=6)
@@ -190,14 +190,14 @@ class EngineBeforeModel(unittest.TestCase):
 
 
 class SetupControlStep(unittest.TestCase):
-    """setup.py in the app's mode (and under `strata launch`): the engine step comes before the download step."""
+    """setup.py in the app's mode (and under `cortex launch`): the engine step comes before the download step."""
 
     def load_setup(self):
         """A private copy of setup.py read in the app's mode; the shared `setup` module (other tests) is left as it is."""
         import importlib.util
         spec = importlib.util.spec_from_file_location("setup_control_copy", ROOT / "setup.py")
         module = importlib.util.module_from_spec(spec)
-        with mock.patch.dict(os.environ, {"STRATA_CONTROL_INSTALL": "1"}):
+        with mock.patch.dict(os.environ, {"CORTEX_CONTROL_INSTALL": "1"}):
             spec.loader.exec_module(module)
         return module
 
@@ -216,25 +216,25 @@ class SetupControlStep(unittest.TestCase):
 
     def test_wrong_family_stops_before_the_download_for_launch(self):
         exc = ec.EngineMissing("nothing matched", Path("/c"), notice=WRONG_FAMILY)
-        res, out = self.step(exc, {"STRATA_NEED_ENGINE": "1"})
+        res, out = self.step(exc, {"CORTEX_NEED_ENGINE": "1"})
         self.assertIsInstance(res, SystemExit)
         self.assertIn("Ask for the RX 9000 build.", out)
         self.assertIn("nothing was downloaded", out)
 
     def test_wrong_family_goes_on_with_a_warning_when_launch_said_go_on(self):
         exc = ec.EngineMissing("nothing matched", Path("/c"), notice=WRONG_FAMILY)
-        res, out = self.step(exc, {"STRATA_ALLOW_NO_ENGINE": "1"})
+        res, out = self.step(exc, {"CORTEX_ALLOW_NO_ENGINE": "1"})
         self.assertNotIsInstance(res, SystemExit)
         self.assertIn("no engine is installed for this PC yet", out)
         self.assertIn("The model is downloaded and prepared now", out)
 
     def test_no_engine_for_launch_still_stops_setup_when_run_on_its_own(self):
-        res, out = self.step(ec.EngineMissing("the component folder holds no engine package", Path("/c")), {"STRATA_NEED_ENGINE": "1"})
+        res, out = self.step(ec.EngineMissing("the component folder holds no engine package", Path("/c")), {"CORTEX_NEED_ENGINE": "1"})
         self.assertIsInstance(res, SystemExit)
 
     def test_the_app_with_a_wrong_family_engine_warns_and_still_downloads(self):
         """Owner decision 2026-10-18: the app downloads the model anyway and warns (its card says so)."""
-        env = {k: v for k, v in os.environ.items() if k != "STRATA_NEED_ENGINE"}
+        env = {k: v for k, v in os.environ.items() if k != "CORTEX_NEED_ENGINE"}
         exc = ec.EngineMissing("nothing matched", Path("/c"), notice=WRONG_FAMILY)
         with mock.patch.dict(os.environ, env, clear=True):
             res, out = self.step(exc, {})
@@ -243,11 +243,11 @@ class SetupControlStep(unittest.TestCase):
         self.assertIn("The model is downloaded and prepared now", out)
 
     def test_no_engine_stops_before_the_download_for_launch(self):
-        res, out = self.step(ec.EngineMissing("the component folder holds no engine package", Path("/c")), {"STRATA_NEED_ENGINE": "1"})
+        res, out = self.step(ec.EngineMissing("the component folder holds no engine package", Path("/c")), {"CORTEX_NEED_ENGINE": "1"})
         self.assertIsInstance(res, SystemExit)
 
     def test_the_app_without_an_engine_keeps_its_order(self):
-        env = {k: v for k, v in os.environ.items() if k != "STRATA_NEED_ENGINE"}
+        env = {k: v for k, v in os.environ.items() if k != "CORTEX_NEED_ENGINE"}
         with mock.patch.dict(os.environ, env, clear=True):
             res, out = self.step(ec.EngineMissing("the component folder holds no engine package", Path("/c")), {})
         self.assertNotIsInstance(res, SystemExit)

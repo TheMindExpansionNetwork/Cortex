@@ -1,4 +1,4 @@
-/** Locate catalog weights in a Strata folder or directly inside an existing GGUF folder. */
+/** Locate catalog weights in a Cortex folder or directly inside an existing GGUF folder. */
 import { closeSync, existsSync, openSync, readSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
 

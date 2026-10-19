@@ -12,7 +12,7 @@ import urllib.request
 from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import serve.server as server                                            # noqa: E402
-from serve.server import StrataEngine, Service, ChatTemplate, ByteTokenizer, serve  # noqa: E402
+from serve.server import CortexEngine, Service, ChatTemplate, ByteTokenizer, serve  # noqa: E402
 
 # never prints READY: the READY read times out and the process is killed
 SILENT = r'''
@@ -43,7 +43,7 @@ class ReadyTimeout(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         self._patchers = [mock.patch.object(server, 'ENGINE_READY_S', 0.5),
-                          mock.patch.object(StrataEngine, 'RESTART_RETRY_S', 0.0)]
+                          mock.patch.object(CortexEngine, 'RESTART_RETRY_S', 0.0)]
         for p in self._patchers:
             p.start(); self.addCleanup(p.stop)
 
@@ -57,7 +57,7 @@ class ReadyTimeout(unittest.TestCase):
         return str(script)
 
     def service(self, script, extra_args=()):
-        eng = StrataEngine(script, list(extra_args), lazy=True)
+        eng = CortexEngine(script, list(extra_args), lazy=True)
         self.addCleanup(eng.close)
         return Service(eng, ByteTokenizer(), ChatTemplate(Path(__file__).parent / 'chat_template.jinja'))
 

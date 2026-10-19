@@ -6,14 +6,14 @@ This script owns only the *revision step* — it asks the pinned DeepSeek Harnes
 agent turn inside the candidate directory and returns when the turn reaches a terminal state.
 
 ```
-strata timeskip run --workspace DIR --prompt "..." \
+cortex timeskip run --workspace DIR --prompt "..." \
     --revise-command "python integrations/harness/revise_once.py"
 ```
 
 The contract Time-skip depends on:
 
 * the process runs with the **candidate directory** as its cwd, and only ever writes there;
-* the prompt arrives in `STRATA_TIMESKIP_PROMPT` and the attempt number in `STRATA_TIMESKIP_ATTEMPT`;
+* the prompt arrives in `CORTEX_TIMESKIP_PROMPT` and the attempt number in `CORTEX_TIMESKIP_ATTEMPT`;
 * exit 0 means "an attempt was made" — *not* "the attempt succeeded". Whether it improved anything is
   decided by the checks, never by this script. A non-zero exit reports that the attempt itself could
   not be made (for example the Harness is not installed), which Time-skip records as a failed run
@@ -74,7 +74,7 @@ def main() -> int:
     ap.add_argument("--workspace", default=None,
                     help="the candidate directory (default: the current directory)")
     ap.add_argument("--deadline", type=float,
-                    default=float(os.environ.get("STRATA_TIMESKIP_DEADLINE_S", DEFAULT_DEADLINE_S)))
+                    default=float(os.environ.get("CORTEX_TIMESKIP_DEADLINE_S", DEFAULT_DEADLINE_S)))
     ap.add_argument("--keep", action="store_true",
                     help="keep the per-attempt Harness home for inspection")
     ap.add_argument("--print-session", action="store_true",
@@ -82,10 +82,10 @@ def main() -> int:
     args = ap.parse_args()
 
     candidate = Path(args.workspace or os.getcwd()).resolve()
-    prompt = os.environ.get("STRATA_TIMESKIP_PROMPT", "").strip()
-    attempt = os.environ.get("STRATA_TIMESKIP_ATTEMPT", "1")
+    prompt = os.environ.get("CORTEX_TIMESKIP_PROMPT", "").strip()
+    attempt = os.environ.get("CORTEX_TIMESKIP_ATTEMPT", "1")
     if not prompt:
-        print("revise_once: STRATA_TIMESKIP_PROMPT is empty; nothing to ask for", file=sys.stderr)
+        print("revise_once: CORTEX_TIMESKIP_PROMPT is empty; nothing to ask for", file=sys.stderr)
         return 2
     if not candidate.is_dir():
         print(f"revise_once: {candidate} is not a directory", file=sys.stderr)
@@ -96,12 +96,12 @@ def main() -> int:
         print(f"revise_once: the Harness CLI is not at {dsh}; set DSH_CLI or --dsh", file=sys.stderr)
         return 3
     if not PROFILE_PATCH.exists():
-        print(f"revise_once: the Strata profile is not at {PROFILE_PATCH}", file=sys.stderr)
+        print(f"revise_once: the Cortex profile is not at {PROFILE_PATCH}", file=sys.stderr)
         return 3
 
     # Each attempt gets its own Harness home. That keeps sessions and approvals scoped to the
     # attempt, and means a crashed attempt cannot corrupt the next one's state.
-    home = Path(tempfile.mkdtemp(prefix=f"strata-revise-a{attempt}-"))
+    home = Path(tempfile.mkdtemp(prefix=f"cortex-revise-a{attempt}-"))
     (home / "sessions").mkdir(parents=True, exist_ok=True)
     agent = None
     deadline = time.time() + args.deadline

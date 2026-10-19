@@ -18,12 +18,12 @@ stays in the session, so a question that starts from a checkpoint reads only wha
 Checkpoint RAM: +804 MiB resident after the first read (6 checkpoints); each later question adds at most 10 MiB. The
 K/V of 262K takes 3.06 GiB of pinned RAM, once per session (`--batch` slots each take their own).
 Identity (greedy, 64 tokens): questions 1 and 12 on a fresh engine give the same tokens as in the 20-question run.
-Caveat: IQ models are not byte-reproducible at temperature 0 between runs unless `STRATA_IQ_MT_MIN=1` (DETAILS.md);
+Caveat: IQ models are not byte-reproducible at temperature 0 between runs unless `CORTEX_IQ_MT_MIN=1` (DETAILS.md);
 some answers differ between two runs of the same prompt for that reason, with or without the field below.
 
-## `strata_prefix` (and the engine's `pin=N`)
+## `cortex_prefix` (and the engine's `pin=N`)
 
-`"strata_prefix": {"messages": 1}`, `{"message": 0, "chars": N}` or `{"tokens": N}` marks the start of the prompt as the
+`"cortex_prefix": {"messages": 1}`, `{"message": 0, "chars": N}` or `{"tokens": N}` marks the start of the prompt as the
 shared document. The checkpoint at its end is pinned: never evicted, kept in the parked-conversation budget, kept by
 `SAVE`, and a question that resumes from it does not park the branch it leaves.
 

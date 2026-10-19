@@ -16,12 +16,12 @@ __pycache__/
 /packs/
 /mtp/
 /models/
-/Strata-data/
+/Cortex-data/
 third_party/llama.cpp/
 third_party/*.zip
 *.done
 *.log
-strata-*.json
-strata-*.txt
+cortex-*.json
+cortex-*.txt
 run-*.sh
 run-*.bat

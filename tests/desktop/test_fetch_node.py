@@ -23,7 +23,7 @@ class PinTests(unittest.TestCase):
         sh_digest = re.search(r'win-x64\)\s+echo "([0-9a-f]{64})"', sh).group(1)
         ps_digest = re.search(r"\$Expected = '([0-9a-f]{64})'", ps).group(1)
         self.assertEqual(sh_digest, ps_digest)
-        self.assertEqual(re.search(r'STRATA_NODE_VERSION:-([\d.]+)', sh).group(1),
+        self.assertEqual(re.search(r'CORTEX_NODE_VERSION:-([\d.]+)', sh).group(1),
                          re.search(r"else \{ '([\d.]+)' \}", ps).group(1))
 
 

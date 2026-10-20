@@ -44,7 +44,7 @@ test('F07: a page opened from another computer says why Add skill cannot work in
   const source = (await readFile(new URL('../src/lib/folder-pick.ts', import.meta.url), 'utf8'));
   const fn = new Function(`${source.slice(source.indexOf('export function pageIsOnThisComputer')).replace('export function', 'function')}; return pageIsOnThisComputer;`.replace(/: string|: boolean/g, ''))();
   for (const yes of ['localhost', '127.0.0.1', '127.1.2.3', '[::1]', '::1']) assert.equal(fn(yes), true, yes);
-  for (const no of ['192.168.1.5', 'strata.example.com', 'my-pc.trycloudflare.com']) assert.equal(fn(no), false, no);
+  for (const no of ['192.168.1.5', 'cortex.example.com', 'my-pc.trycloudflare.com']) assert.equal(fn(no), false, no);
   const skills = (await readFile(new URL('../src/screens/Skills.tsx', import.meta.url), 'utf8'));
   assert.match(skills, /pageIsOnThisComputer\(window\.location\.hostname\)/);
   void pick;

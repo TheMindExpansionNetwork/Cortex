@@ -27,7 +27,7 @@ MODELS_VOLUME = modal.Volume.from_name("cortex-models", create_if_missing=True)
 
 # The image: Modal builds hosting/Dockerfile.cortex itself (from_dockerfile; the build needs no GPU —
 # nvcc compiles, nothing executes on a card). If the owner has pushed the same image to a registry,
-# replace with:  image = modal.Image.from_registry("ghcr.io/TheMindExpansionNetwork/cortex-a100:latest",
+# replace with:  image = modal.Image.from_registry("ghcr.io/themindexpansionnetwork/cortex:latest",
 #                                                  add_python="3.11")
 image = modal.Image.from_dockerfile(
     Path(__file__).parent / "Dockerfile.cortex",
@@ -37,7 +37,7 @@ image = modal.Image.from_dockerfile(
 
 @app.function(
     image=image,
-    gpu=modal.gpu.A100(count=2, size="80GB"),          # 2× required — see the docstring above
+    gpu="A100-80GB:2",          # 2× required — see the docstring above
     volumes={"/models": MODELS_VOLUME},
     secrets=[modal.Secret.from_name("hf-token")],
     timeout=4 * 60 * 60,                                # the shard download alone is 25–45 min; keep headroom

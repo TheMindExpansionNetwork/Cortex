@@ -1066,7 +1066,7 @@ print(r.choices[0].message.content)
   `"api_key": ["key1", "key2"]` (the way to use a key that contains a comma); a request passes with any one of them.
   Streamed answers carry `X-Accel-Buffering: no`, so nginx-style proxies pass
   each token on at once. The web app's settings and MCP tools only answer Cortex's own page: when you open it through
-  a proxy or tunnel whose address differs, add that address, e.g. `"trusted_origins": ["https://strata.example.com"]`.
+  a proxy or tunnel whose address differs, add that address, e.g. `"trusted_origins": ["https://cortex.example.com"]`.
   With the key set, any `Host` name reaches the server (see Host names below).
 - **From web apps in a browser (CORS).** Off by default. `"cors_origins": ["https://chat.example.com"]` lets pages of
   those origins call `/v1/*` from the browser (Open WebUI's direct connections, browser extensions); `["*"]` lets any
@@ -1079,8 +1079,8 @@ print(r.choices[0].message.content)
   listens on and, when it listens beyond this PC (`0.0.0.0` or a LAN address), this PC's name (`mypc`, `mypc.local`)
   and `host.docker.internal`; any port. Others get **403** naming the setting, and the server window prints one line
   for each. Reach it under another name (a reverse proxy that keeps the name, a tunnel, a DNS name on your network,
-  another container's name for it)? Add the name: `"allowed_hosts": ["strata.example.com"]` in
-  `cortex-<model>.json` or `CORTEX_ALLOWED_HOSTS=strata.example.com` (comma-separated); `".example.com"` allows that
+  another container's name for it)? Add the name: `"allowed_hosts": ["cortex.example.com"]` in
+  `cortex-<model>.json` or `CORTEX_ALLOWED_HOSTS=cortex.example.com` (comma-separated); `".example.com"` allows that
   name and every name below it, and `["*"]` turns the check off (so does setting `api_key`). The hosts of
   `trusted_origins` count as allowed. Requests without a `Host` header (HTTP/1.0 clients) pass.
 - **Web pages without an API key.** Without `api_key`, a `POST` to `/v1/*` that carries an `Origin` header (a

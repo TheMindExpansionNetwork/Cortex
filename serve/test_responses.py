@@ -279,16 +279,23 @@ class NoLeakedSampler(unittest.TestCase):
         import threading
         import time
         tok = ByteTokenizer()
-        before = sum(1 for t in threading.enumerate() if t.name.endswith("(_loop)"))
+        samplers = lambda: sum(1 for t in threading.enumerate() if t.name.endswith("(_loop)"))  # noqa: E731
+        # Let samplers of servers that earlier tests already closed finish exiting first: each one only notices its
+        # stop signal on its next 1-second wake, so measuring `before` immediately raced with that exit (a sampler
+        # that was alive for `before` but gone for the next count made this test fail ~2 in 3 runs).
+        deadline = time.monotonic() + 3.0
+        while samplers() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        before = samplers()
         httpd = serve(Service(MockEngine(tok, ANSWER, max_context=16384), tok, TEMPLATE), port=0)
-        self.assertEqual(sum(1 for t in threading.enumerate() if t.name.endswith("(_loop)")), before + 1)
+        self.assertEqual(samplers(), before + 1)
         httpd.shutdown()
         httpd.server_close()
         for _ in range(50):
-            if sum(1 for t in threading.enumerate() if t.name.endswith("(_loop)")) == before:
+            if samplers() == before:
                 break
             time.sleep(0.1)
-        self.assertEqual(sum(1 for t in threading.enumerate() if t.name.endswith("(_loop)")), before)
+        self.assertEqual(samplers(), before)
 
 
 # ------------------------------------------------------------------------------------------------ over HTTP

@@ -1,12 +1,21 @@
 # Cortex engine container image — built on GitHub Actions, pushed to GHCR.
-# This turns hosting/runpod-template.json's imageName placeholder into a real image:
-# one-command pod boots on RunPod (or any 2×A100 box) with no local Docker needed.
+# This turns hosting/runpod-template.json's imageName into a real image: a RunPod (or any Docker) GPU box
+# boots straight into the DeepSeek-V4.1-Flash runtime with no local Docker needed.
+#
+# GHCR image names must be lowercase, so the owner is lowercased in a step (github.repository_owner is
+# "TheMindExpansionNetwork"; the image is ghcr.io/themindexpansionnetwork/cortex).
+# GHCR packages start PRIVATE: either make the package public once (GitHub → Packages → cortex →
+# Package settings → Change visibility) or give RunPod registry credentials (runpodctl registry create).
 name: cortex-docker-image
 
 on:
   push:
     branches: [main]
-    paths: ["hosting/Dockerfile.cortex", "scripts/deepseek-2xa100.sh", ".github/workflows/cortex-docker-image.yml"]
+    paths:
+      - "hosting/Dockerfile.cortex"
+      - "scripts/deepseek-2xa100.sh"
+      - "scripts/build-llama-dsv41.sh"
+      - ".github/workflows/cortex-docker-image.yml"
   workflow_dispatch:
 
 permissions:
@@ -19,6 +28,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Lowercase image name
+        id: img
+        run: echo "name=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/cortex" >> "$GITHUB_OUTPUT"
+
+      - name: Free disk space (the CUDA devel image + llama.cpp build need ~20 GB)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          df -h /
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -37,7 +55,7 @@ jobs:
           file: hosting/Dockerfile.cortex
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/cortex:latest
-            ghcr.io/${{ github.repository_owner }}/cortex:${{ github.sha }}
+            ${{ steps.img.outputs.name }}:latest
+            ${{ steps.img.outputs.name }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

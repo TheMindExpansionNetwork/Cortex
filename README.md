@@ -27,6 +27,8 @@ an inference engine built around exactly the three tricks this model needs: **ho
 experts in RAM, the n-gram lookup table on SSD**, plus speculative drafting. See [NOTICE.md](NOTICE.md)
 for what we changed and why.
 
+> 🧪 **GPU test runbook:** [`docs/RUNBOOK.md`](docs/RUNBOOK.md) — one command boots a RunPod pod, serves DeepSeek-V4.1-Flash, measures it, deletes the pod.
+
 ## What we are building
 
 | Phase | Goal | Status |

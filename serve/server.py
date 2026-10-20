@@ -3373,7 +3373,7 @@ class Service:
         # matters); empty = no CORS headers at all, as before
         self.cors_origins: list[str] = []
         # #321: origins that count as Cortex's own page for /settings and MCP tools, e.g. the web app reached through a
-        # reverse proxy or tunnel whose Host differs ("https://strata.example.com"); never a wildcard
+        # reverse proxy or tunnel whose Host differs ("https://cortex.example.com"); never a wildcard
         self.trusted_origins: list[str] = []
         # DNS rebinding: extra Host names this server answers to (the config's allowed_hosts, $CORTEX_ALLOWED_HOSTS;
         # "*" = any), and every name it answers to, which serve() works out from the address it listens on
@@ -7029,7 +7029,7 @@ def allowed_hosts_of(value, env: str = "") -> list[str]:
         dot = x.startswith(".")
         name = host_name(x[1:] if dot else x)
         if not name:
-            raise ValueError(f"allowed_hosts: {raw!r} is not a host name like strata.example.com")
+            raise ValueError(f"allowed_hosts: {raw!r} is not a host name like cortex.example.com")
         out.append("." + name if dot else name)
     return list(dict.fromkeys(out))
 

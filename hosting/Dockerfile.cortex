@@ -1,67 +1,46 @@
 # Cortex · hosting/Dockerfile.cortex
-# One-command image for the P4 target: DeepSeek-V4.1-Flash-1017 (Unsloth GGUF) served by llama-server
-# on 2× A100 80GB. Built from the repo root so it can COPY scripts/:
+# The serving image for DeepSeek-V4.1-Flash-1017 (Unsloth GGUF) on llama-server. Build from the repo root:
 #
-#     docker build -f hosting/Dockerfile.cortex -t cortex-flash .
-#     docker run --rm --gpus all -p 8080:8080 -e HF_TOKEN=hf_xxx -v /data/models:/models cortex-flash
+#     docker build -f hosting/Dockerfile.cortex -t cortex .
+#     docker run --rm --gpus all -p 8080:8080 -e HF_TOKEN=hf_xxx -v /data:/workspace cortex --quant IQ1_M
 #
-# Protocol and gates: docs/GPU-TEST-PLAN.md  ·  model numbers: docs/CORTEX-DEEPSEEK.md
+# CI builds and pushes it: .github/workflows/cortex-docker-image.yml → ghcr.io/themindexpansionnetwork/cortex
 #
-# PRAGMATIC OPTION (commented per the task): llama.cpp is BUILT FROM SOURCE at the commit setup.py pins
-# (LLAMA_CPP_COMMIT), not fetched from ggml-org/llama.cpp releases — the Linux release assets are CPU-only,
-# so a CUDA llama-server must be built anyway, and building the pinned commit keeps the image reproducible
-# against the rest of the repo. Two stages: -devel (nvcc + headers) builds, -runtime (the CUDA runtime
-# libraries llama-server loads: cudart, cublas, cublasLt, curand) runs. -DLLAMA_CURL=OFF keeps the runtime
-# free of libcurl; the model download is done by `hf` (huggingface_hub), not by llama-server.
-# CUDA archs: sm_80 (A100) real, plus 75/86/89; drop 75 to shave compile time on a dedicated A100 box.
+# RUNTIME CHOICE (important): llama.cpp is built from the official DeepSeek-V4.1 PR (ggml-org/llama.cpp#30817,
+# pinned full commit) by scripts/build-llama-dsv41.sh — the SAME script the pod rig uses, so there is one recipe.
+# Mainline llama.cpp has no `deepseek41` architecture and would refuse the model after the 250 GB download.
+# CUDA archs: sm_80 (A100), sm_89 (L40S/4090), sm_90 (H100/H200), sm_120 (RTX PRO 6000 Blackwell / 5090).
+#
+# On a GPU-less builder, a CUDA llama-server may not start (`--help` needs libcuda.so.1 from the driver), so the
+# build script's flag check is allowed to fail here as long as the binary was produced; the launch script repeats
+# the flag check on the GPU box before downloading anything.
 
 FROM nvidia/cuda:12.8.1-devel-ubuntu22.04 AS builder
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl unzip g++ gcc git cmake ninja-build \
-    && rm -rf /var/lib/apt/lists/*
-
-ARG LLAMA_CPP_COMMIT=3cf03257f219afbe7334045ff7c6a06ac68c627d
-
+      ca-certificates curl git g++ gcc ninja-build python3 python3-pip \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip3 install --no-cache-dir "cmake>=3.28"
+COPY scripts/build-llama-dsv41.sh /build/build-llama-dsv41.sh
 WORKDIR /build
-RUN curl -fsSL -o llama.cpp.zip \
-      "https://github.com/ggml-org/llama.cpp/archive/${LLAMA_CPP_COMMIT}.zip" \
-    && unzip -q llama.cpp.zip && rm llama.cpp.zip \
-    && mv "llama.cpp-${LLAMA_CPP_COMMIT}" llama.cpp \
-    && cmake -S llama.cpp -B build -G Ninja \
-         -DCMAKE_BUILD_TYPE=Release \
-         -DGGML_CUDA=ON \
-         -DLLAMA_CURL=OFF \
-         -DCMAKE_CUDA_ARCHITECTURES="75-real;80-real;86-real;89-real" \
-    && cmake --build build --target llama-server -j"$(nproc)" \
-    && test -x build/bin/llama-server
+RUN SRC=/build/llama.cpp OUT=/build/bin CUDA=ON CUDA_ARCHS="80;89;90;120" bash /build/build-llama-dsv41.sh \
+    || test -x /build/bin/llama-server
 
 # ---------------------------------------------------------------------------
 FROM nvidia/cuda:12.8.1-runtime-ubuntu22.04
-
-# python3.11 (the repo's tooling version) comes from deadsnakes on Ubuntu 22.04; `hf` is the
-# huggingface_hub CLI the launch script uses for the ~250 GB shard download.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends software-properties-common ca-certificates curl bash libgomp1 \
-    && add-apt-repository -y ppa:deadsnakes/ppa \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends python3.11 \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl bash libgomp1 python3 python3-pip \
     && rm -rf /var/lib/apt/lists/* \
-    && curl -fsSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py \
-    && python3.11 /tmp/get-pip.py --no-cache-dir \
-    && python3.11 -m pip install --no-cache-dir -U huggingface_hub \
-    && rm /tmp/get-pip.py
+    && pip3 install --no-cache-dir -U "huggingface_hub[cli]" hf_transfer
 
-COPY --from=builder /build/build/bin/llama-server /usr/local/bin/llama-server
+COPY --from=builder /build/bin/llama-server /build/bin/llama-cli /usr/local/bin/
 COPY scripts/deepseek-2xa100.sh /opt/cortex/scripts/deepseek-2xa100.sh
 RUN chmod 755 /opt/cortex/scripts/deepseek-2xa100.sh
 
-# HF_TOKEN is passed at run time (docker -e / RunPod env / Modal secret); nothing is baked in.
-ENV HF_HOME=/models/hf
-WORKDIR /models
+# HF_TOKEN is passed at run time (docker -e / RunPod env / Modal secret); nothing secret is baked in.
+ENV HF_HUB_ENABLE_HF_TRANSFER=1
+WORKDIR /workspace
 EXPOSE 8080
 
-# The script downloads the shards into /models (the volume) and then execs llama-server.
-# Default args; append your own: docker run ... cortex-flash --quant IQ1_S --ctx 65536
+# Downloads the shards into /workspace/models/dsv41 (mount a big volume at /workspace), then execs llama-server.
 ENTRYPOINT ["/bin/bash", "/opt/cortex/scripts/deepseek-2xa100.sh"]
-CMD ["--port", "8080"]
+CMD ["--quant", "IQ1_M", "--port", "8080"]

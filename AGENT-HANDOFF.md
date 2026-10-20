@@ -1,7 +1,27 @@
 # AGENT HANDOFF — Cortex project
 
 **Read this first if you are a fresh agent taking over this project.** It compresses everything
-learned so far into verified facts, decisions, and the next moves. Last updated: 2026-10-19.
+learned so far into verified facts, decisions, and the next moves. Last updated: 2026-10-20.
+
+## ⚡ STATUS 2026-10-20 — read this block before anything else
+
+**Test-ready. Tomorrow's procedure is `docs/RUNBOOK.md`** (dry run → real run → results in `bench/results/`).
+
+Corrections to anything older in this file:
+* **Engine = llama.cpp PR #30817** (`ggml-org/llama.cpp`, pinned `b72050d03ae14bb3cb5138ecefab3f3f65157d31`), built by
+  `scripts/build-llama-dsv41.sh`. Mainline/release llama.cpp has NO `deepseek41` arch. The Unsloth `dsv41-all`
+  branch mentioned below was a reference only; it is not what runs.
+* Launch recipe (`scripts/deepseek-2xa100.sh`) = Unsloth's documented flags: Engram tensor
+  `per_layer_token_embd.weight` pinned to CPU + `--load-mode mmap --lazy-mode on`; temp 1.0 / top-p 1.0 / top-k 0;
+  `reasoning_effort` 75; DSpark is `--spec-type draft-dspark` (opt-in `--dspark`). All flags verified in the built binary;
+  the real IQ1_S header loads as `deepseek41`.
+* Pod rig rewritten (`hosting/boot-and-test.sh`): runpodctl v3 syntax, live stock/price/balance check,
+  `--dry-run`, SSH on 22/tcp, budget refusal, watchdog + auto-delete. Dry run verified against the live API.
+* Stock reality: A100/H100/H200 unavailable on 10-19 and 10-20. **2× RTX PRO 6000 Blackwell 96 GB at $3.38/hr
+  was in stock** and is now plan `2xpro6000` (192 GB ≥ the 139.8 GB IQ1_M resident set).
+* Image name is `ghcr.io/themindexpansionnetwork/cortex:latest` (lowercase; CI workflow `cortex-docker-image.yml`).
+* CI fixes: nvcc path for the engine build; the flaky `NoLeakedSampler` test. 880/881 serve tests pass locally.
+* Nothing has run on a GPU yet. No pods exist. Balance ≈ $8.50 → one 90-minute attempt.
 
 ## What this project is
 

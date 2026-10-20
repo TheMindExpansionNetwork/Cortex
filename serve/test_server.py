@@ -3252,9 +3252,9 @@ class SharedSettings(unittest.TestCase):
 
     def test_a_trusted_origin_is_cortex_s_own_page(self):
         # the web app behind a reverse proxy or tunnel: the config's trusted_origins
-        self.svc.trusted_origins = ["https://strata.example.com"]
+        self.svc.trusted_origins = ["https://cortex.example.com"]
         try:
-            code, _ = self.req("/settings", {"defaults": {}}, {"Origin": "https://strata.example.com"})
+            code, _ = self.req("/settings", {"defaults": {}}, {"Origin": "https://cortex.example.com"})
             self.assertEqual(code, 200)
             code, _ = self.req("/settings", {"defaults": {}}, {"Origin": "https://evil.example.com"})
             self.assertEqual(code, 403)

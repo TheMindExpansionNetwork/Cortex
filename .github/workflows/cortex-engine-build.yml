@@ -126,6 +126,7 @@ jobs:
             -DCORTEX_ENABLE_CUDA=ON \
             -DCORTEX_BUILD_TESTS=OFF \
             -DCORTEX_PORTABLE=ON \
+            -DCMAKE_CUDA_COMPILER="$CUDA_HOME/bin/nvcc" \
             -DCMAKE_CUDA_ARCHITECTURES="$CUDA_ARCHS" \
             -DCORTEX_GGML_DIR="$RUNNER_TEMP/llama.cpp" \
             "-DCMAKE_EXE_LINKER_FLAGS=-Wl,-rpath,'\$ORIGIN' -Wl,--enable-new-dtags"

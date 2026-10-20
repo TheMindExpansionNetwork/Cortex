@@ -1,3 +1,5 @@
+> **Test day:** follow [`docs/RUNBOOK.md`](../docs/RUNBOOK.md). Engine = llama.cpp PR #30817 via `scripts/build-llama-dsv41.sh`.
+
 # Hosting Cortex Flash — one-command 2× A100 80GB
 
 Bring up DeepSeek-V4.1-Flash-1017 (Unsloth GGUF) behind llama-server's OpenAI-compatible API on
@@ -28,7 +30,7 @@ Quant knobs: `--quant IQ1_M|IQ1_S`, `--ctx` (default 65536, model max 1048576), 
 ## Option A — RunPod (template import)
 
 1. Build and push the image once: `docker build -f hosting/Dockerfile.cortex -t cortex-flash .`
-   `docker tag cortex-flash ghcr.io/TheMindExpansionNetwork/cortex-a100:latest && docker push ...`
+   `docker tag cortex-flash ghcr.io/themindexpansionnetwork/cortex:latest && docker push ...`
    (or point `imageName` at a mirror).
 2. RunPod Console → **Templates → Import template** → upload [`runpod-template.json`](runpod-template.json).
 3. Edit after import: `imageName` if you pushed elsewhere; `env.HF_TOKEN` with the token

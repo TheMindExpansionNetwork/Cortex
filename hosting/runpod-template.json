@@ -1,1 +1,23 @@
-{"name": "cortex-flash-a100", "imageName": "ghcr.io/TheMindExpansionNetwork/cortex-a100:latest", "readme": "Cortex Flash: DeepSeek-V4.1-Flash-1017 (Unsloth GGUF) served by llama-server on 2x A100 80GB. Placeholders to edit on import: imageName (build hosting/Dockerfile.cortex and push, or point at a public mirror), env.HF_TOKEN. See hosting/README.md and docs/GPU-TEST-PLAN.md. Single A100-80GB cannot fit the model: UD-IQ1_M needs ~140 GB resident; UD-IQ1_S ~128 GB. Two GPUs are required.", "dockerArgs": "--gpus all --shm-size 4g", "ports": "8080/http", "env": [{"key": "HF_TOKEN", "value": ""}, {"key": "CORTEX_FLASH_PORT", "value": "8080"}], "gpuIds": "A100-80GB", "gpuCount": 2, "vcpuCount": "20", "memoryInMb": 204800, "containerDiskInGb": 20, "volumeInGb": 500, "volumeMountPath": "/models", "volumeKeys": [], "isPublic": false, "isServerless": false}
+{
+  "name": "cortex-deepseek-v41-flash",
+  "imageName": "ghcr.io/themindexpansionnetwork/cortex:latest",
+  "readme": "Cortex: DeepSeek-V4.1-Flash-1017 (Unsloth GGUF, UD-IQ1_M) on llama-server built from llama.cpp PR #30817. Needs >=150 GB total VRAM (2x RTX PRO 6000 96GB, 2x A100/H100 80GB) or IQ1_S on 1x H200 (set container start args: --quant IQ1_S). Set HF_TOKEN. The model (~250 GB) downloads into /workspace on first boot; OpenAI API on port 8080 (/v1/chat/completions).",
+  "dockerArgs": "--gpus all --shm-size 4g",
+  "ports": "8080/http,22/tcp",
+  "env": [
+    {
+      "key": "HF_TOKEN",
+      "value": ""
+    }
+  ],
+  "gpuIds": "RTX PRO 6000,A100-80GB,H100-80GB",
+  "gpuCount": 2,
+  "vcpuCount": "20",
+  "memoryInMb": 204800,
+  "containerDiskInGb": 20,
+  "volumeInGb": 300,
+  "volumeMountPath": "/workspace",
+  "volumeKeys": [],
+  "isPublic": false,
+  "isServerless": false
+}
